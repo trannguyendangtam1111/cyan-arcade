@@ -1,0 +1,36 @@
+# OS / editors
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.iml
+*.swp
+*~
+
+# Local env overrides
+.env
+.env.*
+!.env.example
+
+# Secrets and key material
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+
+# Build output and dependencies (also ignored per module)
+node_modules/
+target/
+dist/
+coverage/
+
+# Logs and scratch files
+*.log
+*.tmp
+*.bak
+*.orig
+tmp/

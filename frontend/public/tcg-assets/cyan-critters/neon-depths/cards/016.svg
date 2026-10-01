@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 420" role="img" aria-label="Voidmaw">
+<defs>
+<linearGradient id="frame" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fae8ff"/><stop offset="1" stop-color="#e9d5ff"/></linearGradient>
+<linearGradient id="art" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6d28d9"/><stop offset="1" stop-color="#1e1b4b"/></linearGradient>
+<clipPath id="window"><rect x="18" y="54" width="264" height="212" rx="12"/></clipPath>
+</defs>
+<rect x="3" y="3" width="294" height="414" rx="20" fill="url(#frame)" stroke="#c084fc" stroke-width="6"/>
+<text x="22" y="40" font-family="'Trebuchet MS', Verdana, system-ui, sans-serif" font-size="22" font-weight="700" fill="#0f172a">Voidmaw</text>
+<text x="278" y="40" font-family="'Trebuchet MS', Verdana, system-ui, sans-serif" font-size="17" font-weight="700" fill="#b91c1c" text-anchor="end">HP 140</text>
+<g clip-path="url(#window)">
+<rect x="18" y="54" width="264" height="212" fill="url(#art)"/>
+<path d="M 150 160 L 370.0 160.0" stroke="#fff" stroke-width="16" opacity="0.16"/><path d="M 150 160 L 340.5 270.0" stroke="#fff" stroke-width="16" opacity="0.16"/><path d="M 150 160 L 260.0 350.5" stroke="#fff" stroke-width="16" opacity="0.16"/><path d="M 150 160 L 150.0 380.0" stroke="#fff" stroke-width="16" opacity="0.16"/><path d="M 150 160 L 40.0 350.5" stroke="#fff" stroke-width="16" opacity="0.16"/><path d="M 150 160 L -40.5 270.0" stroke="#fff" stroke-width="16" opacity="0.16"/><path d="M 150 160 L -70.0 160.0" stroke="#fff" stroke-width="16" opacity="0.16"/><path d="M 150 160 L -40.5 50.0" stroke="#fff" stroke-width="16" opacity="0.16"/><path d="M 150 160 L 40.0 -30.5" stroke="#fff" stroke-width="16" opacity="0.16"/><path d="M 150 160 L 150.0 -60.0" stroke="#fff" stroke-width="16" opacity="0.16"/><path d="M 150 160 L 260.0 -30.5" stroke="#fff" stroke-width="16" opacity="0.16"/><path d="M 150 160 L 340.5 50.0" stroke="#fff" stroke-width="16" opacity="0.16"/>
+<ellipse cx="150" cy="246" rx="96" ry="16" fill="#000" opacity="0.18"/>
+<g transform="translate(150 166) scale(1.18)"><path d="M 56 18 q 46 -4 36 -46 q -4 26 -28 28 z" fill="#7864b4"/><path d="M -26.300000000000004 -25.36 q -4 -30 -26 -32 q 8 14 6 34 z" fill="#fef3c7" stroke="#7864b4" stroke-width="3"/><path d="M 26.300000000000004 -25.36 q 4 -30 26 -32 q -8 14 -6 34 z" fill="#fef3c7" stroke="#7864b4" stroke-width="3"/><ellipse cx="-29.7" cy="45" rx="16" ry="9" fill="#7864b4"/><ellipse cx="29.7" cy="45" rx="16" ry="9" fill="#7864b4"/><ellipse cx="0" cy="0" rx="66" ry="48" fill="#a78bfa"/><ellipse cx="0" cy="16.32" rx="39.6" ry="23.04" fill="#ede9fe"/><polygon points="0.0,6.2 3.4,14.5 12.4,15.2 5.6,21.0 7.6,29.7 0.0,25.1 -7.6,29.7 -5.6,21.0 -12.4,15.2 -3.4,14.5" fill="#fbbf24"/><circle cx="-22.44" cy="-8.64" r="11" fill="#fff"/><circle cx="-21.44" cy="-7.640000000000001" r="7" fill="#1f2937"/><circle cx="-18.44" cy="-11.64" r="2.5" fill="#fff"/><circle cx="22.44" cy="-8.64" r="11" fill="#fff"/><circle cx="23.44" cy="-7.640000000000001" r="7" fill="#1f2937"/><circle cx="26.44" cy="-11.64" r="2.5" fill="#fff"/><circle cx="-34.44" cy="5.359999999999999" r="6" fill="#fb7185" opacity="0.55"/><circle cx="34.44" cy="5.359999999999999" r="6" fill="#fb7185" opacity="0.55"/><path d="M -7 4.359999999999999 q 7 8 14 0" stroke="#1f2937" stroke-width="3.5" fill="none" stroke-linecap="round"/></g>
+
+</g>
+<rect x="18" y="54" width="264" height="212" rx="12" fill="none" stroke="#c084fc" stroke-width="3"/>
+<rect x="22" y="280" width="76" height="26" rx="13" fill="#1e1b4b"/>
+<text x="35" y="298" font-family="'Trebuchet MS', Verdana, system-ui, sans-serif" font-size="14" font-weight="700" fill="#fff">Shade</text>
+<text x="22" y="330" font-family="'Trebuchet MS', Verdana, system-ui, sans-serif" font-size="14" font-style="italic" fill="#334155">Swallows echoes. The depths are quiet</text>
+<text x="22" y="349" font-family="'Trebuchet MS', Verdana, system-ui, sans-serif" font-size="14" font-style="italic" fill="#334155">around it.</text>
+<text x="22" y="400" font-family="'Trebuchet MS', Verdana, system-ui, sans-serif" font-size="13" font-weight="700" fill="#64748b">016/018</text>
+<polygon points="252.0,386.0 254.4,391.7 260.6,392.2 255.9,396.3 257.3,402.3 252.0,399.1 246.7,402.3 248.1,396.3 243.4,392.2 249.6,391.7" fill="#9333ea"/><polygon points="272.0,386.0 274.4,391.7 280.6,392.2 275.9,396.3 277.3,402.3 272.0,399.1 266.7,402.3 268.1,396.3 263.4,392.2 269.6,391.7" fill="#9333ea"/>
+</svg>

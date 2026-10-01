@@ -1,0 +1,643 @@
+{
+  "game": {
+    "slug": "cyan-critters",
+    "name": "Cyan Critters",
+    "description": "The arcade's own card game: small, round and very collectible.",
+    "imageUrl": "/tcg-assets/cyan-critters/game.svg"
+  },
+  "rarities": [
+    {
+      "code": "common",
+      "name": "Common",
+      "tier": 1
+    },
+    {
+      "code": "uncommon",
+      "name": "Uncommon",
+      "tier": 2
+    },
+    {
+      "code": "rare",
+      "name": "Rare",
+      "tier": 3
+    },
+    {
+      "code": "epic",
+      "name": "Epic",
+      "tier": 4
+    },
+    {
+      "code": "legendary",
+      "name": "Legendary",
+      "tier": 5
+    }
+  ],
+  "sets": [
+    {
+      "code": "pixel-meadow",
+      "name": "Pixel Meadow",
+      "description": "Sunny fields, mossy rocks and the critters that nap on them.",
+      "imageUrl": "/tcg-assets/cyan-critters/pixel-meadow/set.svg",
+      "releasedOn": "2026-09-01",
+      "cards": [
+        {
+          "number": "001",
+          "name": "Sproutle",
+          "rarity": "common",
+          "imageUrl": "/tcg-assets/cyan-critters/pixel-meadow/cards/001.svg",
+          "metadata": {
+            "type": "Leaf",
+            "hp": 40,
+            "flavor": "Grows a new leaf every time it is praised."
+          }
+        },
+        {
+          "number": "002",
+          "name": "Pebblit",
+          "rarity": "common",
+          "imageUrl": "/tcg-assets/cyan-critters/pixel-meadow/cards/002.svg",
+          "metadata": {
+            "type": "Stone",
+            "hp": 50,
+            "flavor": "Often mistaken for a rock, which suits it fine."
+          }
+        },
+        {
+          "number": "003",
+          "name": "Zapling",
+          "rarity": "common",
+          "imageUrl": "/tcg-assets/cyan-critters/pixel-meadow/cards/003.svg",
+          "metadata": {
+            "type": "Spark",
+            "hp": 40,
+            "flavor": "Its tail tingles just before a thunderstorm."
+          }
+        },
+        {
+          "number": "004",
+          "name": "Puffkin",
+          "rarity": "common",
+          "imageUrl": "/tcg-assets/cyan-critters/pixel-meadow/cards/004.svg",
+          "metadata": {
+            "type": "Breeze",
+            "hp": 30,
+            "flavor": "Light enough to ride a dandelion seed."
+          }
+        },
+        {
+          "number": "005",
+          "name": "Mossnip",
+          "rarity": "common",
+          "imageUrl": "/tcg-assets/cyan-critters/pixel-meadow/cards/005.svg",
+          "metadata": {
+            "type": "Leaf",
+            "hp": 50,
+            "flavor": "Keeps a tiny garden on its back."
+          }
+        },
+        {
+          "number": "006",
+          "name": "Flickit",
+          "rarity": "common",
+          "imageUrl": "/tcg-assets/cyan-critters/pixel-meadow/cards/006.svg",
+          "metadata": {
+            "type": "Spark",
+            "hp": 40,
+            "flavor": "Blinks on and off when it gets the hiccups."
+          }
+        },
+        {
+          "number": "007",
+          "name": "Dustbun",
+          "rarity": "common",
+          "imageUrl": "/tcg-assets/cyan-critters/pixel-meadow/cards/007.svg",
+          "metadata": {
+            "type": "Stone",
+            "hp": 60,
+            "flavor": "Rolls downhill for fun, then walks all the way back."
+          }
+        },
+        {
+          "number": "008",
+          "name": "Bloomtail",
+          "rarity": "uncommon",
+          "imageUrl": "/tcg-assets/cyan-critters/pixel-meadow/cards/008.svg",
+          "metadata": {
+            "type": "Leaf",
+            "hp": 70,
+            "flavor": "The flower on its tail opens only at sunrise."
+          }
+        },
+        {
+          "number": "009",
+          "name": "Voltbug",
+          "rarity": "uncommon",
+          "imageUrl": "/tcg-assets/cyan-critters/pixel-meadow/cards/009.svg",
+          "metadata": {
+            "type": "Spark",
+            "hp": 60,
+            "flavor": "Hums like a tiny power line."
+          }
+        },
+        {
+          "number": "010",
+          "name": "Galeowl",
+          "rarity": "uncommon",
+          "imageUrl": "/tcg-assets/cyan-critters/pixel-meadow/cards/010.svg",
+          "metadata": {
+            "type": "Breeze",
+            "hp": 70,
+            "flavor": "Turns its head all the way round to feel the wind."
+          }
+        },
+        {
+          "number": "011",
+          "name": "Craglet",
+          "rarity": "uncommon",
+          "imageUrl": "/tcg-assets/cyan-critters/pixel-meadow/cards/011.svg",
+          "metadata": {
+            "type": "Stone",
+            "hp": 80,
+            "flavor": "Stacks pebbles into towers and guards them."
+          }
+        },
+        {
+          "number": "012",
+          "name": "Twirlwing",
+          "rarity": "uncommon",
+          "imageUrl": "/tcg-assets/cyan-critters/pixel-meadow/cards/012.svg",
+          "metadata": {
+            "type": "Breeze",
+            "hp": 60,
+            "flavor": "Spins when it is happy, which is nearly always."
+          }
+        },
+        {
+          "number": "013",
+          "name": "Thornback",
+          "rarity": "rare",
+          "imageUrl": "/tcg-assets/cyan-critters/pixel-meadow/cards/013.svg",
+          "metadata": {
+            "type": "Leaf",
+            "hp": 100,
+            "flavor": "Gentle, unless you step on its flowerbed."
+          }
+        },
+        {
+          "number": "014",
+          "name": "Stormane",
+          "rarity": "rare",
+          "imageUrl": "/tcg-assets/cyan-critters/pixel-meadow/cards/014.svg",
+          "metadata": {
+            "type": "Spark",
+            "hp": 90,
+            "flavor": "Its mane crackles when it runs at full speed."
+          }
+        },
+        {
+          "number": "015",
+          "name": "Boulderon",
+          "rarity": "rare",
+          "imageUrl": "/tcg-assets/cyan-critters/pixel-meadow/cards/015.svg",
+          "metadata": {
+            "type": "Stone",
+            "hp": 120,
+            "flavor": "Moves one step a day, and never backwards."
+          }
+        },
+        {
+          "number": "016",
+          "name": "Zephyra",
+          "rarity": "epic",
+          "imageUrl": "/tcg-assets/cyan-critters/pixel-meadow/cards/016.svg",
+          "metadata": {
+            "type": "Breeze",
+            "hp": 130,
+            "flavor": "Wherever it lands, the clouds part."
+          }
+        },
+        {
+          "number": "017",
+          "name": "Solarhorn",
+          "rarity": "epic",
+          "imageUrl": "/tcg-assets/cyan-critters/pixel-meadow/cards/017.svg",
+          "metadata": {
+            "type": "Spark",
+            "hp": 140,
+            "flavor": "Carries a little piece of noon between its horns."
+          }
+        },
+        {
+          "number": "018",
+          "name": "Pixelord",
+          "rarity": "legendary",
+          "imageUrl": "/tcg-assets/cyan-critters/pixel-meadow/cards/018.svg",
+          "metadata": {
+            "type": "Leaf",
+            "hp": 180,
+            "flavor": "The first critter of the meadow. Every blade of grass knows its name."
+          }
+        }
+      ],
+      "packs": [
+        {
+          "code": "sunrise",
+          "name": "Sunrise Pack",
+          "description": "Warm light and crackling manes. Solarhorn waits inside.",
+          "imageUrl": "/tcg-assets/cyan-critters/pixel-meadow/packs/sunrise.svg",
+          "slots": [
+            {
+              "count": 3,
+              "odds": {
+                "common": 100
+              }
+            },
+            {
+              "count": 1,
+              "odds": {
+                "uncommon": 90,
+                "rare": 10
+              }
+            },
+            {
+              "count": 1,
+              "odds": {
+                "rare": 75,
+                "epic": 20,
+                "legendary": 5
+              }
+            }
+          ],
+          "cards": [
+            "001",
+            "002",
+            "003",
+            "004",
+            "005",
+            "006",
+            "007",
+            "008",
+            "009",
+            "010",
+            "011",
+            "012",
+            "013",
+            "014",
+            "017",
+            "018"
+          ]
+        },
+        {
+          "code": "twilight",
+          "name": "Twilight Pack",
+          "description": "Cool winds over quiet stone. Zephyra waits inside.",
+          "imageUrl": "/tcg-assets/cyan-critters/pixel-meadow/packs/twilight.svg",
+          "slots": [
+            {
+              "count": 3,
+              "odds": {
+                "common": 100
+              }
+            },
+            {
+              "count": 1,
+              "odds": {
+                "uncommon": 90,
+                "rare": 10
+              }
+            },
+            {
+              "count": 1,
+              "odds": {
+                "rare": 75,
+                "epic": 20,
+                "legendary": 5
+              }
+            }
+          ],
+          "cards": [
+            "001",
+            "002",
+            "003",
+            "004",
+            "005",
+            "006",
+            "007",
+            "008",
+            "009",
+            "010",
+            "011",
+            "012",
+            "014",
+            "015",
+            "016",
+            "018"
+          ]
+        }
+      ]
+    },
+    {
+      "code": "neon-depths",
+      "name": "Neon Depths",
+      "description": "A glowing sea under the arcade, full of things that shimmer and lurk.",
+      "imageUrl": "/tcg-assets/cyan-critters/neon-depths/set.svg",
+      "releasedOn": "2026-09-15",
+      "cards": [
+        {
+          "number": "001",
+          "name": "Dripple",
+          "rarity": "common",
+          "imageUrl": "/tcg-assets/cyan-critters/neon-depths/cards/001.svg",
+          "metadata": {
+            "type": "Wave",
+            "hp": 40,
+            "flavor": "Leaves wet footprints even on a dry day."
+          }
+        },
+        {
+          "number": "002",
+          "name": "Glimmit",
+          "rarity": "common",
+          "imageUrl": "/tcg-assets/cyan-critters/neon-depths/cards/002.svg",
+          "metadata": {
+            "type": "Glow",
+            "hp": 30,
+            "flavor": "Glows brighter the more it is looked at."
+          }
+        },
+        {
+          "number": "003",
+          "name": "Murkit",
+          "rarity": "common",
+          "imageUrl": "/tcg-assets/cyan-critters/neon-depths/cards/003.svg",
+          "metadata": {
+            "type": "Shade",
+            "hp": 50,
+            "flavor": "Naps in shadows and is rarely found twice."
+          }
+        },
+        {
+          "number": "004",
+          "name": "Chillo",
+          "rarity": "common",
+          "imageUrl": "/tcg-assets/cyan-critters/neon-depths/cards/004.svg",
+          "metadata": {
+            "type": "Frost",
+            "hp": 40,
+            "flavor": "Sneezes snowflakes."
+          }
+        },
+        {
+          "number": "005",
+          "name": "Bubblu",
+          "rarity": "common",
+          "imageUrl": "/tcg-assets/cyan-critters/neon-depths/cards/005.svg",
+          "metadata": {
+            "type": "Wave",
+            "hp": 50,
+            "flavor": "Talks only in bubbles. Nobody minds."
+          }
+        },
+        {
+          "number": "006",
+          "name": "Neonip",
+          "rarity": "common",
+          "imageUrl": "/tcg-assets/cyan-critters/neon-depths/cards/006.svg",
+          "metadata": {
+            "type": "Glow",
+            "hp": 40,
+            "flavor": "Collects lost light and keeps it in its cheeks."
+          }
+        },
+        {
+          "number": "007",
+          "name": "Shadelet",
+          "rarity": "common",
+          "imageUrl": "/tcg-assets/cyan-critters/neon-depths/cards/007.svg",
+          "metadata": {
+            "type": "Shade",
+            "hp": 40,
+            "flavor": "Follows you home, then pretends it did not."
+          }
+        },
+        {
+          "number": "008",
+          "name": "Tidefin",
+          "rarity": "uncommon",
+          "imageUrl": "/tcg-assets/cyan-critters/neon-depths/cards/008.svg",
+          "metadata": {
+            "type": "Wave",
+            "hp": 70,
+            "flavor": "Knows the tide tables by heart."
+          }
+        },
+        {
+          "number": "009",
+          "name": "Lumoth",
+          "rarity": "uncommon",
+          "imageUrl": "/tcg-assets/cyan-critters/neon-depths/cards/009.svg",
+          "metadata": {
+            "type": "Glow",
+            "hp": 60,
+            "flavor": "Draws slow circles around every lantern."
+          }
+        },
+        {
+          "number": "010",
+          "name": "Frostpaw",
+          "rarity": "uncommon",
+          "imageUrl": "/tcg-assets/cyan-critters/neon-depths/cards/010.svg",
+          "metadata": {
+            "type": "Frost",
+            "hp": 70,
+            "flavor": "Its paw prints stay frozen until spring."
+          }
+        },
+        {
+          "number": "011",
+          "name": "Gloomcap",
+          "rarity": "uncommon",
+          "imageUrl": "/tcg-assets/cyan-critters/neon-depths/cards/011.svg",
+          "metadata": {
+            "type": "Shade",
+            "hp": 80,
+            "flavor": "Grows where nobody has looked for a while."
+          }
+        },
+        {
+          "number": "012",
+          "name": "Coralisk",
+          "rarity": "uncommon",
+          "imageUrl": "/tcg-assets/cyan-critters/neon-depths/cards/012.svg",
+          "metadata": {
+            "type": "Wave",
+            "hp": 70,
+            "flavor": "Wears a reef like a crown and tends it daily."
+          }
+        },
+        {
+          "number": "013",
+          "name": "Abyssail",
+          "rarity": "rare",
+          "imageUrl": "/tcg-assets/cyan-critters/neon-depths/cards/013.svg",
+          "metadata": {
+            "type": "Wave",
+            "hp": 110,
+            "flavor": "Drifts up from the deep once every full moon."
+          }
+        },
+        {
+          "number": "014",
+          "name": "Prismoth",
+          "rarity": "rare",
+          "imageUrl": "/tcg-assets/cyan-critters/neon-depths/cards/014.svg",
+          "metadata": {
+            "type": "Glow",
+            "hp": 90,
+            "flavor": "Its wings split one beam into seven."
+          }
+        },
+        {
+          "number": "015",
+          "name": "Rimeclaw",
+          "rarity": "rare",
+          "imageUrl": "/tcg-assets/cyan-critters/neon-depths/cards/015.svg",
+          "metadata": {
+            "type": "Frost",
+            "hp": 110,
+            "flavor": "Carves its name into glaciers."
+          }
+        },
+        {
+          "number": "016",
+          "name": "Voidmaw",
+          "rarity": "epic",
+          "imageUrl": "/tcg-assets/cyan-critters/neon-depths/cards/016.svg",
+          "metadata": {
+            "type": "Shade",
+            "hp": 140,
+            "flavor": "Swallows echoes. The depths are quiet around it."
+          }
+        },
+        {
+          "number": "017",
+          "name": "Aurorix",
+          "rarity": "epic",
+          "imageUrl": "/tcg-assets/cyan-critters/neon-depths/cards/017.svg",
+          "metadata": {
+            "type": "Frost",
+            "hp": 130,
+            "flavor": "Paints the ice with the colours of the sky."
+          }
+        },
+        {
+          "number": "018",
+          "name": "Neonarch",
+          "rarity": "legendary",
+          "imageUrl": "/tcg-assets/cyan-critters/neon-depths/cards/018.svg",
+          "metadata": {
+            "type": "Glow",
+            "hp": 190,
+            "flavor": "The light at the bottom of the sea. Every glow in the depths is borrowed from it."
+          }
+        }
+      ],
+      "packs": [
+        {
+          "code": "tide",
+          "name": "Tide Pack",
+          "description": "Bright water and drifting lights. Aurorix waits inside.",
+          "imageUrl": "/tcg-assets/cyan-critters/neon-depths/packs/tide.svg",
+          "slots": [
+            {
+              "count": 3,
+              "odds": {
+                "common": 100
+              }
+            },
+            {
+              "count": 1,
+              "odds": {
+                "uncommon": 90,
+                "rare": 10
+              }
+            },
+            {
+              "count": 1,
+              "odds": {
+                "rare": 75,
+                "epic": 20,
+                "legendary": 5
+              }
+            }
+          ],
+          "cards": [
+            "001",
+            "002",
+            "003",
+            "004",
+            "005",
+            "006",
+            "007",
+            "008",
+            "009",
+            "010",
+            "011",
+            "012",
+            "013",
+            "014",
+            "017",
+            "018"
+          ]
+        },
+        {
+          "code": "abyss",
+          "name": "Abyss Pack",
+          "description": "Cold, dark and very quiet. Voidmaw waits inside.",
+          "imageUrl": "/tcg-assets/cyan-critters/neon-depths/packs/abyss.svg",
+          "slots": [
+            {
+              "count": 3,
+              "odds": {
+                "common": 100
+              }
+            },
+            {
+              "count": 1,
+              "odds": {
+                "uncommon": 90,
+                "rare": 10
+              }
+            },
+            {
+              "count": 1,
+              "odds": {
+                "rare": 75,
+                "epic": 20,
+                "legendary": 5
+              }
+            }
+          ],
+          "cards": [
+            "001",
+            "002",
+            "003",
+            "004",
+            "005",
+            "006",
+            "007",
+            "008",
+            "009",
+            "010",
+            "011",
+            "012",
+            "014",
+            "015",
+            "016",
+            "018"
+          ]
+        }
+      ]
+    }
+  ]
+}

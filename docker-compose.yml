@@ -1,0 +1,62 @@
+# Cyan Arcade: the whole stack.
+#
+#   docker compose up --build        the app on http://localhost:3000
+#   docker compose up -d postgres    only the database, for running the backend and frontend natively
+#
+# Every setting has a working default; copy .env.example to .env to change them.
+name: cyan-arcade
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-cyan_arcade}
+      POSTGRES_USER: ${DB_USERNAME:-cyan}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-cyan}
+    ports:
+      # Only this machine can reach it. Port 5433 avoids a locally installed PostgreSQL on 5432.
+      - "127.0.0.1:${DB_PORT:-5433}:5432"
+    volumes:
+      # PostgreSQL 18+ images keep their data in a version-specific subdirectory of /var/lib/postgresql.
+      - db-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/${DB_NAME:-cyan_arcade}
+      DB_USERNAME: ${DB_USERNAME:-cyan}
+      DB_PASSWORD: ${DB_PASSWORD:-cyan}
+      # Set to true when the site is served over HTTPS.
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
+      TCG_DAILY_PACK_LIMIT: ${TCG_DAILY_PACK_LIMIT:-10}
+    ports:
+      # For development tools only (the Vite dev server, curl). The browser goes through the frontend.
+      - "127.0.0.1:${BACKEND_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ > /dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  db-data:

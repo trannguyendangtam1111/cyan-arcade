@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 240" role="img" aria-label="Snake">
+  <rect width="400" height="240" fill="#22c55e"/>
+  <g fill="#16a34a" opacity=".45">
+    <rect x="0" y="0" width="40" height="40"/><rect x="80" y="0" width="40" height="40"/><rect x="160" y="0" width="40" height="40"/><rect x="240" y="0" width="40" height="40"/><rect x="320" y="0" width="40" height="40"/>
+    <rect x="40" y="40" width="40" height="40"/><rect x="120" y="40" width="40" height="40"/><rect x="200" y="40" width="40" height="40"/><rect x="280" y="40" width="40" height="40"/><rect x="360" y="40" width="40" height="40"/>
+    <rect x="0" y="80" width="40" height="40"/><rect x="80" y="80" width="40" height="40"/><rect x="160" y="80" width="40" height="40"/><rect x="240" y="80" width="40" height="40"/><rect x="320" y="80" width="40" height="40"/>
+    <rect x="40" y="120" width="40" height="40"/><rect x="120" y="120" width="40" height="40"/><rect x="200" y="120" width="40" height="40"/><rect x="280" y="120" width="40" height="40"/><rect x="360" y="120" width="40" height="40"/>
+    <rect x="0" y="160" width="40" height="40"/><rect x="80" y="160" width="40" height="40"/><rect x="160" y="160" width="40" height="40"/><rect x="240" y="160" width="40" height="40"/><rect x="320" y="160" width="40" height="40"/>
+    <rect x="40" y="200" width="40" height="40"/><rect x="120" y="200" width="40" height="40"/><rect x="200" y="200" width="40" height="40"/><rect x="280" y="200" width="40" height="40"/><rect x="360" y="200" width="40" height="40"/>
+  </g>
+  <path d="M60 180h120v-80h100" fill="none" stroke="#14532d" stroke-width="40" stroke-linecap="round" stroke-linejoin="round" opacity=".25" transform="translate(0 6)"/>
+  <path d="M60 180h120v-80h100" fill="none" stroke="#fef9c3" stroke-width="36" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="286" cy="92" r="5" fill="#14532d"/><circle cx="286" cy="108" r="5" fill="#14532d"/>
+  <path d="M298 100h16" stroke="#ef4444" stroke-width="5" stroke-linecap="round"/>
+  <circle cx="340" cy="60" r="16" fill="#ef4444"/><path d="M340 44c2-8 8-10 12-10" fill="none" stroke="#14532d" stroke-width="4" stroke-linecap="round"/>
+</svg>

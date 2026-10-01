@@ -1,0 +1,273 @@
+@import '@fontsource-variable/fredoka';
+@import '@fontsource-variable/nunito';
+@import 'tailwindcss';
+
+/*
+ * Design tokens for the "Playful Cartoon Arcade" theme.
+ *
+ * Every token is a CSS variable and also generates Tailwind utilities (bg-brand-500, rounded-card,
+ * shadow-soft, px-gutter, text-hero, ...). Cyan is the platform brand. Games bring their own accent
+ * color from the catalog; components receive it through the `--accent` variable and must never
+ * hardcode a game's color.
+ */
+@theme {
+  /* Typography */
+  --font-display: 'Fredoka Variable', ui-rounded, system-ui, sans-serif;
+  --font-sans: 'Nunito Variable', ui-sans-serif, system-ui, sans-serif;
+
+  --text-hero: clamp(2.25rem, 1.4rem + 4.2vw, 3.75rem);
+  --text-hero--line-height: 1.1;
+  --text-title: clamp(1.75rem, 1.4rem + 1.8vw, 2.5rem);
+  --text-title--line-height: 1.15;
+
+  /* Brand */
+  --color-brand-50: var(--color-cyan-50);
+  --color-brand-100: var(--color-cyan-100);
+  --color-brand-200: var(--color-cyan-200);
+  --color-brand-300: var(--color-cyan-300);
+  --color-brand-400: var(--color-cyan-400);
+  --color-brand-500: var(--color-cyan-500);
+  --color-brand-600: var(--color-cyan-600);
+  --color-brand-700: var(--color-cyan-700);
+  --color-brand-800: var(--color-cyan-800);
+  --color-brand-900: var(--color-cyan-900);
+
+  /* Background, surfaces, text, borders */
+  --color-canvas: #f1fbfd;
+  --color-surface: #ffffff;
+  --color-surface-muted: #e6f6fa;
+  --color-ink: #16323f;
+  --color-ink-soft: #4b6776;
+  --color-line: #cfeef5;
+
+  /* Trading cards: purple and pink, with gold for the rarest. Used by the card game module only. */
+  --color-tcg-purple: var(--color-purple-600);
+  --color-tcg-pink: var(--color-pink-600);
+  --color-tcg-gold: var(--color-amber-400);
+
+  /* Feedback */
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-danger: #f43f5e;
+
+  /* Shape */
+  --radius-control: 1rem;
+  --radius-card: 1.5rem;
+
+  /* Elevation */
+  --shadow-soft: 0 2px 0 0 rgb(22 50 63 / 0.06), 0 10px 30px -12px rgb(22 50 63 / 0.18);
+  --shadow-lift: 0 2px 0 0 rgb(22 50 63 / 0.06), 0 18px 40px -14px rgb(22 50 63 / 0.28);
+
+  /* Layout spacing */
+  --spacing-gutter: clamp(1rem, 4vw, 1.5rem);
+  --spacing-section: clamp(2.5rem, 6vw, 4rem);
+  --container-page: 72rem;
+
+  /* Motion */
+  --animate-float: float 6s ease-in-out infinite;
+  --animate-pop-in: pop-in 380ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  /* A short sideways shake: "that hurt" feedback, e.g. on game over. */
+  --animate-shake: shake 420ms ease-in-out both;
+  /* A ring that grows and fades: "collected" feedback. Pair with opacity-0 as the resting state. */
+  --animate-burst: burst 450ms ease-out both;
+  /* A short-lived label: pops in, stays a moment, drifts up and fades. Pair with opacity-0. */
+  --animate-toast: toast 1200ms ease-out both;
+  /* Card packs. A sealed pack trembling while the server decides what is in it. */
+  --animate-pack-shake: pack-shake 480ms ease-in-out infinite;
+  /* The pack tearing open: it swells, brightens and is gone. */
+  --animate-pack-burst: pack-burst 900ms ease-in both;
+  /* A flash of light behind the pack as it opens. Pair with a blurred element. */
+  --animate-flash: flash 900ms ease-out both;
+  /* A card being dealt onto the table. */
+  --animate-card-deal: card-deal 420ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  /* A bar of light crossing the rarest cards. Only transform is animated, so it stays cheap. */
+  --animate-holo: holo 3s ease-in-out infinite;
+
+  @keyframes pack-shake {
+    0%,
+    100% {
+      transform: rotate(0deg);
+    }
+    25% {
+      transform: rotate(-4deg) scale(1.03);
+    }
+    75% {
+      transform: rotate(4deg) scale(1.03);
+    }
+  }
+
+  @keyframes pack-burst {
+    0% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    45% {
+      opacity: 1;
+      transform: scale(1.14) rotate(-3deg);
+    }
+    100% {
+      opacity: 0;
+      transform: scale(1.7) rotate(2deg);
+    }
+  }
+
+  @keyframes flash {
+    0% {
+      opacity: 0;
+      transform: scale(0.6);
+    }
+    55% {
+      opacity: 0.9;
+      transform: scale(1.3);
+    }
+    100% {
+      opacity: 0;
+      transform: scale(1.8);
+    }
+  }
+
+  @keyframes card-deal {
+    from {
+      opacity: 0;
+      transform: translateY(36px) scale(0.8) rotate(-6deg);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @keyframes holo {
+    0% {
+      transform: translateX(-160%) skewX(-18deg);
+    }
+    55%,
+    100% {
+      transform: translateX(460%) skewX(-18deg);
+    }
+  }
+
+  /* A page arriving after navigation: a quick fade with a small rise. */
+  --animate-page-in: page-in 240ms ease-out both;
+
+  @keyframes page-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @keyframes float {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-8px);
+    }
+  }
+
+  @keyframes shake {
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+    20% {
+      transform: translateX(-7px);
+    }
+    40% {
+      transform: translateX(6px);
+    }
+    60% {
+      transform: translateX(-4px);
+    }
+    80% {
+      transform: translateX(3px);
+    }
+  }
+
+  @keyframes burst {
+    from {
+      opacity: 0.8;
+      transform: scale(0.5);
+    }
+    to {
+      opacity: 0;
+      transform: scale(2.6);
+    }
+  }
+
+  @keyframes toast {
+    0% {
+      opacity: 0;
+      translate: -50% 8px;
+    }
+    15%,
+    65% {
+      opacity: 1;
+      translate: -50% 0;
+    }
+    100% {
+      opacity: 0;
+      translate: -50% -12px;
+    }
+  }
+
+  @keyframes pop-in {
+    from {
+      opacity: 0;
+      transform: scale(0.94) translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}
+
+@layer base {
+  :root {
+    /* Default accent for anything not scoped to a game, and the text color that reads on it. */
+    --accent: var(--color-brand-500);
+    --accent-ink: var(--color-brand-950);
+  }
+
+  html {
+    color-scheme: light;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-canvas font-sans text-ink antialiased;
+    /* Subtle arcade-floor dot pattern. */
+    background-image: radial-gradient(rgb(6 182 212 / 0.1) 1.2px, transparent 1.2px);
+    background-size: 22px 22px;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-display;
+  }
+
+  :focus-visible {
+    @apply outline-3 outline-offset-2 outline-brand-500;
+  }
+}
+
+/* Respect users who ask the OS for less motion: keep state changes, drop decorative movement. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

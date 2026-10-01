@@ -1,0 +1,83 @@
+spring:
+  application:
+    name: cyan-arcade-backend
+  autoconfigure:
+    # No in-memory default user: authentication is provided by the auth feature, not by Boot.
+    exclude: org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5433/cyan_arcade}
+    username: ${DB_USERNAME:cyan}
+    password: ${DB_PASSWORD:cyan}
+  jpa:
+    open-in-view: false
+    hibernate:
+      # Schema is owned by Flyway; Hibernate only verifies that entities match it.
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    locations: classpath:db/migration
+
+server:
+  port: ${SERVER_PORT:8080}
+  servlet:
+    session:
+      # How long a player stays signed in without visiting.
+      timeout: 14d
+      cookie:
+        name: CYAN_SESSION
+        http-only: true
+        same-site: lax
+        # Set to true wherever the site is served over HTTPS.
+        secure: ${SESSION_COOKIE_SECURE:false}
+  error:
+    include-stacktrace: never
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  info:
+    env:
+      enabled: true
+
+info:
+  app:
+    name: Cyan Arcade
+    version: '@project.version@'
+
+app:
+  auth:
+    login:
+      # Failed logins allowed per username and address before further attempts are refused,
+      # and how long a failure is remembered.
+      max-failures: ${LOGIN_MAX_FAILURES:5}
+      window: ${LOGIN_FAILURE_WINDOW:5m}
+  game-sessions:
+    # A run still unfinished after this long is removed by an hourly job.
+    abandoned-after: ${GAME_SESSIONS_ABANDONED_AFTER:24h}
+  scheduling:
+    # Switches every scheduled job on or off.
+    enabled: ${SCHEDULING_ENABLED:true}
+  daily-challenges:
+    # Creates each day's challenges at startup and at midnight UTC. Turn off to manage them by hand.
+    generation-enabled: ${DAILY_CHALLENGES_GENERATION_ENABLED:true}
+  tcg:
+    # Packs one player may open per day (UTC). 0 means no limit.
+    daily-pack-limit: ${TCG_DAILY_PACK_LIMIT:10}
+    import:
+      # Import the card games that ship with the application (classpath:tcg/datasets/*.json) at startup.
+      bundled: ${TCG_IMPORT_BUNDLED:true}
+      # Comma-separated paths of further dataset files to import at startup.
+      files: ${TCG_IMPORT_FILES:}
+  cors:
+    # Comma-separated origins allowed to call the API directly from a browser.
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}

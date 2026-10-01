@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 420" role="img" aria-label="Neonip">
+<defs>
+<linearGradient id="frame" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f8fafc"/><stop offset="1" stop-color="#e2e8f0"/></linearGradient>
+<linearGradient id="art" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fbcfe8"/><stop offset="1" stop-color="#db2777"/></linearGradient>
+<clipPath id="window"><rect x="18" y="54" width="264" height="212" rx="12"/></clipPath>
+</defs>
+<rect x="3" y="3" width="294" height="414" rx="20" fill="url(#frame)" stroke="#cbd5e1" stroke-width="6"/>
+<text x="22" y="40" font-family="'Trebuchet MS', Verdana, system-ui, sans-serif" font-size="22" font-weight="700" fill="#0f172a">Neonip</text>
+<text x="278" y="40" font-family="'Trebuchet MS', Verdana, system-ui, sans-serif" font-size="17" font-weight="700" fill="#b91c1c" text-anchor="end">HP 40</text>
+<g clip-path="url(#window)">
+<rect x="18" y="54" width="264" height="212" fill="url(#art)"/>
+
+<ellipse cx="150" cy="246" rx="96" ry="16" fill="#000" opacity="0.18"/>
+<g transform="translate(150 166) scale(1.18)"><path d="M 36 18 q 46 -4 36 -46 q -4 26 -28 28 z" fill="#b05283"/><polygon points="-11.3,-37.199999999999996 -39.3,-37.199999999999996 -31.3,-75.19999999999999" fill="#b05283"/><polygon points="11.3,-37.199999999999996 39.3,-37.199999999999996 31.3,-75.19999999999999" fill="#b05283"/><ellipse cx="-20.7" cy="57" rx="16" ry="9" fill="#b05283"/><ellipse cx="20.7" cy="57" rx="16" ry="9" fill="#b05283"/><ellipse cx="0" cy="0" rx="46" ry="60" fill="#f472b6"/><ellipse cx="0" cy="20.400000000000002" rx="27.599999999999998" ry="28.799999999999997" fill="#fce7f3"/><path d="M -15.64 -44.4 q 15.64 8 31.28 0" stroke="#b05283" stroke-width="5" fill="none" stroke-linecap="round" opacity="0.6"/><path d="M -10.120000000000001 -34.8 q 10.120000000000001 8 20.240000000000002 0" stroke="#b05283" stroke-width="5" fill="none" stroke-linecap="round" opacity="0.6"/><circle cx="-15.64" cy="-10.799999999999999" r="6" fill="#1f2937"/><circle cx="-13.64" cy="-12.799999999999999" r="2" fill="#fff"/><circle cx="15.64" cy="-10.799999999999999" r="6" fill="#1f2937"/><circle cx="17.64" cy="-12.799999999999999" r="2" fill="#fff"/><circle cx="-27.64" cy="3.200000000000001" r="6" fill="#fb7185" opacity="0.55"/><circle cx="27.64" cy="3.200000000000001" r="6" fill="#fb7185" opacity="0.55"/><path d="M -7 2.200000000000001 q 7 8 14 0" stroke="#1f2937" stroke-width="3.5" fill="none" stroke-linecap="round"/></g>
+
+</g>
+<rect x="18" y="54" width="264" height="212" rx="12" fill="none" stroke="#cbd5e1" stroke-width="3"/>
+<rect x="22" y="280" width="66" height="26" rx="13" fill="#db2777"/>
+<text x="35" y="298" font-family="'Trebuchet MS', Verdana, system-ui, sans-serif" font-size="14" font-weight="700" fill="#fff">Glow</text>
+<text x="22" y="330" font-family="'Trebuchet MS', Verdana, system-ui, sans-serif" font-size="14" font-style="italic" fill="#334155">Collects lost light and keeps it in its</text>
+<text x="22" y="349" font-family="'Trebuchet MS', Verdana, system-ui, sans-serif" font-size="14" font-style="italic" fill="#334155">cheeks.</text>
+<text x="22" y="400" font-family="'Trebuchet MS', Verdana, system-ui, sans-serif" font-size="13" font-weight="700" fill="#64748b">006/018</text>
+<circle cx="272" cy="395" r="6" fill="#64748b"/>
+</svg>
