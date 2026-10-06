@@ -11,7 +11,8 @@ import { Pager } from '@/components/ui/Pager'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { cn } from '@/lib/cn'
 import { formatScore } from '@/lib/format'
-import { useCollection, type Collection, type TcgCard } from '../api'
+import { gameAccent } from '../accent'
+import { useCollection, useTcgGames, type Collection, type TcgCard } from '../api'
 import { CardDetail } from '../components/CardDetail'
 import { CardTile } from '../components/CardTile'
 import { CompletionBar } from '../components/CompletionBar'
@@ -26,23 +27,34 @@ function positive(value: string | null): number | undefined {
 
 /**
  * The player's cards: how complete the collection is, set by set, and the cards themselves.
- * The chosen set and page live in the URL (`?set=3&page=2`).
+ * The chosen game, set and page live in the URL (`?game=pokemon&set=3&page=2`).
  */
 export function TcgCollectionPage() {
   useDocumentTitle('Collection')
   const { user, isPending: sessionPending } = useSession()
   const [params, setParams] = useSearchParams()
+  const gameSlug = params.get('game') ?? undefined
   const setId = positive(params.get('set'))
   const page = positive(params.get('page')) ?? 1
-  const { data, isPending, isError, isPlaceholderData, refetch } = useCollection({ setId, page: page - 1 }, Boolean(user))
+  const { data: games } = useTcgGames()
+  const { data, isPending, isError, isPlaceholderData, refetch } = useCollection(
+    { gameSlug, setId, page: page - 1 },
+    Boolean(user),
+  )
   const [selected, setSelected] = useState<{ card: TcgCard; quantity: number } | null>(null)
+  const [allSets, setAllSets] = useState(false)
 
-  const show = (next: { set?: number; page?: number }) => {
+  const show = (next: { game?: string; set?: number; page?: number }) => {
     const query: Record<string, string> = {}
+    if (next.game !== undefined) query.game = next.game
     if (next.set !== undefined) query.set = String(next.set)
     if (next.page !== undefined && next.page > 1) query.page = String(next.page)
     setParams(query)
   }
+  const accentOf = (slug: string) => games?.find((game) => game.slug === slug)?.accentColor
+  // Real games have dozens of sets: the ones the player has started come first, the rest on request.
+  const started = data?.sets.filter((set) => set.ownedCards > 0 || set.id === setId) ?? []
+  const shownSets = allSets || started.length === 0 ? (data?.sets ?? []) : started
 
   return (
     <>
@@ -59,6 +71,33 @@ export function TcgCollectionPage() {
         <ErrorState title="Couldn't load your collection" onRetry={() => void refetch()} />
       )}
 
+      {user && games && games.length > 1 && (
+        <nav aria-label="Card games" className="mb-6">
+          <ul className="flex flex-wrap gap-2">
+            {[{ slug: undefined, name: 'All games', accentColor: null }, ...games].map((game) => {
+              const current = game.slug === gameSlug
+              return (
+                <li key={game.slug ?? 'all'} style={gameAccent(game.accentColor)}>
+                  <button
+                    type="button"
+                    aria-pressed={current}
+                    onClick={() => show({ game: game.slug })}
+                    className={cn(
+                      'rounded-full px-4 py-2 font-display font-medium ring-2 transition-all active:scale-95',
+                      current
+                        ? 'bg-(--accent) text-(--accent-ink) ring-transparent'
+                        : 'bg-surface text-ink-soft ring-line hover:text-ink hover:ring-(--accent)',
+                    )}
+                  >
+                    {game.name}
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        </nav>
+      )}
+
       {user && data && (
         <div className="flex flex-col gap-8">
           <Summary collection={data} />
@@ -68,24 +107,36 @@ export function TcgCollectionPage() {
               Sets
             </h2>
             <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {data.sets.map((set) => {
+              {shownSets.map((set) => {
                 const chosen = set.id === setId
                 return (
-                  <li key={set.id} className="flex *:w-full">
+                  <li key={set.id} style={gameAccent(accentOf(set.game.slug))} className="flex *:w-full">
                     <button
                       type="button"
                       aria-pressed={chosen}
-                      onClick={() => show(chosen ? {} : { set: set.id })}
+                      onClick={() => show(chosen ? { game: gameSlug } : { game: gameSlug, set: set.id })}
                       className={cardStyles(
                         'md',
                         cn(
                           'text-left transition-all hover:-translate-y-0.5 hover:shadow-lift active:translate-y-0',
-                          chosen && 'ring-[3px] ring-purple-400',
+                          chosen && 'ring-[3px] ring-(--accent)',
                         ),
                       )}
                     >
-                      <span className="block font-display text-lg font-semibold">{set.name}</span>
-                      <span className="mb-3 block text-sm text-ink-soft">{set.game.name}</span>
+                      <span className="mb-3 flex items-center gap-3">
+                        {(set.imageUrl ?? set.coverImageUrl) && (
+                          <img
+                            src={set.imageUrl ?? set.coverImageUrl ?? undefined}
+                            alt=""
+                            loading="lazy"
+                            className="h-10 w-14 shrink-0 object-contain"
+                          />
+                        )}
+                        <span className="min-w-0">
+                          <span className="block truncate font-display text-lg font-semibold">{set.name}</span>
+                          <span className="block truncate text-sm text-ink-soft">{set.game.name}</span>
+                        </span>
+                      </span>
                       <CompletionBar
                         label={set.name}
                         owned={set.ownedCards}
@@ -97,6 +148,15 @@ export function TcgCollectionPage() {
                 )
               })}
             </ul>
+            {shownSets.length < data.sets.length && (
+              <button
+                type="button"
+                onClick={() => setAllSets(true)}
+                className="mt-4 rounded font-display font-medium text-purple-700 hover:text-purple-900"
+              >
+                Show all {data.sets.length} sets
+              </button>
+            )}
           </section>
 
           <section aria-labelledby="owned-cards-heading">
@@ -136,7 +196,7 @@ export function TcgCollectionPage() {
                     label="Collection pages"
                     page={page}
                     totalPages={data.totalPages}
-                    onPageChange={(next) => show({ set: setId, page: next })}
+                    onPageChange={(next) => show({ game: gameSlug, set: setId, page: next })}
                   />
                 </div>
               </>

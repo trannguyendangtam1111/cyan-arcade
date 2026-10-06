@@ -5,7 +5,7 @@ import { GameShell, Key } from '@/games/shared/components/GameShell'
 import { useSwipe } from '@/games/shared/useSwipe'
 import type { GameProps } from '@/games/types'
 import { cn } from '@/lib/cn'
-import type { SnakeStrategy } from './ai/snakeAi'
+import type { SnakeAI, SnakeStrategy } from './ai/snakeAi'
 import { SnakeBoard } from './components/SnakeBoard'
 import { useSnakeGame } from './hooks/useSnakeGame'
 
@@ -18,7 +18,7 @@ const STRATEGY_LABELS: Record<SnakeStrategy, string> = {
 }
 
 /** Snake's screen. All behaviour lives in `useSnakeGame`; this file only lays it out. */
-export default function SnakeGame(props: GameProps) {
+export default function SnakeGame(props: GameProps<SnakeAI>) {
   const game = useSnakeGame(props)
   const { state, status, isAi } = game
   const swipe = useSwipe(game.steer)
@@ -49,6 +49,7 @@ export default function SnakeGame(props: GameProps) {
     <GameShell
       mode={game.mode}
       onModeChange={game.changeMode}
+      aiAvailable={game.aiAvailable}
       onRestart={game.restart}
       pause={{ paused: game.paused, onToggle: game.togglePause, disabled: !game.canPause }}
       stats={

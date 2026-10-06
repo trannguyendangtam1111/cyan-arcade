@@ -55,10 +55,13 @@ function AchievementCard({ achievement }: { achievement: AchievementStatus }) {
         <p className="mt-1.5 text-sm font-bold">
           {unlocked ? (
             <span className="text-amber-700">
-              Unlocked{achievement.unlockedAt ? ` ${formatDate(achievement.unlockedAt)}` : ''} · +{achievement.xp} XP
+              Unlocked{achievement.unlockedAt ? ` ${formatDate(achievement.unlockedAt)}` : ''} · +{achievement.xp} XP · +
+              {achievement.coins} coins
             </span>
           ) : (
-            <span className="text-ink-soft">Locked · worth {achievement.xp} XP</span>
+            <span className="text-ink-soft">
+              Locked · worth {achievement.xp} XP and {achievement.coins} coins
+            </span>
           )}
         </p>
       </div>

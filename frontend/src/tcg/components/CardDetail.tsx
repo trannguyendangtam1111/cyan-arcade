@@ -43,6 +43,8 @@ export function CardDetail({ card, quantity, onClose }: CardDetailProps) {
             <dd>
               {card.set.name} · {card.number}
             </dd>
+            <dt className="font-bold text-ink">Card ID</dt>
+            <dd className="font-mono text-xs leading-5">{card.externalId}</dd>
             <dt className="font-bold text-ink">Game</dt>
             <dd>{card.game.name}</dd>
             {quantity !== undefined && (

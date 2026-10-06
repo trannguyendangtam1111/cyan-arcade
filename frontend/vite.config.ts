@@ -15,6 +15,18 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
+  build: {
+    rolldownOptions: {
+      output: {
+        // The games' AIs (AI mode is for admins) go to assets/ai/, which nginx serves only to an
+        // admin's session. Everything else keeps the usual place.
+        chunkFileNames: (chunk) =>
+          /[\\/]games[\\/][^\\/]+[\\/]ai[\\/]/.test(chunk.facadeModuleId ?? '')
+            ? 'assets/ai/[name]-[hash].js'
+            : 'assets/[name]-[hash].js',
+      },
+    },
+  },
   server: {
     port: 5173,
     proxy: {

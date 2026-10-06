@@ -21,7 +21,7 @@ export function CardTile({ card, quantity, onSelect }: CardTileProps) {
       aria-label={`${card.name}, ${card.rarity.name}${owned}`}
       className="group relative flex w-full flex-col gap-1.5 rounded-xl text-left transition-transform hover:-translate-y-1 active:translate-y-0"
     >
-      <CardFace card={card} missing={missing} className="w-full" />
+      <CardFace card={card} missing={missing} size="thumb" className="w-full" />
       {quantity !== undefined && quantity > 1 && (
         <span className="absolute -top-2 -right-2 rounded-full bg-ink px-2 py-0.5 text-xs font-bold text-white shadow-soft ring-2 ring-surface">
           ×{quantity}

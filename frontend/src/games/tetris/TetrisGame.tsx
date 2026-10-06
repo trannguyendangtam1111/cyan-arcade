@@ -3,6 +3,7 @@ import { BoardOverlay } from '@/games/shared/components/BoardOverlay'
 import { GameShell, Key } from '@/games/shared/components/GameShell'
 import type { GameProps } from '@/games/types'
 import { formatScore } from '@/lib/format'
+import type { TetrisAI } from './ai/tetrisAi'
 import { NextPieces } from './components/NextPieces'
 import { TetrisBoard } from './components/TetrisBoard'
 import { TouchControls } from './components/TouchControls'
@@ -20,7 +21,7 @@ const ACTION_LABELS: Record<TetrisAction, string> = {
 }
 
 /** Tetris's screen. All behaviour lives in `useTetrisGame`; this file only lays it out. */
-export default function TetrisGame(props: GameProps) {
+export default function TetrisGame(props: GameProps<TetrisAI>) {
   const game = useTetrisGame(props)
   const { state, status, isAi } = game
 
@@ -53,6 +54,7 @@ export default function TetrisGame(props: GameProps) {
     <GameShell
       mode={game.mode}
       onModeChange={game.changeMode}
+      aiAvailable={game.aiAvailable}
       onRestart={game.restart}
       pause={{ paused: game.paused, onToggle: game.togglePause, disabled: !game.canPause }}
       stats={[

@@ -71,7 +71,8 @@ describe("today's challenge on the game page", () => {
     const challenge = within(await screen.findByRole('complementary', { name: "Today's challenge" }))
     expect(challenge.getByText('Snack Time')).toBeInTheDocument()
     expect(challenge.getByText(/Eat 10 apples in one game of Snake\./)).toBeInTheDocument()
-    expect(challenge.getByText('+35 XP')).toBeInTheDocument()
+    expect(challenge.getByText(/\+35 XP/)).toBeInTheDocument()
+    expect(challenge.getByText('+70 coins')).toBeInTheDocument()
     // The other games' challenges belong on their own pages.
     expect(challenge.queryByText('Tidy Up')).not.toBeInTheDocument()
   })
@@ -82,7 +83,7 @@ describe("today's challenge on the game page", () => {
 
     const challenge = within(await screen.findByRole('complementary', { name: "Today's challenge" }))
     expect(challenge.getByText('Completed')).toBeInTheDocument()
-    expect(challenge.queryByText('+35 XP')).not.toBeInTheDocument()
+    expect(challenge.queryByText(/\+35 XP/)).not.toBeInTheDocument()
   })
 
   it('shows nothing when the game has no challenge today', async () => {
@@ -135,12 +136,16 @@ describe('score keeping on the game page', () => {
       user: pixel,
       rewards: {
         xpEarned: 185,
+        coinsEarned: 240,
         personalBest: true,
-        achievements: [{ code: 'FIRST_GAME', name: 'First Coin', description: 'Finish your first game.', xp: 50 }],
-        bonuses: [{ type: 'DAILY_CHALLENGE', title: 'Snack Time', xp: 35 }],
+        achievements: [
+          { code: 'FIRST_GAME', name: 'First Coin', description: 'Finish your first game.', xp: 50, coins: 100 },
+        ],
+        bonuses: [{ type: 'DAILY_CHALLENGE', title: 'Snack Time', xp: 35, coins: 70 }],
         totalXp: 185,
         level: 2,
         leveledUp: true,
+        coinBalance: 240,
       },
     })
     renderRoute('/games/snake')
@@ -148,6 +153,7 @@ describe('score keeping on the game page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Finish run' }))
 
     expect(await screen.findByText('+185 XP')).toBeInTheDocument()
+    expect(screen.getByText('+240 coins')).toBeInTheDocument()
     expect(screen.getByText('New account best')).toBeInTheDocument()
     expect(screen.getByText('Achievement: First Coin')).toBeInTheDocument()
     expect(screen.getByText('Daily challenge: Snack Time')).toBeInTheDocument()

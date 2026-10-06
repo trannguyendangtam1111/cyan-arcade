@@ -8,6 +8,7 @@ import { buttonStyles } from '@/components/ui/buttonStyles'
 import { cn } from '@/lib/cn'
 import { useOpenPack, type Allowance, type PulledCard, type TcgPack } from '../api'
 import { CardBack, CardFace } from '../components/CardFace'
+import { PackArt } from '../components/PackArt'
 import { RarityBadge } from '../components/RarityBadge'
 import { tcgButton } from '../components/tcgButton'
 import { SPECIAL_TIER, TOP_TIER, tierStyle } from '../rarity'
@@ -42,7 +43,8 @@ export function PackOpening({ pack, allowance, cardBackUrl }: PackOpeningProps) 
   const openPack = useOpenPack()
   const { phase, opening, revealed } = state
 
-  const noneLeft = allowance?.leftToday === 0
+  // Once today's packs are gone, extra ones (from the shop) can still be opened.
+  const noneLeft = allowance?.leftToday === 0 && allowance.bonusPacks === 0
   const open = () => {
     dispatch({ type: 'open' })
     openPack.mutate(pack.id, {
@@ -75,12 +77,11 @@ export function PackOpening({ pack, allowance, cardBackUrl }: PackOpeningProps) 
               className="absolute size-64 rounded-full bg-amber-200 blur-2xl motion-safe:animate-flash"
             />
           )}
-          <img
-            src={pack.imageUrl}
-            alt={pack.name}
-            draggable={false}
+          <PackArt
+            pack={pack}
+            label={pack.name}
             className={cn(
-              'relative w-52 drop-shadow-[0_18px_24px_rgb(88_28_135/0.35)] sm:w-60',
+              'relative w-52 sm:w-60',
               phase === 'sealed' && 'motion-safe:animate-float',
               phase === 'requesting' && 'motion-safe:animate-pack-shake',
               phase === 'tearing' && 'motion-safe:animate-pack-burst',
@@ -100,12 +101,20 @@ export function PackOpening({ pack, allowance, cardBackUrl }: PackOpeningProps) 
             <PackageOpen aria-hidden className="size-5" />
             Open pack
           </button>
-          {noneLeft && <p className="text-ink-soft">You have opened all of today's packs. More tomorrow!</p>}
+          {noneLeft && (
+            <p className="text-ink-soft">
+              You have opened all of today's packs. More tomorrow, or{' '}
+              <Link to="/shop" className="font-bold text-purple-700 hover:text-purple-900">
+                get extra packs in the shop
+              </Link>
+              .
+            </p>
+          )}
         </div>
       )}
 
       {phase === 'requesting' && (
-        <p role="status" className="font-display text-lg font-semibold text-purple-800">
+        <p role="status" className="font-display text-lg font-semibold text-ink">
           Opening…
         </p>
       )}
@@ -182,7 +191,15 @@ export function PackOpening({ pack, allowance, cardBackUrl }: PackOpeningProps) 
               View collection
             </Link>
           </div>
-          {noneLeft && <p className="text-sm text-ink-soft">That was today's last pack. More tomorrow!</p>}
+          {noneLeft && (
+            <p className="text-sm text-ink-soft">
+              That was today's last pack. More tomorrow, or{' '}
+              <Link to="/shop" className="font-bold text-purple-700 hover:text-purple-900">
+                get extra packs in the shop
+              </Link>
+              .
+            </p>
+          )}
         </section>
       )}
     </div>

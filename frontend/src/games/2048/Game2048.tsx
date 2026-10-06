@@ -4,11 +4,12 @@ import { GameShell, Key } from '@/games/shared/components/GameShell'
 import { useSwipe } from '@/games/shared/useSwipe'
 import type { GameProps } from '@/games/types'
 import { formatScore } from '@/lib/format'
+import type { Game2048AI } from './ai/game2048Ai'
 import { Board2048 } from './components/Board2048'
 import { useGame2048 } from './hooks/useGame2048'
 
 /** 2048's screen. All behaviour lives in `useGame2048`; this file only lays it out. */
-export default function Game2048(props: GameProps) {
+export default function Game2048(props: GameProps<Game2048AI>) {
   const game = useGame2048(props)
   const { state, status, isAi } = game
   const swipe = useSwipe(game.play)
@@ -47,6 +48,7 @@ export default function Game2048(props: GameProps) {
     <GameShell
       mode={game.mode}
       onModeChange={game.changeMode}
+      aiAvailable={game.aiAvailable}
       onRestart={game.restart}
       // A turn-based game has nothing to pause for a human; only AI playback can be paused.
       pause={isAi ? { paused: game.paused, onToggle: game.togglePause, disabled: status === 'over' } : undefined}

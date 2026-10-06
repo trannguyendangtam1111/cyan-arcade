@@ -1,8 +1,9 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
-import { mockApi, pixel } from '@/test/mockApi'
+import { describe, expect, it, vi } from 'vitest'
+import { admin, mockApi, pixel } from '@/test/mockApi'
 import { renderRoute } from '@/test/renderWithProviders'
+import { RETRY_AFTER_MS } from './components/CardImage'
 import { openingFixture, tcgHandlers } from './test/tcgMockApi'
 
 type TcgOptions = Parameters<typeof tcgHandlers>[0]
@@ -34,8 +35,9 @@ describe('browsing card games, sets and packs', () => {
     renderRoute('/tcg')
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Card packs' })).toBeInTheDocument()
-    const game = await screen.findByRole('link', { name: /cyan critters/i })
-    expect(game).toHaveAttribute('href', '/tcg/cyan-critters')
+    expect(screen.getByRole('heading', { name: 'Choose your TCG' })).toBeInTheDocument()
+    const game = await screen.findByRole('link', { name: /pokémon tcg/i })
+    expect(game).toHaveAttribute('href', '/tcg/pokemon')
     expect(game).toHaveTextContent('1 set · 3 cards')
     // A guest has no collection to show.
     expect(screen.queryByRole('region', { name: 'Your collection' })).not.toBeInTheDocument()
@@ -53,12 +55,14 @@ describe('browsing card games, sets and packs', () => {
 
   it("lists a game's sets", async () => {
     asGuest()
-    renderRoute('/tcg/cyan-critters')
+    renderRoute('/tcg/pokemon')
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Cyan Critters' })).toBeInTheDocument()
-    const set = await screen.findByRole('link', { name: /pixel meadow/i })
-    expect(set).toHaveAttribute('href', '/tcg/cyan-critters/pixel-meadow')
-    expect(set).toHaveTextContent('3 cards · 1 pack')
+    expect(await screen.findByRole('heading', { level: 1, name: 'Pokémon TCG' })).toBeInTheDocument()
+    const set = await screen.findByRole('link', { name: /scarlet & violet/i })
+    expect(set).toHaveAttribute('href', '/tcg/pokemon/sv01')
+    expect(set).toHaveTextContent('2023 · 3 cards · 1 pack')
+    // The arcade does not own the cards it shows, and says whose they are.
+    expect(screen.getByText(/not affiliated with the pokémon company/i)).toBeInTheDocument()
   })
 
   it('shows the 404 page for a card game that does not exist', async () => {
@@ -70,29 +74,29 @@ describe('browsing card games, sets and packs', () => {
 
   it("lists a set's packs and every card in it", async () => {
     asGuest()
-    renderRoute('/tcg/cyan-critters/pixel-meadow')
+    renderRoute('/tcg/pokemon/sv01')
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Pixel Meadow' })).toBeInTheDocument()
-    const pack = await screen.findByRole('link', { name: /sunrise pack/i })
+    expect(await screen.findByRole('heading', { level: 1, name: 'Scarlet & Violet' })).toBeInTheDocument()
+    const pack = await screen.findByRole('link', { name: /scarlet & violet booster pack/i })
     expect(pack).toHaveAttribute('href', '/tcg/packs/20')
     expect(pack).toHaveTextContent('3 cards per pack · 3 to find')
 
     const cards = within(screen.getByRole('region', { name: 'Cards in this set' }))
     // A guest sees the cards without any word about owning them.
-    expect(await cards.findByRole('button', { name: 'Sproutle, Common' })).toBeInTheDocument()
-    expect(cards.getByRole('button', { name: 'Pixelord, Legendary' })).toBeInTheDocument()
+    expect(await cards.findByRole('button', { name: 'Pineco, Common' })).toBeInTheDocument()
+    expect(cards.getByRole('button', { name: 'Koraidon ex, Hyper Rare' })).toBeInTheDocument()
     expect(cards.getAllByRole('button')).toHaveLength(3)
   })
 
   it('marks which cards of a set a signed-in player owns', async () => {
     asPixel({ owned: { 101: 2, 102: 1 } })
-    renderRoute('/tcg/cyan-critters/pixel-meadow')
+    renderRoute('/tcg/pokemon/sv01')
 
     const cards = within(await screen.findByRole('region', { name: 'Cards in this set' }))
-    expect(await cards.findByRole('button', { name: 'Sproutle, Common, 2 owned' })).toBeInTheDocument()
-    expect(cards.getByRole('button', { name: 'Thornback, Rare, 1 owned' })).toBeInTheDocument()
-    expect(cards.getByRole('button', { name: 'Pixelord, Legendary, not owned' })).toBeInTheDocument()
-    expect(cards.getByRole('progressbar', { name: 'Pixel Meadow completion' })).toHaveAttribute(
+    expect(await cards.findByRole('button', { name: 'Pineco, Common, 2 owned' })).toBeInTheDocument()
+    expect(cards.getByRole('button', { name: 'Miraidon ex, Double Rare, 1 owned' })).toBeInTheDocument()
+    expect(cards.getByRole('button', { name: 'Koraidon ex, Hyper Rare, not owned' })).toBeInTheDocument()
+    expect(cards.getByRole('progressbar', { name: 'Scarlet & Violet completion' })).toHaveAttribute(
       'aria-valuetext',
       '2 of 3 cards',
     )
@@ -100,19 +104,51 @@ describe('browsing card games, sets and packs', () => {
 
   it("opens a closer look at a card, with whatever its game knows about it", async () => {
     asPixel({ owned: { 101: 2 } })
-    renderRoute('/tcg/cyan-critters/pixel-meadow')
+    renderRoute('/tcg/pokemon/sv01')
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Sproutle, Common, 2 owned' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Pineco, Common, 2 owned' }))
 
-    const dialog = within(screen.getByRole('dialog', { name: 'Sproutle' }))
+    const dialog = within(screen.getByRole('dialog', { name: 'Pineco' }))
     const value = (term: string) => dialog.getByText(term, { selector: 'dt' }).nextElementSibling
     expect(value('Rarity')).toHaveTextContent('Common')
-    expect(value('Set')).toHaveTextContent('Pixel Meadow · 001')
+    expect(value('Set')).toHaveTextContent('Scarlet & Violet · 001')
+    expect(value('Card ID')).toHaveTextContent('sv01-001')
     expect(value('Owned')).toHaveTextContent('2 copies')
     // The card's own metadata, listed as it comes.
-    expect(value('Type')).toHaveTextContent('Leaf')
-    expect(value('Hp')).toHaveTextContent('40')
-    expect(value('Flavor')).toHaveTextContent('Grows a new leaf.')
+    expect(value('Category')).toHaveTextContent('Pokemon')
+    expect(value('Hp')).toHaveTextContent('60')
+    expect(value('Types')).toHaveTextContent('Grass')
+  })
+
+  it('shows small images in grids and the full-size image for a closer look', async () => {
+    asGuest()
+    renderRoute('/tcg/pokemon/sv01')
+
+    const tile = await screen.findByRole('button', { name: 'Pineco, Common' })
+    expect(tile.querySelector('img')).toHaveAttribute('src', 'https://assets.tcgdex.net/en/sv/sv01/001/low.webp')
+    await userEvent.click(tile)
+    expect(screen.getByRole('dialog', { name: 'Pineco' }).querySelector('img')).toHaveAttribute(
+      'src',
+      'https://assets.tcgdex.net/en/sv/sv01/001/high.webp',
+    )
+  })
+
+  it('tries a card image a second time, then shows the card by name', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      asGuest()
+      renderRoute('/tcg/pokemon/sv01')
+      const tile = await screen.findByRole('button', { name: 'Pineco, Common' })
+
+      fireEvent.error(tile.querySelector('img')!)
+      await act(() => vi.advanceTimersByTimeAsync(RETRY_AFTER_MS))
+      expect(tile.querySelector('img')).toHaveAttribute('src', 'https://assets.tcgdex.net/en/sv/sv01/001/low.webp#retry')
+
+      fireEvent.error(tile.querySelector('img')!)
+      expect(within(tile).getByRole('img', { name: 'Pineco 001 (image unavailable)' })).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 
@@ -121,9 +157,11 @@ describe('the pack page', () => {
     asGuest()
     renderRoute('/tcg/packs/20')
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Sunrise Pack' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Scarlet & Violet Booster Pack' })).toBeInTheDocument()
     const rows = within(screen.getByRole('table')).getAllByRole('row').slice(1)
-    expect(rows.map((row) => row.textContent)).toEqual(['1Common100%', '2Rare100%', '3Rare75%Legendary25%'])
+    expect(rows.map((row) => row.textContent)).toEqual(['1Common100%', '2Double Rare100%', '3Double Rare75%Hyper Rare25%'])
+    // Neither publisher gives pull rates; the page says where its odds come from.
+    expect(screen.getByText(/^Simulator probabilities\./)).toBeInTheDocument()
   })
 
   it('asks a guest to log in, and comes back to the pack afterwards', async () => {
@@ -166,8 +204,8 @@ describe('opening a pack', () => {
 
     await userEvent.click(cards.getByRole('button', { name: 'Reveal card 1' }))
 
-    expect(cards.getByRole('button', { name: 'Sproutle, Common' })).toBeDisabled()
-    expect(screen.getByText('Sproutle, Common, new')).toBeInTheDocument()
+    expect(cards.getByRole('button', { name: 'Pineco, Common' })).toBeDisabled()
+    expect(screen.getByText('Pineco, Common, new')).toBeInTheDocument()
     expect(screen.getByText(/2 to go/)).toBeInTheDocument()
 
     await userEvent.click(cards.getByRole('button', { name: 'Reveal card 3' }))
@@ -198,9 +236,9 @@ describe('opening a pack', () => {
 
     const cards = within(screen.getByRole('list', { name: 'Your cards' }))
     expect(cards.getAllByRole('button').map((button) => button.getAttribute('aria-label'))).toEqual([
-      'Pixelord, Legendary',
-      'Thornback, Rare',
-      'Sproutle, Common',
+      'Koraidon ex, Hyper Rare',
+      'Miraidon ex, Double Rare',
+      'Pineco, Common',
     ])
   })
 
@@ -222,12 +260,40 @@ describe('opening a pack', () => {
     expect(tcgRequests(fetchSpy).filter((request) => request.startsWith('POST'))).toHaveLength(2)
   })
 
+  it('lets an admin keep opening packs past the players\' daily limit, and says so', async () => {
+    const fetchSpy = mockApi({ user: admin, handlers: [tcgHandlers({ openedToday: 5 })] })
+    renderRoute('/tcg/packs/20')
+
+    expect(await screen.findByText('Unlimited packs · Admin')).toBeInTheDocument()
+    expect(screen.queryByText(/packs left today/)).not.toBeInTheDocument()
+    await userEvent.click(await screen.findByRole('button', { name: 'Open pack' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Reveal all' }))
+
+    expect(screen.getByRole('button', { name: 'Open another' })).toBeEnabled()
+    expect(screen.getByText('Unlimited packs · Admin')).toBeInTheDocument()
+    expect(tcgRequests(fetchSpy).filter((request) => request.startsWith('POST'))).toHaveLength(1)
+  })
+
   it('does not offer a pack when none are left today', async () => {
     asPixel({ openedToday: 5 })
     renderRoute('/tcg/packs/20')
 
     expect(await screen.findByText(/you have opened all of today's packs/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Open pack' })).toBeDisabled()
+  })
+
+  it("opens a pack bought in the shop once today's are gone", async () => {
+    const fetchSpy = asPixel({ openedToday: 5, bonusPacks: 1 })
+    renderRoute('/tcg/packs/20')
+
+    expect(await screen.findByText('No packs left today · 1 extra')).toBeInTheDocument()
+    await userEvent.click(await screen.findByRole('button', { name: 'Open pack' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Reveal all' }))
+
+    expect(await screen.findByText('No packs left today')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open another' })).toBeDisabled()
+    expect(screen.getByRole('link', { name: 'get extra packs in the shop' })).toHaveAttribute('href', '/shop')
+    expect(tcgRequests(fetchSpy).filter((request) => request.startsWith('POST'))).toHaveLength(1)
   })
 
   it('says why when the server refuses, and leaves the pack sealed', async () => {
@@ -263,27 +329,27 @@ describe('the collection page', () => {
     expect(summary.getByText('66.7%')).toBeInTheDocument()
 
     const sets = within(screen.getByRole('region', { name: 'Sets' }))
-    expect(sets.getByRole('button', { name: /pixel meadow/i })).toHaveTextContent('2 / 3 cards')
+    expect(sets.getByRole('button', { name: /scarlet & violet/i })).toHaveTextContent('2 / 3 cards')
 
     const cards = within(screen.getByRole('region', { name: 'Your cards' }))
-    expect(cards.getByRole('button', { name: 'Sproutle, Common, 3 owned' })).toHaveTextContent('×3')
-    expect(cards.getByRole('button', { name: 'Pixelord, Legendary, 1 owned' })).toBeInTheDocument()
+    expect(cards.getByRole('button', { name: 'Pineco, Common, 3 owned' })).toHaveTextContent('×3')
+    expect(cards.getByRole('button', { name: 'Koraidon ex, Hyper Rare, 1 owned' })).toBeInTheDocument()
     expect(cards.getAllByRole('button')).toHaveLength(2)
   })
 
   it('narrows the cards to one set, and back', async () => {
     const fetchSpy = asPixel({ owned: { 101: 1 } })
     renderRoute('/tcg/collection')
-    const set = await screen.findByRole('button', { name: /pixel meadow/i })
+    const set = await screen.findByRole('button', { name: /scarlet & violet/i })
     expect(set).toHaveAttribute('aria-pressed', 'false')
 
     await userEvent.click(set)
 
-    expect(await screen.findByRole('region', { name: 'Your cards from Pixel Meadow' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /pixel meadow/i })).toHaveAttribute('aria-pressed', 'true')
+    expect(await screen.findByRole('region', { name: 'Your cards from Scarlet & Violet' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /scarlet & violet/i })).toHaveAttribute('aria-pressed', 'true')
     await waitFor(() => expect(tcgRequests(fetchSpy)).toContain('GET /api/tcg/collection?page=0&size=60&set=10'))
 
-    await userEvent.click(screen.getByRole('button', { name: /pixel meadow/i }))
+    await userEvent.click(screen.getByRole('button', { name: /scarlet & violet/i }))
 
     expect(await screen.findByRole('region', { name: 'Your cards' })).toBeInTheDocument()
   })
@@ -305,8 +371,8 @@ describe('the collection page', () => {
     await userEvent.click(await screen.findByRole('link', { name: 'View collection' }))
 
     const cards = within(await screen.findByRole('region', { name: 'Your cards' }))
-    expect(await cards.findByRole('button', { name: 'Thornback, Rare, 2 owned' })).toBeInTheDocument()
-    expect(cards.getByRole('button', { name: 'Pixelord, Legendary, 1 owned' })).toBeInTheDocument()
+    expect(await cards.findByRole('button', { name: 'Miraidon ex, Double Rare, 2 owned' })).toBeInTheDocument()
+    expect(cards.getByRole('button', { name: 'Koraidon ex, Hyper Rare, 1 owned' })).toBeInTheDocument()
   })
 })
 
@@ -327,15 +393,15 @@ describe('the opening history', () => {
     const openings = packs.filter((item) => within(item).queryByRole('heading') !== null)
     expect(openings).toHaveLength(2)
     const newest = within(openings[0])
-    expect(newest.getByRole('heading', { name: 'Sunrise Pack' })).toBeInTheDocument()
-    expect(newest.getByText('Pixel Meadow · Cyan Critters')).toBeInTheDocument()
+    expect(newest.getByRole('heading', { name: 'Scarlet & Violet Booster Pack' })).toBeInTheDocument()
+    expect(newest.getByText('Scarlet & Violet · Pokémon TCG')).toBeInTheDocument()
     expect(newest.getByText(/2026/)).toBeInTheDocument()
     expect(newest.getByText('2 new')).toBeInTheDocument()
-    const cards = within(newest.getByRole('list', { name: 'Cards from Sunrise Pack' })).getAllByRole('listitem')
+    const cards = within(newest.getByRole('list', { name: 'Cards from Scarlet & Violet Booster Pack' })).getAllByRole('listitem')
     expect(cards.map((card) => within(card).getByText(/,/).textContent)).toEqual([
-      'Sproutle, Common, new',
-      'Thornback, Rare',
-      'Pixelord, Legendary, new',
+      'Pineco, Common, new',
+      'Miraidon ex, Double Rare',
+      'Koraidon ex, Hyper Rare, new',
     ])
   })
 

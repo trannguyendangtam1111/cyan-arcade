@@ -1,6 +1,8 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { userKeys } from '@/api/auth'
 import { apiFetch } from '@/api/client'
+import { dailyChallengeKeys } from '@/api/dailyChallenges'
+import { economyKeys } from '@/api/economy'
 
 /**
  * Everything the card game module asks the API for. The rest of the app never calls `/api/tcg`,
@@ -29,9 +31,14 @@ export interface SetRef {
 export interface TcgGame extends GameRef {
   id: number
   description: string
-  imageUrl: string
+  /** A picture for the game, one of its own cards; `null` when there is none. */
+  imageUrl: string | null
   /** The back of this game's cards, or `null` to use the arcade's own. */
   cardBackUrl: string | null
+  /** The game's own color, `#rrggbb`, or `null` for the card game purple. */
+  accentColor: string | null
+  /** Where the game's data and images come from and whose they are. Shown with the game. */
+  attribution: string
   rarities: Rarity[]
   setCount: number
   cardCount: number
@@ -39,7 +46,12 @@ export interface TcgGame extends GameRef {
 
 export interface TcgSet extends SetRef {
   description: string
-  imageUrl: string
+  /** A group of sets, such as "Scarlet & Violet". */
+  series: string | null
+  /** The set's logo, when it has one. */
+  imageUrl: string | null
+  /** One of the set's rarest cards, to show for it. */
+  coverImageUrl: string | null
   releasedOn: string | null
   game: GameRef
   cardCount: number
@@ -48,10 +60,15 @@ export interface TcgSet extends SetRef {
 
 export interface TcgCard {
   id: number
-  /** The number printed on the card. */
+  /** The card's id in the source it was imported from, e.g. `sv01-001`. */
+  externalId: string
+  /** The number printed on the card. Alternate arts share the number of their card. */
   number: string
   name: string
+  /** The full-size image. */
   imageUrl: string
+  /** A smaller image for grids, when the source has one. */
+  thumbnailUrl: string | null
   rarity: Rarity
   set: SetRef
   game: GameRef
@@ -63,7 +80,11 @@ export interface PackRef {
   id: number
   code: string
   name: string
-  imageUrl: string
+  /** The pack's own artwork. Real card games have none; the arcade draws one from the fields below. */
+  imageUrl: string | null
+  setLogoUrl: string | null
+  coverImageUrl: string | null
+  accentColor: string | null
   set: SetRef
   game: GameRef
 }
@@ -75,6 +96,8 @@ export interface TcgPack extends PackRef {
   poolSize: number
   /** What each card of the pack can turn out to be, in the order the cards come out. */
   slots: { slot: number; odds: { rarity: Rarity; percent: number }[] }[]
+  /** Where the odds come from, e.g. that they are a simulator's and not the publisher's. */
+  oddsNote: string | null
 }
 
 export interface PulledCard {
@@ -98,6 +121,8 @@ export interface Allowance {
   openedToday: number
   /** Packs the player may still open today, or `null` when there is no limit. */
   leftToday: number | null
+  /** Extra packs the player has (e.g. bought in the shop), opened once `leftToday` reaches 0. */
+  bonusPacks: number
   resetsAt: string
 }
 
@@ -117,7 +142,8 @@ export interface OpeningHistory {
 }
 
 export interface SetProgress extends SetRef {
-  imageUrl: string
+  imageUrl: string | null
+  coverImageUrl: string | null
   game: GameRef
   ownedCards: number
   totalCards: number
@@ -154,8 +180,8 @@ export interface Collection {
 
 export const COLLECTION_PAGE_SIZE = 60
 export const OPENINGS_PAGE_SIZE = 8
-/** Large enough to hold every card a player can own of one set. */
-const WHOLE_SET = 200
+/** Large enough to hold every card a player can own of one set (the largest real sets have about 300). */
+const WHOLE_SET = 500
 
 /** Everything cached about "my cards". It lives under the player's own keys, so signing out drops it. */
 const mine = [...userKeys.all, 'tcg'] as const
@@ -279,6 +305,10 @@ export function useOpenPack() {
       queryClient.setQueryData(tcgKeys.allowance, allowance)
       void queryClient.invalidateQueries({ queryKey: [...tcgKeys.mine, 'collection'] })
       void queryClient.invalidateQueries({ queryKey: [...tcgKeys.mine, 'openings'] })
+      // The platform counts opened packs (daily challenges, which may pay coins) and the profile's numbers.
+      void queryClient.invalidateQueries({ queryKey: dailyChallengeKeys.mine })
+      void queryClient.invalidateQueries({ queryKey: economyKeys.coins })
+      void queryClient.invalidateQueries({ queryKey: [...userKeys.all, 'stats'] })
     },
     onError: () => {
       // A refusal usually means the allowance on screen was out of date.

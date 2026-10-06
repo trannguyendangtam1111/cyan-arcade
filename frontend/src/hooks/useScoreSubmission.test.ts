@@ -133,12 +133,14 @@ describe('useScoreSubmission', () => {
   it('keeps what the run earned and refreshes the player\'s own data', async () => {
     const rewards = {
       xpEarned: 85,
+      coinsEarned: 20,
       personalBest: true,
       achievements: [],
       bonuses: [],
       totalXp: 85,
       level: 1,
       leveledUp: false,
+      coinBalance: 20,
     }
     finish.mockResolvedValue({ ...recorded, rewards })
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries')

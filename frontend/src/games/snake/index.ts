@@ -1,8 +1,10 @@
 import { lazy } from 'react'
-import type { GameModule } from '@/games/types'
+import { defineGameModule } from '@/games/types'
 
-export const snakeModule: GameModule = {
+export const snakeModule = defineGameModule({
   slug: 'snake',
   controls: { keyboard: true, touch: true },
   Component: lazy(() => import('./SnakeGame')),
-}
+  // AI mode is for admins; the AI is downloaded only for them (see GameModule.loadAi).
+  loadAi: () => import('./ai/snakeAi').then((ai) => ai.createSnakeAi),
+})

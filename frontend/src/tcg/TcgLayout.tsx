@@ -1,9 +1,10 @@
 import { History, Layers, PackageOpen, type LucideIcon } from 'lucide-react'
-import { Suspense, type CSSProperties } from 'react'
+import { Suspense } from 'react'
 import { Link, Outlet, useLocation } from 'react-router'
-import { useSession } from '@/api/auth'
+import { isAdmin, useSession } from '@/api/auth'
 import { LoadingState } from '@/components/ui/LoadingState'
 import { cn } from '@/lib/cn'
+import { gameAccent } from './accent'
 import { useAllowance } from './api'
 
 const COLLECTION = '/tcg/collection'
@@ -21,12 +22,11 @@ const sections: { to: string; label: string; icon: LucideIcon; isCurrent: (path:
   { to: HISTORY, label: 'History', icon: History, isCurrent: (path) => path.startsWith(HISTORY) },
 ]
 
-/** Purple with white text on it, where the arcade has cyan with dark text. */
-const TCG_ACCENT = { '--accent': 'var(--color-tcg-purple)', '--accent-ink': '#fff' } as CSSProperties
 
 /**
- * The frame around every card game page: its own accent color (purple, where the arcade is cyan),
- * its own little navigation, and how many packs are left today.
+ * The frame around every card game page: its own accent color (purple, where the arcade is cyan;
+ * each game's pages switch to the game's own color), its own little navigation, and how many packs
+ * are left today.
  */
 export function TcgLayout() {
   const { pathname } = useLocation()
@@ -34,7 +34,7 @@ export function TcgLayout() {
   const { data: allowance } = useAllowance(Boolean(user))
 
   return (
-    <div style={TCG_ACCENT} className="flex flex-col gap-6">
+    <div style={gameAccent(null)} className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <nav aria-label="Card packs">
           <ul className="flex flex-wrap gap-2">
@@ -61,11 +61,17 @@ export function TcgLayout() {
           </ul>
         </nav>
 
+        {allowance && allowance.leftToday === null && isAdmin(user) && (
+          <p className="rounded-full bg-amber-100 px-4 py-2 text-sm font-bold text-amber-900">Unlimited packs · Admin</p>
+        )}
         {allowance && allowance.leftToday !== null && (
           <p className="rounded-full bg-amber-100 px-4 py-2 text-sm font-bold text-amber-900">
             {allowance.leftToday === 0
-              ? 'No packs left today'
+              ? allowance.bonusPacks > 0
+                ? `No packs left today · ${allowance.bonusPacks} extra`
+                : 'No packs left today'
               : `${allowance.leftToday} of ${allowance.dailyLimit} packs left today`}
+            {allowance.leftToday !== 0 && allowance.bonusPacks > 0 && ` · +${allowance.bonusPacks} extra`}
           </p>
         )}
       </div>

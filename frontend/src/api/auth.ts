@@ -4,10 +4,22 @@ import { leaderboardKeys } from './leaderboards'
 
 export type AvatarKey = 'ROBOT' | 'CAT' | 'DOG' | 'GHOST' | 'ROCKET' | 'CROWN' | 'BIRD' | 'FISH'
 
+/**
+ * What an account may do. `ADMIN` adds AI mode and packs without a daily allowance. The app only
+ * uses it to decide what to show: the server checks the role on every request that needs it.
+ */
+export type Role = 'USER' | 'ADMIN'
+
 export interface SessionUser {
   id: number
   username: string
   avatar: AvatarKey
+  role: Role
+}
+
+/** Whether the signed-in player is an admin. A guest (`null`) or an unknown session is not. */
+export function isAdmin(user: SessionUser | null | undefined): boolean {
+  return user?.role === 'ADMIN'
 }
 
 /** Who is signed in, as returned by `GET /api/auth/session`. */

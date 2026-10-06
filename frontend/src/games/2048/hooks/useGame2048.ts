@@ -7,7 +7,7 @@ import { useKeyboard } from '@/games/shared/useKeyboard'
 import { usePlaySession } from '@/games/shared/usePlaySession'
 import { useTicker } from '@/games/shared/useTicker'
 import type { GameProps, GameStatus } from '@/games/types'
-import { createGame2048Ai, type Game2048Decision } from '../ai/game2048Ai'
+import type { Game2048AI, Game2048Decision } from '../ai/game2048Ai'
 import { applyMove, createGame2048, highestTile } from '../engine/game2048Engine'
 import type { Game2048State, Move } from '../types/game2048Types'
 
@@ -36,7 +36,7 @@ const details = (state: Game2048State) => ({ highestTile: highestTile(state.boar
  * and AI controllers, the win decision and reporting runs to the platform.
  * `Game2048.tsx` renders what this returns.
  */
-export function useGame2048(props: GameProps) {
+export function useGame2048(props: GameProps<Game2048AI>) {
   const session = usePlaySession()
   const { mode, speed, paused } = session
   const { state, dispatch, reset, getState } = useEngine(newGame, applyMove)
@@ -44,9 +44,12 @@ export function useGame2048(props: GameProps) {
   const [decision, setDecision] = useState<Game2048Decision | null>(null)
   // Reaching 2048 wins the game. A human is then asked whether to keep going for a higher tile.
   const [keptGoing, setKeptGoing] = useState(false)
-  const ai = useMemo(() => createGame2048Ai(), [])
+  // Present only for players allowed to use AI mode (admins); see GameProps.ai.
+  const createAi = props.ai
+  const ai = useMemo(() => createAi?.(), [createAi])
 
-  const isAi = mode === 'ai'
+  // AI mode needs an AI: without one (a player who is not an admin) the game is human-only.
+  const isAi = mode === 'ai' && ai !== undefined
   const playing = state.status === 'playing'
   const aiDelay = aiActionDelay(AI_MOVE_MS, speed)
 
@@ -54,6 +57,7 @@ export function useGame2048(props: GameProps) {
   // It plays straight through 2048 without stopping.
   useTicker(
     () => {
+      if (!ai) return
       const next = ai.decide(getState())
       setDecision(next)
       dispatch(next.action)
@@ -115,6 +119,7 @@ export function useGame2048(props: GameProps) {
     status,
     mode,
     isAi,
+    aiAvailable: ai !== undefined,
     speed,
     setSpeed: session.setSpeed,
     paused,

@@ -2,8 +2,12 @@ import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import type { GameResponse } from '@/api/games'
-import { catalogFixture, mockApi } from '@/test/mockApi'
+import { admin, catalogFixture, mockApi, mockProblem, pixel } from '@/test/mockApi'
 import { renderRoute } from '@/test/renderWithProviders'
+
+/** The paths the app asked the API for. */
+const requested = (fetchSpy: ReturnType<typeof mockApi>) =>
+  fetchSpy.mock.calls.map(([input]) => new URL(String(input), 'http://localhost').pathname)
 
 /** In the catalog, but with no module in the frontend registry. */
 const unreleasedGame: GameResponse = {
@@ -92,16 +96,43 @@ describe('game detail page', () => {
     ['snake', 'Snake'],
     ['2048', '2048'],
     ['tetris', 'Tetris'],
-  ])('loads the real %s game with Human and AI modes', async (slug, name) => {
-    mockApi()
+  ])('loads the real %s game, with Human and AI modes for an admin', async (slug, name) => {
+    const fetchSpy = mockApi({ user: admin })
     renderRoute(`/games/${slug}`)
 
     expect(await screen.findByRole('heading', { level: 1, name })).toBeInTheDocument()
-    // The game module is lazy-loaded from the registry.
-    expect(await screen.findByRole('button', { name: 'Human' })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('button', { name: 'AI' })).toBeInTheDocument()
+    // The game module is lazy-loaded from the registry, its AI only once the server has said yes.
+    expect(await screen.findByRole('button', { name: 'AI' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Human' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('img', { name: /board/i })).toBeInTheDocument()
     expect(screen.queryByText(/is being built/i)).not.toBeInTheDocument()
+    expect(requested(fetchSpy)).toContain('/api/ai/access')
+  })
+
+  it.each([
+    ['a player', pixel],
+    ['a guest', null],
+  ])('gives %s the game without AI mode, and never asks for the AI', async (_, user) => {
+    const fetchSpy = mockApi({ user })
+    renderRoute('/games/snake')
+
+    expect(await screen.findByRole('img', { name: /board/i })).toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Play mode' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'AI' })).not.toBeInTheDocument()
+    expect(requested(fetchSpy)).not.toContain('/api/ai/access')
+  })
+
+  it('leaves AI mode out when the server refuses it, whatever the app believed', async () => {
+    // A session that still says "admin", but the server no longer agrees.
+    mockApi({
+      user: admin,
+      handlers: [({ path }) => (path === '/api/ai/access' ? mockProblem(403, 'FORBIDDEN', 'Admins only') : undefined)],
+    })
+    renderRoute('/games/snake')
+
+    expect(await screen.findByRole('img', { name: /board/i })).toBeInTheDocument()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(screen.queryByRole('button', { name: 'AI' })).not.toBeInTheDocument()
   })
 
   it('renders the 404 page for a game that is not in the catalog', async () => {

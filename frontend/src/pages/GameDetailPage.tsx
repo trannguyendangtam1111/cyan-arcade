@@ -16,6 +16,7 @@ import { ApiError } from '@/api/client'
 import { useDailyChallenges } from '@/api/dailyChallenges'
 import type { Rewards } from '@/api/gameSessions'
 import { Badge } from '@/components/ui/Badge'
+import { CoinAmount } from '@/components/ui/CoinAmount'
 import { buttonStyles } from '@/components/ui/buttonStyles'
 import { Card } from '@/components/ui/Card'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -24,6 +25,7 @@ import { LoadingState } from '@/components/ui/LoadingState'
 import { categoryLabels } from '@/games/registry'
 import type { GameDefinition, GameModule } from '@/games/types'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
+import { useGameAi } from '@/hooks/useGameAi'
 import { useGameDefinition } from '@/hooks/useGameCatalog'
 import { useScoreSubmission, type ScoreSubmission } from '@/hooks/useScoreSubmission'
 import { accentStyle } from '@/lib/accent'
@@ -96,7 +98,7 @@ function GameHeader({ game }: { game: GameDefinition }) {
  */
 function TodaysChallenge({ gameSlug }: { gameSlug: string }) {
   const { data } = useDailyChallenges()
-  const challenge = data?.challenges.find((candidate) => candidate.game.slug === gameSlug)
+  const challenge = data?.challenges.find((candidate) => candidate.game?.slug === gameSlug)
   if (!challenge) return null
 
   return (
@@ -120,6 +122,12 @@ function TodaysChallenge({ gameSlug }: { gameSlug: string }) {
       ) : (
         <Badge tone="accent" className="ml-auto px-3 py-1 text-sm">
           +{challenge.xpReward} XP
+          {challenge.coinReward > 0 && (
+            <>
+              {' · '}
+              <CoinAmount amount={challenge.coinReward} signed className="text-sm" />
+            </>
+          )}
         </Badge>
       )}
     </aside>
@@ -129,6 +137,8 @@ function TodaysChallenge({ gameSlug }: { gameSlug: string }) {
 function GameStage({ game, gameModule }: { game: GameDefinition; gameModule: GameModule }) {
   // The platform owns score keeping: the game only reports that a run started and how it ended.
   const { submission, onGameStart, onGameOver, retry } = useScoreSubmission(game.slug)
+  // AI mode is for admins: everyone else gets the game without its AI.
+  const ai = useGameAi(gameModule)
 
   const handleGameStart = useCallback(() => {
     // Remembered on this device, for the hub's "Jump back in" row.
@@ -139,7 +149,8 @@ function GameStage({ game, gameModule }: { game: GameDefinition; gameModule: Gam
   return (
     <Card padding="none" className="overflow-hidden border-t-8 border-(--accent)">
       <Suspense fallback={<LoadingState label={`Loading ${game.name}…`} className="min-h-80" />}>
-        <gameModule.Component onGameStart={handleGameStart} onGameOver={onGameOver} />
+        {/* The module pairs the component with its own AI (defineGameModule), so this is that AI. */}
+        <gameModule.Component onGameStart={handleGameStart} onGameOver={onGameOver} ai={ai as (() => never) | undefined} />
       </Suspense>
       <ScoreStatus submission={submission} onRetry={retry} gameSlug={game.slug} />
     </Card>
@@ -204,8 +215,8 @@ function ScoreStatus({ submission, onRetry, gameSlug }: ScoreStatusProps) {
 }
 
 /**
- * What a signed-in player's run earned: XP, a best for the account, achievements, completed daily
- * challenges, a new level.
+ * What a signed-in player's run earned: XP, coins, a best for the account, achievements, completed
+ * daily challenges, a new level. Every amount is the server's.
  *
  * The best is named after the account because the game itself shows the best on this device, which
  * can be higher: a guest, or someone else's account, may have played here before.
@@ -214,6 +225,11 @@ function RewardBadges({ rewards }: { rewards: Rewards }) {
   return (
     <span className="flex flex-wrap items-center gap-1.5">
       <Badge tone="brand">+{rewards.xpEarned} XP</Badge>
+      {rewards.coinsEarned > 0 && (
+        <Badge tone="warning" className="py-0">
+          <CoinAmount amount={rewards.coinsEarned} signed className="text-xs" />
+        </Badge>
+      )}
       {rewards.personalBest && <Badge tone="warning">New account best</Badge>}
       {rewards.achievements.map((achievement) => (
         <Badge key={achievement.code} tone="warning" title={achievement.description}>

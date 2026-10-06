@@ -1,21 +1,28 @@
-import { Award, Gamepad2, LogOut, Pencil, Star, type LucideIcon } from 'lucide-react'
-import { useState } from 'react'
+import { Award, Clock, Gamepad2, Layers, LogOut, Package, Pencil, PiggyBank, Star, type LucideIcon } from 'lucide-react'
+import { useState, type ReactNode } from 'react'
 import { useLogout } from '@/api/auth'
-import { useProfile, type ProfileResponse } from '@/api/profile'
+import { useProfile, useStats, type ProfileResponse, type StatsResponse } from '@/api/profile'
+import { ItemIcon } from '@/components/ItemIcon'
 import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
+import { CoinAmount, CoinIcon } from '@/components/ui/CoinAmount'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { LoadingState } from '@/components/ui/LoadingState'
-import { formatDate, formatScore } from '@/lib/format'
+import { cn } from '@/lib/cn'
+import { formatDate, formatDuration, formatScore } from '@/lib/format'
 import { AchievementGrid } from './AchievementGrid'
 import { AvatarPicker } from './AvatarPicker'
+import { CoinHistory } from './CoinHistory'
+import { GameStatsTable } from './GameStatsTable'
 import { RecentGames } from './RecentGames'
 
 /** The profile of the signed-in player. */
 export function PlayerProfile() {
   const { data: profile, isPending, isError, refetch } = useProfile(true)
+  // Counted on the server from several modules; asked for here only, not on every page.
+  const { data: stats } = useStats(true)
 
   if (isPending) return <LoadingState label="Loading your profile…" />
   if (isError) return <ErrorState title="Couldn't load your profile" onRetry={() => void refetch()} />
@@ -26,11 +33,13 @@ export function PlayerProfile() {
         <ProfileHeader profile={profile} />
         <div className="flex flex-col gap-5">
           <LevelProgress profile={profile} />
-          <Statistics profile={profile} />
+          <Statistics profile={profile} stats={stats} />
         </div>
       </div>
+      {stats && stats.games.length > 0 && <GameStatsTable games={stats.games} />}
       <RecentGames />
       <AchievementGrid />
+      <CoinHistory />
     </div>
   )
 }
@@ -51,11 +60,26 @@ function ProfileHeader({ profile }: { profile: ProfileResponse }) {
         >
           <Pencil aria-hidden className="size-4" />
         </button>
+        {profile.badge && (
+          <span
+            title={`Badge: ${profile.badge.name}`}
+            className="absolute -top-1 -left-1 grid size-9 place-items-center rounded-full bg-amber-400 text-amber-950 shadow-soft ring-2 ring-surface"
+          >
+            <ItemIcon icon={profile.badge.icon} className="size-5" />
+            <span className="sr-only">Badge: {profile.badge.name}</span>
+          </span>
+        )}
       </div>
       <h2 className="text-2xl font-semibold break-all">{profile.username}</h2>
-      <Badge tone="brand" className="mt-2 px-3 py-1 text-sm">
-        Level {profile.level}
-      </Badge>
+      {profile.title && <p className="font-display font-medium text-purple-700">{profile.title.name}</p>}
+      <div className="mt-2 flex flex-wrap justify-center gap-2">
+        <Badge tone="brand" className="px-3 py-1 text-sm">
+          Level {profile.level}
+        </Badge>
+        <span className="inline-flex items-center rounded-full bg-amber-100 px-3 py-1 text-sm text-amber-900">
+          <CoinAmount amount={profile.coins} />
+        </span>
+      </div>
       <p className="mt-3 text-sm text-ink-soft">Playing since {formatDate(profile.memberSince)}</p>
       <Button
         variant="ghost"
@@ -100,34 +124,65 @@ function LevelProgress({ profile }: { profile: ProfileResponse }) {
         <strong className="text-ink tabular-nums">
           {profile.xpIntoLevel} / {profile.xpForNextLevel} XP
         </strong>{' '}
-        · {remaining} XP to level {profile.level + 1}
+        · {remaining} XP to level {profile.level + 1} · {percent}%
       </p>
     </Card>
   )
 }
 
-function Statistics({ profile }: { profile: ProfileResponse }) {
-  const stats: { icon: LucideIcon; label: string; value: string }[] = [
-    { icon: Gamepad2, label: 'Games played', value: formatScore(profile.gamesPlayed) },
-    { icon: Star, label: 'Total score', value: formatScore(profile.totalScore) },
+interface Stat {
+  icon: LucideIcon | null
+  label: string
+  value: ReactNode
+  tone: string
+}
+
+/** A number the card game (or any other module) counts, when the server sent it. */
+function activity(stats: StatsResponse | undefined, key: string): string {
+  const value = stats?.activities.find((entry) => entry.key === key)?.value
+  return value === undefined ? '–' : formatScore(value)
+}
+
+function Statistics({ profile, stats }: { profile: ProfileResponse; stats: StatsResponse | undefined }) {
+  const items: Stat[] = [
+    { icon: null, label: 'Coins', value: formatScore(profile.coins), tone: 'bg-amber-100 text-amber-800' },
+    { icon: Gamepad2, label: 'Games played', value: formatScore(profile.gamesPlayed), tone: 'bg-brand-100 text-brand-800' },
     {
       icon: Award,
       label: 'Achievements',
       value: `${profile.achievementsUnlocked} / ${profile.achievementsTotal}`,
+      tone: 'bg-orange-100 text-orange-800',
+    },
+    { icon: Layers, label: 'Cards collected', value: activity(stats, 'tcg.cardsCollected'), tone: 'bg-purple-100 text-purple-800' },
+    { icon: Package, label: 'Packs opened', value: activity(stats, 'tcg.packsOpened'), tone: 'bg-pink-100 text-pink-800' },
+    {
+      icon: Clock,
+      label: 'Play time',
+      value: stats ? formatDuration(stats.playTimeMs) : '–',
+      tone: 'bg-sky-100 text-sky-800',
+    },
+    { icon: Star, label: 'Total score', value: formatScore(profile.totalScore), tone: 'bg-emerald-100 text-emerald-800' },
+    {
+      icon: PiggyBank,
+      label: 'Coins earned',
+      value: stats ? formatScore(stats.coinsEarned) : '–',
+      tone: 'bg-amber-100 text-amber-800',
     },
   ]
 
   return (
     <Card padding="lg">
       <h2 className="mb-4 text-xl font-semibold">Statistics</h2>
-      <dl className="grid gap-4 sm:grid-cols-3">
-        {stats.map(({ icon: Icon, label, value }) => (
-          <div key={label} className="rounded-control bg-surface-muted p-4">
+      <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {items.map(({ icon: Icon, label, value, tone }) => (
+          <div key={label} className="rounded-control bg-surface-muted p-3">
             <dt className="flex items-center gap-2 text-sm font-bold text-ink-soft">
-              <Icon aria-hidden className="size-4" />
+              <span className={cn('grid size-7 shrink-0 place-items-center rounded-lg', tone)}>
+                {Icon ? <Icon aria-hidden className="size-4" /> : <CoinIcon className="size-4 text-[0.55rem]" />}
+              </span>
               {label}
             </dt>
-            <dd className="mt-1 font-display text-3xl font-semibold tabular-nums">{value}</dd>
+            <dd className="mt-1 font-display text-2xl font-semibold tabular-nums">{value}</dd>
           </div>
         ))}
       </dl>

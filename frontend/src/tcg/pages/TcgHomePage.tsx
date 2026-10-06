@@ -8,10 +8,12 @@ import { LoadingState } from '@/components/ui/LoadingState'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { cn } from '@/lib/cn'
-import { useCollection, useTcgGames } from '../api'
+import { gameAccent } from '../accent'
+import { useCollection, useTcgGames, type TcgGame } from '../api'
+import { CardBack } from '../components/CardFace'
 import { CompletionBar } from '../components/CompletionBar'
 
-/** Where card packs start: the card games the arcade carries, and how far the player's collection has come. */
+/** Where card packs start: the trading card games the arcade carries, and how far the player's collection has come. */
 export function TcgHomePage() {
   useDocumentTitle('Card packs')
   const { user } = useSession()
@@ -23,7 +25,7 @@ export function TcgHomePage() {
       <PageHeader
         icon={Layers}
         title="Card packs"
-        description="Open packs, pull rare cards and complete your collection."
+        description="Open booster packs of real trading card games, pull rare cards and complete your collection."
       />
 
       {collection && (
@@ -51,7 +53,7 @@ export function TcgHomePage() {
 
       <section aria-labelledby="card-games-heading">
         <h2 id="card-games-heading" className="mb-4 text-xl font-semibold">
-          Choose a card game
+          Choose your TCG
         </h2>
 
         {isPending && <LoadingState label="Loading card games…" />}
@@ -60,7 +62,7 @@ export function TcgHomePage() {
           <EmptyState
             icon={Layers}
             title="No card games yet"
-            description="The first boosters are still at the printer. Check back soon!"
+            description="The card catalog has not been imported yet. Check back soon!"
           />
         )}
 
@@ -68,31 +70,41 @@ export function TcgHomePage() {
           <ul className="grid gap-5 md:grid-cols-2">
             {games.map((game) => (
               <li key={game.slug} className="flex *:w-full">
-                <Link
-                  to={`/tcg/${game.slug}`}
-                  className={cardStyles(
-                    'none',
-                    cn('group flex items-center gap-5 p-5 motion-safe:animate-pop-in', interactiveCard),
-                  )}
-                >
-                  <img
-                    src={game.imageUrl}
-                    alt=""
-                    className="size-24 shrink-0 rounded-3xl object-cover shadow-soft transition-transform group-hover:-rotate-3 group-hover:scale-105 sm:size-28"
-                  />
-                  <span className="min-w-0">
-                    <span className="block font-display text-2xl font-semibold">{game.name}</span>
-                    <span className="mt-1 line-clamp-2 block text-ink-soft">{game.description}</span>
-                    <span className="mt-2 block text-sm font-bold text-purple-700">
-                      {game.setCount} {game.setCount === 1 ? 'set' : 'sets'} · {game.cardCount} cards
-                    </span>
-                  </span>
-                </Link>
+                <GameTile game={game} />
               </li>
             ))}
           </ul>
         )}
       </section>
     </>
+  )
+}
+
+/** A card game to choose: one of its own cards on a band of its color, and what it holds. */
+function GameTile({ game }: { game: TcgGame }) {
+  return (
+    <Link
+      to={`/tcg/${game.slug}`}
+      style={gameAccent(game.accentColor)}
+      className={cardStyles('none', cn('group flex overflow-hidden motion-safe:animate-pop-in', interactiveCard))}
+    >
+      <span aria-hidden className="relative grid w-32 shrink-0 place-items-center bg-(--accent) py-5 sm:w-40">
+        <span className="absolute inset-0 bg-linear-to-br from-white/35 to-black/15" />
+        <span className="relative w-20 -rotate-6 shadow-lift transition-transform duration-300 group-hover:rotate-0 group-hover:scale-105 sm:w-24">
+          {game.imageUrl ? (
+            <img src={game.imageUrl} alt="" className="block aspect-5/7 w-full rounded-[5%/3.6%] object-cover ring-2 ring-white" />
+          ) : (
+            <CardBack />
+          )}
+        </span>
+      </span>
+      <span className="flex min-w-0 flex-col justify-center gap-1 p-5">
+        <span className="block font-display text-2xl font-semibold">{game.name}</span>
+        <span className="line-clamp-3 block text-ink-soft">{game.description}</span>
+        <span className="mt-1 block text-sm font-bold text-ink">
+          {game.setCount} {game.setCount === 1 ? 'set' : 'sets'} · {game.cardCount.toLocaleString('en-US')} cards
+        </span>
+      </span>
+    </Link>
   )
 }

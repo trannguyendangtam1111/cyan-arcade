@@ -4,8 +4,8 @@ import { cn } from '@/lib/cn'
 
 interface LogoProps {
   /**
-   * Show only the emblem between the tablet and desktop breakpoints, where the header also has to
-   * fit the full navigation and the signed-in player.
+   * Show only the emblem on narrower desktops (from the desktop breakpoint to the wide one), where
+   * the header also has to fit the full navigation, the coins and the signed-in player.
    */
   compactOnTablet?: boolean
 }
@@ -19,7 +19,7 @@ export function Logo({ compactOnTablet = false }: LogoProps) {
       <span
         className={cn(
           'font-display text-xl font-bold tracking-tight whitespace-nowrap',
-          compactOnTablet && 'md:max-lg:hidden',
+          compactOnTablet && 'lg:max-xl:hidden',
         )}
       >
         <span className="text-brand-600">Cyan</span> Arcade

@@ -16,6 +16,8 @@ interface GameShellProps {
   stats: GameStat[]
   mode: PlayMode
   onModeChange: (mode: PlayMode) => void
+  /** Whether this player has the game's AI (admins). Without it there is no Human/AI switch. */
+  aiAvailable: boolean
   ai: AiPanelProps
   /** Omit for games where pausing a human makes no sense (turn-based games). */
   pause?: { paused: boolean; onToggle: () => void; disabled?: boolean }
@@ -29,14 +31,16 @@ interface GameShellProps {
 }
 
 /**
- * The frame shared by every game: board on the left, and on the right the Human/AI switch, stats,
- * the AI panel (or human help), and pause/restart. Games supply content; none of this is game-specific.
+ * The frame shared by every game: board on the left, and on the right the Human/AI switch (for
+ * admins, who have the AI), stats, the AI panel (or human help), and pause/restart. Games supply
+ * content; none of this is game-specific.
  */
 export function GameShell({
   board,
   stats,
   mode,
   onModeChange,
+  aiAvailable,
   ai,
   pause,
   onRestart,
@@ -54,7 +58,7 @@ export function GameShell({
       </div>
 
       <aside className="flex flex-col gap-4">
-        <PlayModeToggle mode={mode} onChange={onModeChange} />
+        {aiAvailable && <PlayModeToggle mode={mode} onChange={onModeChange} />}
 
         <dl className="grid grid-cols-[repeat(auto-fit,minmax(5rem,1fr))] gap-2">
           {stats.map(({ label, value }) => (

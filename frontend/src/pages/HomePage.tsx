@@ -1,5 +1,6 @@
 import {
   ArrowRight,
+  Award,
   Dices,
   Gamepad2,
   History,
@@ -15,11 +16,13 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router'
 import { useSession } from '@/api/auth'
 import type { GameCategory } from '@/api/games'
+import { useAchievements } from '@/api/profile'
 import { categoryIcons } from '@/components/categoryIcons'
 import { DailyChallenges } from '@/components/DailyChallenges'
 import { GameGrid } from '@/components/GameGrid'
 import { JumpBackIn } from '@/components/JumpBackIn'
 import { LeaderboardPreview } from '@/components/LeaderboardPreview'
+import { PlayerStrip } from '@/components/PlayerStrip'
 import { buttonStyles } from '@/components/ui/buttonStyles'
 import { cardStyles, interactiveCard } from '@/components/ui/cardStyles'
 import { categoryLabels } from '@/games/registry'
@@ -50,11 +53,12 @@ function featuredGames(games: GameDefinition[]): GameDefinition[] {
 }
 
 /**
- * The hub's front page: what is new today, where the player left off, what to play, who is
- * winning, and ways to browse.
+ * The hub's front page: the player's coins and daily reward, what is new today, where they left
+ * off, what to play, who is winning, what they unlocked lately, and ways to browse.
  */
 export function HomePage() {
   useDocumentTitle()
+  const { user } = useSession()
   const { games } = useGameCatalog()
   const recentGames = useRecentGames()
   // Boards only make sense for games that can be played.
@@ -63,6 +67,8 @@ export function HomePage() {
   return (
     <div className="flex flex-col gap-section">
       <Hero />
+
+      {user && <PlayerStrip />}
 
       <DailyChallenges />
 
@@ -85,6 +91,8 @@ export function HomePage() {
           <LeaderboardPreview games={boards} />
         </Section>
       )}
+
+      {user && <RecentAchievements />}
 
       {games && games.length > 0 && (
         <Section id="categories" icon={LayoutGrid} title="Browse by category">
@@ -180,6 +188,36 @@ function Section({ id, icon: Icon, title, link, children }: SectionProps) {
       </div>
       {children}
     </section>
+  )
+}
+
+const RECENT_ACHIEVEMENTS = 3
+
+/** The signed-in player's latest unlocks. Nothing at all until they have one. */
+function RecentAchievements() {
+  const { data } = useAchievements(true)
+  const recent = (data ?? [])
+    .filter((achievement) => achievement.unlocked && achievement.unlockedAt)
+    .sort((a, b) => (b.unlockedAt ?? '').localeCompare(a.unlockedAt ?? ''))
+    .slice(0, RECENT_ACHIEVEMENTS)
+  if (recent.length === 0) return null
+
+  return (
+    <Section id="recent-achievements" icon={Award} title="Recent achievements" link={{ to: '/profile', label: 'All achievements' }}>
+      <ul className="grid gap-4 md:grid-cols-3">
+        {recent.map((achievement) => (
+          <li key={achievement.code} className={cardStyles('md', 'flex items-center gap-4')}>
+            <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-amber-400 text-amber-950 shadow-soft">
+              <Trophy aria-hidden className="size-6" />
+            </span>
+            <span className="min-w-0">
+              <span className="block font-display text-lg font-semibold">{achievement.name}</span>
+              <span className="text-sm text-ink-soft">{achievement.description}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </Section>
   )
 }
 

@@ -33,15 +33,40 @@ export interface GameModule {
    * The game's root component. Declare it with `lazy(() => import('./MyGame'))` in the module's
    * `index.ts` so each game ships in its own bundle chunk and the catalog stays lightweight.
    */
-  Component: ComponentType<GameProps>
+  Component: ComponentType<GameProps<never>>
+  /**
+   * Downloads the game's AI, for a game that has one: `() => import('./ai/myAi').then((ai) => ai.createMyAi)`.
+   * AI mode is for admins: the platform calls this only after the server has confirmed that the
+   * player may use it, and in production the AI's chunk is only served to admins. Nothing else may
+   * import the AI's code, or it would ship with the game to everyone.
+   */
+  loadAi?: () => Promise<() => unknown>
+}
+
+/** A game module whose component and AI belong together. See {@link defineGameModule}. */
+export interface TypedGameModule<Ai> {
+  slug: string
+  controls: { keyboard: boolean; touch: boolean }
+  Component: ComponentType<GameProps<Ai>>
+  loadAi?: () => Promise<() => Ai>
+}
+
+/** Declares a game module, checking that its `loadAi` gives the AI its component expects. */
+export function defineGameModule<Ai>(module: TypedGameModule<Ai>): GameModule {
+  return module as unknown as GameModule
 }
 
 /** Props the platform passes to a game's root component. */
-export interface GameProps {
+export interface GameProps<Ai = unknown> {
   /** Call when a human run begins. The platform opens a score session. Never call it for AI runs. */
   onGameStart: () => void
   /** Call once when that run ends. The platform submits the score. */
   onGameOver: (result: GameResult) => void
+  /**
+   * Creates the game's AI. Given only to players who may use AI mode (admins); without it the game
+   * is played by a human only and shows no AI controls.
+   */
+  ai?: () => Ai
 }
 
 /**

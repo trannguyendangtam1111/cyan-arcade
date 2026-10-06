@@ -6,13 +6,16 @@ import { ErrorState } from '@/components/ui/ErrorState'
 import { LoadingState } from '@/components/ui/LoadingState'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { NotFoundPage } from '@/pages/NotFoundPage'
+import { gameAccent } from '../accent'
 import { useAllowance, usePack, useTcgGames, type TcgPack } from '../api'
+import { Attribution } from '../components/Attribution'
 import { Breadcrumbs } from '../components/Breadcrumbs'
+import { PackArt } from '../components/PackArt'
 import { RarityBadge } from '../components/RarityBadge'
 import { SignInPrompt } from '../components/SignInPrompt'
 import { PackOpening } from '../opening/PackOpening'
 
-/** One pack: open it, and see exactly what the odds are. */
+/** One pack, in its game's color: open it, and see exactly what the odds are and where they come from. */
 export function TcgPackPage() {
   const packId = Number(useParams().packId)
   const { user, isPending: sessionPending } = useSession()
@@ -26,10 +29,10 @@ export function TcgPackPage() {
   if (error instanceof ApiError && error.status === 404) return <NotFoundPage />
   if (!pack) return <ErrorState title="Couldn't load this pack" onRetry={() => void refetch()} />
 
-  const cardBackUrl = games?.find((game) => game.slug === pack.game.slug)?.cardBackUrl
+  const game = games?.find((candidate) => candidate.slug === pack.game.slug)
 
   return (
-    <div className="flex flex-col gap-8">
+    <div style={gameAccent(pack.accentColor)} className="flex flex-col gap-8">
       <Breadcrumbs
         crumbs={[
           { label: 'Card packs', to: '/tcg' },
@@ -45,10 +48,10 @@ export function TcgPackPage() {
       </header>
 
       {sessionPending && <LoadingState className="min-h-40" />}
-      {user && <PackOpening pack={pack} allowance={allowance} cardBackUrl={cardBackUrl} />}
+      {user && <PackOpening pack={pack} allowance={allowance} cardBackUrl={game?.cardBackUrl} />}
       {user === null && (
         <div className="flex flex-col items-center gap-6">
-          <img src={pack.imageUrl} alt={pack.name} className="w-44 drop-shadow-[0_18px_24px_rgb(88_28_135/0.35)]" />
+          <PackArt pack={pack} label={pack.name} className="w-44" />
           <SignInPrompt title="Log in to open packs">
             The cards you pull are kept in your collection, so opening a pack needs an account.
           </SignInPrompt>
@@ -56,6 +59,8 @@ export function TcgPackPage() {
       )}
 
       <Odds pack={pack} />
+
+      <Attribution text={game?.attribution} className="mx-auto w-full max-w-xl" />
     </div>
   )
 }
@@ -71,6 +76,11 @@ function Odds({ pack }: { pack: TcgPack }) {
             {pack.cardsPerPack} cards, from {pack.poolSize} different ones. The server picks them the moment the pack
             is opened.
           </span>
+          {pack.oddsNote && (
+            <span className="mt-2 block rounded-control bg-amber-50 px-3 py-2 text-sm font-bold text-amber-900">
+              {pack.oddsNote}
+            </span>
+          )}
         </caption>
         <thead className="text-xs font-bold tracking-wide text-ink-soft uppercase">
           <tr>

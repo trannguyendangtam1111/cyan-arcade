@@ -7,7 +7,7 @@ import { useKeyboard } from '@/games/shared/useKeyboard'
 import { usePlaySession } from '@/games/shared/usePlaySession'
 import { useTicker } from '@/games/shared/useTicker'
 import type { GameProps, GameStatus } from '@/games/types'
-import { createTetrisAi, type TetrisDecision } from '../ai/tetrisAi'
+import type { TetrisAI, TetrisDecision } from '../ai/tetrisAi'
 import { createTetrisGame, gravityDelay, updateTetris } from '../engine/tetrisEngine'
 import type { TetrisAction, TetrisState } from '../types/tetrisTypes'
 
@@ -43,7 +43,7 @@ const newGame = () => createTetrisGame(createSeed())
  * the Human and AI controllers, and reporting runs to the platform.
  * `TetrisGame.tsx` renders what this returns.
  */
-export function useTetrisGame(props: GameProps) {
+export function useTetrisGame(props: GameProps<TetrisAI>) {
   const session = usePlaySession()
   const { mode, speed, paused } = session
   const { state, dispatch, reset, getState } = useEngine(newGame, updateTetris)
@@ -52,9 +52,12 @@ export function useTetrisGame(props: GameProps) {
   const { started } = run
   const [decision, setDecision] = useState<TetrisDecision | null>(null)
   const [lineClear, setLineClear] = useState<LineClear | null>(null)
-  const ai = useMemo(() => createTetrisAi(), [])
+  // Present only for players allowed to use AI mode (admins); see GameProps.ai.
+  const createAi = props.ai
+  const ai = useMemo(() => createAi?.(), [createAi])
 
-  const isAi = mode === 'ai'
+  // AI mode needs an AI: without one (a player who is not an admin) the game is human-only.
+  const isAi = mode === 'ai' && ai !== undefined
   const playing = state.status === 'playing'
   const running = playing && !paused && (isAi || started)
 
@@ -78,7 +81,7 @@ export function useTetrisGame(props: GameProps) {
   // action per step and there is no gravity, so the playback speed alone sets the pace.
   useTicker(
     () => {
-      if (!isAi) {
+      if (!isAi || !ai) {
         act('TICK')
         return
       }
@@ -146,6 +149,7 @@ export function useTetrisGame(props: GameProps) {
     status,
     mode,
     isAi,
+    aiAvailable: ai !== undefined,
     speed,
     setSpeed: session.setSpeed,
     paused,

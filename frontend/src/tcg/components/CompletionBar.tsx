@@ -1,7 +1,7 @@
 import { cn } from '@/lib/cn'
 
 interface CompletionBarProps {
-  /** What is being completed, for screen readers: "Pixel Meadow". */
+  /** What is being completed, for screen readers: "Scarlet & Violet". */
   label: string
   owned: number
   total: number
@@ -10,7 +10,10 @@ interface CompletionBarProps {
   className?: string
 }
 
-/** How much of a set, or of everything, a player has collected. Turns gold when it is complete. */
+/**
+ * How much of a set, or of everything, a player has collected, in the color around it (`--accent`).
+ * Turns gold when it is complete.
+ */
 export function CompletionBar({ label, owned, total, percent, className }: CompletionBarProps) {
   const complete = total > 0 && owned >= total
   return (
@@ -22,13 +25,13 @@ export function CompletionBar({ label, owned, total, percent, className }: Compl
         aria-valuemax={total}
         aria-valuenow={owned}
         aria-valuetext={`${owned} of ${total} cards`}
-        className="h-2.5 overflow-hidden rounded-full bg-purple-100"
+        className="h-2.5 overflow-hidden rounded-full bg-[color-mix(in_srgb,var(--accent)_18%,white)]"
       >
         <div
           style={{ width: `${Math.min(100, percent)}%` }}
           className={cn(
             'h-full rounded-full transition-[width] duration-500',
-            complete ? 'bg-linear-to-r from-amber-400 to-amber-500' : 'bg-linear-to-r from-purple-600 to-pink-600',
+            complete ? 'bg-linear-to-r from-amber-400 to-amber-500' : 'bg-(--accent)',
           )}
         />
       </div>

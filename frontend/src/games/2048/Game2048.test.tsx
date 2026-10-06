@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { GameProps } from '@/games/types'
 import Game2048 from './Game2048'
 import type { Game2048State } from './types/game2048Types'
+import { createGame2048Ai, type Game2048AI } from './ai/game2048Ai'
 
 // A fixed seed makes tile spawns, and therefore every AI decision in this file, repeatable.
 vi.mock('@/games/shared/random', async (importOriginal) => ({
@@ -36,8 +37,9 @@ const press = (key: string) => fireEvent.keyDown(window, { key })
 const click = (name: string) => fireEvent.click(screen.getByRole('button', { name }))
 const stat = (label: string) => Number(screen.getByText(label).nextElementSibling?.textContent)
 
-function renderGame(handlers: Partial<GameProps> = {}) {
-  return render(<Game2048 onGameStart={vi.fn()} onGameOver={vi.fn()} {...handlers} />)
+function renderGame(handlers: Partial<GameProps<Game2048AI>> = {}) {
+  // With its AI, as an admin plays it: some of these tests let the AI play.
+  return render(<Game2048 onGameStart={vi.fn()} onGameOver={vi.fn()} ai={createGame2048Ai} {...handlers} />)
 }
 
 beforeEach(() => window.localStorage.clear())

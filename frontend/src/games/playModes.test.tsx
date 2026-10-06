@@ -1,8 +1,11 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import type { ComponentType } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createGame2048Ai } from './2048/ai/game2048Ai'
 import Game2048 from './2048/Game2048'
+import { createSnakeAi } from './snake/ai/snakeAi'
 import SnakeGame from './snake/SnakeGame'
+import { createTetrisAi } from './tetris/ai/tetrisAi'
 import TetrisGame from './tetris/TetrisGame'
 import type { GameProps } from './types'
 
@@ -18,10 +21,25 @@ vi.mock('@/games/shared/random', async (importOriginal) => ({
  *
  * `progress` names a stat that goes up as the AI plays; `oneX` is the AI's action delay at 1x.
  */
-const games: { name: string; Game: ComponentType<GameProps>; progress: string; oneX: number }[] = [
-  { name: 'Snake', Game: SnakeGame, progress: 'Moves', oneX: 140 },
-  { name: '2048', Game: Game2048, progress: 'Moves', oneX: 320 },
-  { name: 'Tetris', Game: TetrisGame, progress: 'Score', oneX: 120 },
+type Handlers = Partial<Omit<GameProps, 'ai'>>
+
+/**
+ * Renders a game the way the platform does for an admin: with its AI. Pass `withAi: false` for
+ * everyone else, who gets the game without one.
+ */
+function playable<Ai>(Game: ComponentType<GameProps<Ai>>, ai: () => Ai) {
+  return (handlers: Handlers = {}, withAi = true) =>
+    render(<Game onGameStart={vi.fn()} onGameOver={vi.fn()} {...handlers} ai={withAi ? ai : undefined} />)
+}
+
+const snake = playable(SnakeGame, createSnakeAi)
+const game2048 = playable(Game2048, createGame2048Ai)
+const tetris = playable(TetrisGame, createTetrisAi)
+
+const games: { name: string; play: ReturnType<typeof playable>; progress: string; oneX: number }[] = [
+  { name: 'Snake', play: snake, progress: 'Moves', oneX: 140 },
+  { name: '2048', play: game2048, progress: 'Moves', oneX: 320 },
+  { name: 'Tetris', play: tetris, progress: 'Score', oneX: 120 },
 ]
 
 /** How long one Snake step takes for a human at level 1. */
@@ -37,9 +55,6 @@ const boardLabel = () => board().getAttribute('aria-label')
 /** Everything drawn on the board: changes whenever anything on it moves. */
 const boardMarkup = () => board().outerHTML
 
-function renderGame(Game: ComponentType<GameProps>, handlers: Partial<GameProps> = {}) {
-  return render(<Game onGameStart={vi.fn()} onGameOver={vi.fn()} {...handlers} />)
-}
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -47,10 +62,20 @@ beforeEach(() => {
 })
 afterEach(() => vi.useRealTimers())
 
-describe.each(games)('$name play modes', ({ Game, progress, oneX }) => {
+describe.each(games)('$name play modes', ({ play, progress, oneX }) => {
+  it('offers no AI mode to a player without the AI (anyone but an admin)', () => {
+    play({}, false)
+
+    expect(screen.queryByRole('group', { name: 'Play mode' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'AI' })).not.toBeInTheDocument()
+    // The game itself is all there.
+    expect(board()).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Restart' })).toBeInTheDocument()
+  })
+
   it('starts in Human mode and does nothing until the player acts', () => {
     const onGameStart = vi.fn()
-    renderGame(Game, { onGameStart })
+    play({ onGameStart })
     const initial = boardMarkup()
 
     expect(screen.getByRole('button', { name: 'Human' })).toHaveAttribute('aria-pressed', 'true')
@@ -61,7 +86,7 @@ describe.each(games)('$name play modes', ({ Game, progress, oneX }) => {
   })
 
   it('plays by itself as soon as AI mode is selected', () => {
-    renderGame(Game)
+    play()
     click('AI')
 
     expect(screen.getByRole('button', { name: 'AI' })).toHaveAttribute('aria-pressed', 'true')
@@ -73,7 +98,7 @@ describe.each(games)('$name play modes', ({ Game, progress, oneX }) => {
   })
 
   it('ignores human controls while the AI is playing', () => {
-    renderGame(Game)
+    play()
     click('AI')
     click('Pause AI')
     const before = boardMarkup()
@@ -85,7 +110,7 @@ describe.each(games)('$name play modes', ({ Game, progress, oneX }) => {
   })
 
   it('pauses and resumes the AI', () => {
-    renderGame(Game)
+    play()
     click('AI')
     advance(oneX * 10)
 
@@ -102,7 +127,7 @@ describe.each(games)('$name play modes', ({ Game, progress, oneX }) => {
   })
 
   it('plays faster at a higher speed', () => {
-    renderGame(Game)
+    play()
     click('AI')
     fireEvent.click(screen.getByRole('radio', { name: '8x' }))
 
@@ -120,14 +145,14 @@ describe.each(games)('$name play modes', ({ Game, progress, oneX }) => {
 
   it('makes exactly the same decisions at every speed', () => {
     // 40 actions at 1x ...
-    const slow = renderGame(Game)
+    const slow = play()
     click('AI')
     advance(oneX * 40)
     const atNormalSpeed = boardLabel()
     slow.unmount()
 
     // ... and the same 40 actions at 4x must lead to the identical position.
-    renderGame(Game)
+    play()
     click('AI')
     fireEvent.click(screen.getByRole('radio', { name: '4x' }))
     advance((oneX / 4) * 40)
@@ -136,7 +161,7 @@ describe.each(games)('$name play modes', ({ Game, progress, oneX }) => {
   })
 
   it('restarts from a fresh game and keeps playing', () => {
-    renderGame(Game)
+    play()
     click('AI')
     advance(oneX * 40)
 
@@ -147,7 +172,7 @@ describe.each(games)('$name play modes', ({ Game, progress, oneX }) => {
   })
 
   it('starts a fresh game when switching back to Human mode', () => {
-    renderGame(Game)
+    play()
     click('AI')
     advance(oneX * 40)
 
@@ -163,7 +188,7 @@ describe.each(games)('$name play modes', ({ Game, progress, oneX }) => {
   it('does not report AI runs to the platform', () => {
     const onGameStart = vi.fn()
     const onGameOver = vi.fn()
-    renderGame(Game, { onGameStart, onGameOver })
+    play({ onGameStart, onGameOver })
     click('AI')
     advance(oneX * 40)
 
@@ -173,7 +198,7 @@ describe.each(games)('$name play modes', ({ Game, progress, oneX }) => {
 
   it('reports a human run once, even when several inputs arrive before the screen updates', () => {
     const onGameStart = vi.fn()
-    renderGame(Game, { onGameStart })
+    play({ onGameStart })
 
     // One `act` means no re-render between the key presses, like fast typing within one frame.
     act(() => {
@@ -186,7 +211,7 @@ describe.each(games)('$name play modes', ({ Game, progress, oneX }) => {
   })
 
   it('leaves no timers running after the game is unmounted', () => {
-    const { unmount } = renderGame(Game)
+    const { unmount } = play()
     click('AI')
     advance(oneX * 10)
     expect(vi.getTimerCount()).toBe(1)
@@ -199,7 +224,7 @@ describe.each(games)('$name play modes', ({ Game, progress, oneX }) => {
 
 describe('Snake in Human mode', () => {
   it('waits for the first key, then moves with the arrow keys', () => {
-    renderGame(SnakeGame)
+    snake()
     expect(screen.getByRole('heading', { name: 'Ready?' })).toBeInTheDocument()
     expect(boardLabel()).toContain('Head at column 9, row 9.')
 
@@ -211,7 +236,7 @@ describe('Snake in Human mode', () => {
   })
 
   it('also steers with WASD', () => {
-    renderGame(SnakeGame)
+    snake()
 
     press('s')
     advance(SNAKE_STEP * 2)
@@ -223,7 +248,7 @@ describe('Snake in Human mode', () => {
 
   it('reports the start of a run once, on the first input', () => {
     const onGameStart = vi.fn()
-    renderGame(SnakeGame, { onGameStart })
+    snake({ onGameStart })
 
     press('ArrowUp')
     press('ArrowLeft')
@@ -233,7 +258,7 @@ describe('Snake in Human mode', () => {
   })
 
   it('pauses with P and resumes', () => {
-    renderGame(SnakeGame)
+    snake()
     press('ArrowUp')
     advance(SNAKE_STEP)
 
@@ -249,7 +274,7 @@ describe('Snake in Human mode', () => {
 
   it('ends the game at the wall and reports the result exactly once', () => {
     const onGameOver = vi.fn()
-    renderGame(SnakeGame, { onGameOver })
+    snake({ onGameOver })
 
     press('ArrowUp') // from the middle of a 16x16 board the top wall is 8 cells away
     advance(SNAKE_STEP * 20)
@@ -262,7 +287,7 @@ describe('Snake in Human mode', () => {
 
   it('restarts after game over into a fresh game that waits for input', () => {
     const onGameStart = vi.fn()
-    renderGame(SnakeGame, { onGameStart })
+    snake({ onGameStart })
     press('ArrowUp')
     advance(SNAKE_STEP * 20)
 
@@ -276,7 +301,7 @@ describe('Snake in Human mode', () => {
 
   it('shows the score, the best score and the level', () => {
     window.localStorage.setItem('cyan-arcade:high-score:snake', '17')
-    renderGame(SnakeGame)
+    snake()
 
     expect(stat('Score')).toBe(0)
     expect(stat('Best')).toBe(17)
@@ -287,7 +312,7 @@ describe('Snake in Human mode', () => {
 describe('2048 in Human mode', () => {
   it('moves tiles with the arrow keys, reports the start once and has no pause button', () => {
     const onGameStart = vi.fn()
-    renderGame(Game2048, { onGameStart })
+    game2048({ onGameStart })
     expect(screen.queryByRole('button', { name: /pause/i })).not.toBeInTheDocument()
 
     const initial = boardMarkup()
@@ -302,7 +327,7 @@ describe('2048 in Human mode', () => {
 describe('Tetris in Human mode', () => {
   it('starts on request, falls with gravity and drops with Space', () => {
     const onGameStart = vi.fn()
-    renderGame(TetrisGame, { onGameStart })
+    tetris({ onGameStart })
     click('Start')
     const spawned = boardMarkup()
 
@@ -315,7 +340,7 @@ describe('Tetris in Human mode', () => {
   })
 
   it('pauses gravity with P', () => {
-    renderGame(TetrisGame)
+    tetris()
     click('Start')
 
     press('p')

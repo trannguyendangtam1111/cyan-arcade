@@ -13,6 +13,7 @@ import { cn } from '@/lib/cn'
 import { formatDateTime } from '@/lib/format'
 import { useOpenings, type Opening } from '../api'
 import { CardFace } from '../components/CardFace'
+import { PackArt } from '../components/PackArt'
 import { SignInPrompt } from '../components/SignInPrompt'
 import { tcgButton } from '../components/tcgButton'
 
@@ -81,7 +82,7 @@ function OpenedPack({ opening }: { opening: Opening }) {
   return (
     <Card padding="md" className="flex flex-col gap-4 sm:flex-row sm:items-center">
       <div className="flex items-center gap-4 sm:w-64 sm:shrink-0">
-        <img src={pack.imageUrl} alt="" loading="lazy" className="w-14 shrink-0 drop-shadow" />
+        <PackArt pack={pack} className="w-14 shrink-0" />
         <div className="min-w-0">
           <h2 className="truncate font-display text-lg font-semibold">{pack.name}</h2>
           <p className="truncate text-sm text-ink-soft">
@@ -101,7 +102,7 @@ function OpenedPack({ opening }: { opening: Opening }) {
       <ul aria-label={`Cards from ${pack.name}`} className="flex flex-1 flex-wrap gap-2">
         {cards.map(({ position, card, isNew }) => (
           <li key={position} className="relative w-16 sm:w-20" title={`${card.name} · ${card.rarity.name}`}>
-            <CardFace card={card} />
+            <CardFace card={card} size="thumb" />
             <span className="sr-only">
               {card.name}, {card.rarity.name}
               {isNew ? ', new' : ''}

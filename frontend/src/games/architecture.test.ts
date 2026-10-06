@@ -81,6 +81,28 @@ describe('game modules', () => {
   })
 })
 
+describe('AI mode', () => {
+  /** Specifiers a file imports for real, leaving out `import type` (which is erased from the build). */
+  const runtimeImports = (path: string) =>
+    [...code(path).matchAll(/^import\s+(?!type\s)[^;]*?\s+from\s+'([^']+)'/gm)].map((match) => match[1])
+
+  it.each(gameFolders)('%s ships its AI in a chunk of its own, loaded only through the module', (game) => {
+    // A real import of the AI anywhere in the game would put the AI in the game's chunk, which every
+    // player downloads. Only the module's `loadAi` reaches it, with a dynamic import.
+    for (const path of sourceFiles(join(SRC, 'games', game)).filter((file) => !name(file).includes('/ai/'))) {
+      expect(runtimeImports(path).filter((specifier) => /(^|\/)ai\//.test(specifier)), name(path)).toEqual([])
+    }
+    expect(code(join(SRC, 'games', game, 'index.ts'))).toMatch(/loadAi: \(\) => import\('\.\/ai\//)
+  })
+
+  it('is loaded by the platform only after the server allows it', () => {
+    // Calls of loadAi(); merely asking whether a game has an AI (the admin page) is fine.
+    const loaders = sourceFiles(SRC).filter((path) => !name(path).startsWith('games/') && /\bloadAi\s*\(\)/.test(code(path)))
+    expect(loaders.map(name)).toEqual(['hooks/useGameAi.ts'])
+    expect(code(join(SRC, 'hooks', 'useGameAi.ts'))).toMatch(/checkAiAccess\(/)
+  })
+})
+
 describe('the card game module', () => {
   it('is used by the rest of the app only through its routes and its hub banner', () => {
     const outside = sourceFiles(SRC).filter((path) => !name(path).startsWith('tcg/'))

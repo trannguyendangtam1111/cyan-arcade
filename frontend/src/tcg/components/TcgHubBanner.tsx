@@ -1,5 +1,6 @@
 import { ArrowRight, Sparkles } from 'lucide-react'
 import { Link } from 'react-router'
+import { gameAccent } from '../accent'
 import { CardBack } from './CardFace'
 
 /**
@@ -10,6 +11,7 @@ export function TcgHubBanner() {
   return (
     <Link
       to="/tcg"
+      style={gameAccent(null)}
       className="group relative flex items-center justify-between gap-6 overflow-hidden rounded-card bg-linear-to-br from-purple-700 via-fuchsia-600 to-pink-600 p-6 text-white shadow-soft transition-all duration-200 hover:-translate-y-1 hover:shadow-lift active:translate-y-0 sm:p-8"
     >
       <span className="relative max-w-md">
@@ -19,7 +21,7 @@ export function TcgHubBanner() {
         </span>
         <span className="block font-display text-2xl font-bold sm:text-3xl">Card packs</span>
         <span className="mt-1 block text-white/90">
-          Tear open a booster, flip the cards one by one and hope for a legendary.
+          Tear open real Pokémon and One Piece boosters, flip the cards one by one and chase the rarest pulls.
         </span>
         <span className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-white px-4 py-2 font-display font-semibold text-purple-700">
           Open packs

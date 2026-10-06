@@ -9,16 +9,21 @@ import { LoadingState } from '@/components/ui/LoadingState'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { cn } from '@/lib/cn'
 import { NotFoundPage } from '@/pages/NotFoundPage'
-import { useOwnedCardsOfSet, useSetCards, useSetPacks, useTcgSets, type TcgCard } from '../api'
+import { gameAccent } from '../accent'
+import { useOwnedCardsOfSet, useSetCards, useSetPacks, useTcgGames, useTcgSets, type TcgCard } from '../api'
+import { Attribution } from '../components/Attribution'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { CardDetail } from '../components/CardDetail'
 import { CardTile } from '../components/CardTile'
 import { CompletionBar } from '../components/CompletionBar'
+import { PackArt } from '../components/PackArt'
+import { SetBanner } from '../components/SetBanner'
 
-/** One set: the packs that can be opened, and every card there is to find in them. */
+/** One set, in its game's color: the packs that can be opened, and every card there is to find in them. */
 export function TcgSetPage() {
   const { gameSlug = '', setCode = '' } = useParams()
   const { user } = useSession()
+  const { data: games } = useTcgGames()
   const sets = useTcgSets(gameSlug)
   const set = sets.data?.find((candidate) => candidate.code === setCode)
   useDocumentTitle(set?.name)
@@ -38,9 +43,10 @@ export function TcgSetPage() {
     : undefined
   const quantityOf = (card: TcgCard) => (quantities ? (quantities.get(card.id) ?? 0) : undefined)
   const progress = owned.data?.sets.find((candidate) => candidate.id === set.id)
+  const game = games?.find((candidate) => candidate.slug === set.game.slug)
 
   return (
-    <div className="flex flex-col gap-8">
+    <div style={gameAccent(game?.accentColor)} className="flex flex-col gap-8">
       <Breadcrumbs
         crumbs={[
           { label: 'Card packs', to: '/tcg' },
@@ -49,9 +55,18 @@ export function TcgSetPage() {
         ]}
       />
 
-      <header>
-        <h1 className="text-title font-bold">{set.name}</h1>
-        <p className="mt-1 max-w-2xl text-lg text-ink-soft">{set.description}</p>
+      <header className="flex flex-col gap-5 sm:flex-row sm:items-center">
+        <SetBanner
+          name={set.name}
+          logoUrl={set.imageUrl}
+          coverImageUrl={set.coverImageUrl}
+          className="aspect-20/9 w-full shrink-0 rounded-card shadow-soft sm:w-80"
+        />
+        <div>
+          {set.series && <p className="font-display font-semibold text-ink-soft">{set.series}</p>}
+          <h1 className="text-title font-bold">{set.name}</h1>
+          <p className="mt-1 max-w-2xl text-lg text-ink-soft">{set.description}</p>
+        </div>
       </header>
 
       <section aria-labelledby="packs-heading">
@@ -71,16 +86,14 @@ export function TcgSetPage() {
                   to={`/tcg/packs/${pack.id}`}
                   className={cardStyles('none', cn('group flex items-center gap-5 p-5', interactiveCard))}
                 >
-                  <img
-                    src={pack.imageUrl}
-                    alt=""
-                    loading="lazy"
-                    className="w-24 shrink-0 drop-shadow-md transition-transform duration-300 group-hover:-rotate-3 group-hover:scale-105 sm:w-28"
+                  <PackArt
+                    pack={pack}
+                    className="w-24 shrink-0 transition-transform duration-300 group-hover:-rotate-3 group-hover:scale-105 sm:w-28"
                   />
                   <span className="min-w-0">
                     <span className="block font-display text-xl font-semibold">{pack.name}</span>
                     <span className="mt-1 block text-ink-soft">{pack.description}</span>
-                    <span className="mt-2 block text-sm font-bold text-purple-700">
+                    <span className="mt-2 block text-sm font-bold text-ink">
                       {pack.cardsPerPack} cards per pack · {pack.poolSize} to find
                     </span>
                   </span>
@@ -118,6 +131,8 @@ export function TcgSetPage() {
           </ul>
         )}
       </section>
+
+      <Attribution text={game?.attribution} />
 
       <CardDetail
         card={selected}

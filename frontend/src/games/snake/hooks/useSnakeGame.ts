@@ -7,7 +7,7 @@ import { useKeyboard } from '@/games/shared/useKeyboard'
 import { usePlaySession } from '@/games/shared/usePlaySession'
 import { useTicker } from '@/games/shared/useTicker'
 import type { GameProps, GameStatus } from '@/games/types'
-import { createSnakeAi, type SnakeDecision } from '../ai/snakeAi'
+import type { SnakeAI, SnakeDecision } from '../ai/snakeAi'
 import type { EatenFood } from '../components/SnakeBoard'
 import { createSnakeGame, snakeLevel, tickDelay, updateSnake } from '../engine/snakeEngine'
 import type { Direction } from '../types/snakeTypes'
@@ -33,7 +33,7 @@ const newGame = () => createSnakeGame({ seed: createSeed() })
  * input, the Human and AI controllers, the high score and reporting runs to the platform.
  * `SnakeGame.tsx` renders what this returns.
  */
-export function useSnakeGame(props: GameProps) {
+export function useSnakeGame(props: GameProps<SnakeAI>) {
   const session = usePlaySession()
   const { mode, speed, paused } = session
   const { state, dispatch, reset, getState } = useEngine(newGame, updateSnake)
@@ -42,9 +42,12 @@ export function useSnakeGame(props: GameProps) {
   const { started } = run
   const [decision, setDecision] = useState<SnakeDecision | null>(null)
   const [eaten, setEaten] = useState<EatenFood | null>(null)
-  const ai = useMemo(() => createSnakeAi(), [])
+  // Present only for players allowed to use AI mode (admins); see GameProps.ai.
+  const createAi = props.ai
+  const ai = useMemo(() => createAi?.(), [createAi])
 
-  const isAi = mode === 'ai'
+  // AI mode needs an AI: without one (a player who is not an admin) the game is human-only.
+  const isAi = mode === 'ai' && ai !== undefined
   const playing = state.status === 'playing'
   const running = playing && !paused && (isAi || started)
 
@@ -54,7 +57,7 @@ export function useSnakeGame(props: GameProps) {
       const before = getState()
       if (before.status !== 'playing') return
 
-      if (isAi) {
+      if (isAi && ai) {
         const next = ai.decide(before)
         setDecision(next)
         dispatch({ type: 'turn', direction: next.action })
@@ -118,6 +121,7 @@ export function useSnakeGame(props: GameProps) {
     status,
     mode,
     isAi,
+    aiAvailable: ai !== undefined,
     speed,
     setSpeed: session.setSpeed,
     paused,

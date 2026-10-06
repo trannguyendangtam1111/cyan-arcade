@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { GameProps } from '@/games/types'
 import TetrisGame from './TetrisGame'
 import type { Cell, PieceType, TetrisState } from './types/tetrisTypes'
+import type { TetrisAI } from './ai/tetrisAi'
 
 const WIDTH = 10
 const HEIGHT = 20
@@ -46,11 +47,11 @@ const stat = (label: string) => Number(screen.getByText(label).nextElementSiblin
 const boardMarkup = () => screen.getByRole('img', { name: /tetris board/i }).outerHTML
 const advance = (ms: number) => act(() => vi.advanceTimersByTime(ms))
 
-function renderGame(handlers: Partial<GameProps> = {}) {
+function renderGame(handlers: Partial<GameProps<TetrisAI>> = {}) {
   return render(<TetrisGame onGameStart={vi.fn()} onGameOver={vi.fn()} {...handlers} />)
 }
 
-function startGame(handlers: Partial<GameProps> = {}) {
+function startGame(handlers: Partial<GameProps<TetrisAI>> = {}) {
   const view = renderGame(handlers)
   click('Start')
   return view

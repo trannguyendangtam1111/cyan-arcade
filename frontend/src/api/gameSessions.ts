@@ -23,13 +23,17 @@ export interface ScoreResponse {
 export interface Rewards {
   /** Everything this run added: the run itself, a personal-best bonus, achievements and bonuses. */
   xpEarned: number
+  /** The same, in coins. */
+  coinsEarned: number
   personalBest: boolean
-  achievements: { code: string; name: string; description: string; xp: number }[]
+  achievements: { code: string; name: string; description: string; xp: number; coins: number }[]
   /** Extra rewards from other features, such as a completed daily challenge. */
   bonuses: RewardBonus[]
   totalXp: number
   level: number
   leveledUp: boolean
+  /** The player's coins afterwards. */
+  coinBalance: number
 }
 
 export interface RewardBonus {
@@ -37,6 +41,7 @@ export interface RewardBonus {
   type: 'DAILY_CHALLENGE' | (string & {})
   title: string
   xp: number
+  coins: number
 }
 
 /** Returned when a session is finished a second time. */

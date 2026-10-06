@@ -14,11 +14,24 @@ export interface ProfileResponse {
   xpIntoLevel: number
   /** XP the current level takes in total. */
   xpForNextLevel: number
+  /** The coin balance. */
+  coins: number
   gamesPlayed: number
   totalScore: number
   achievementsUnlocked: number
   achievementsTotal: number
+  /** The title the player wears, bought in the shop; `null` when none. */
+  title: Cosmetic | null
+  /** The badge the player wears; `null` when none. */
+  badge: Cosmetic | null
   memberSince: string
+}
+
+/** Something worn on the profile. */
+export interface Cosmetic {
+  code: string
+  name: string
+  icon: string
 }
 
 export interface AchievementStatus {
@@ -26,6 +39,7 @@ export interface AchievementStatus {
   name: string
   description: string
   xp: number
+  coins: number
   unlocked: boolean
   unlockedAt: string | null
 }
@@ -49,12 +63,48 @@ export interface GameHistoryResponse {
   totalPages: number
 }
 
+/** `GET /api/users/me/stats`: the platform's numbers, other modules' (card packs...), and per game. */
+export interface StatsResponse {
+  gamesPlayed: number
+  totalScore: number
+  /** Time spent in finished runs, measured by the server. */
+  playTimeMs: number
+  achievementsUnlocked: number
+  achievementsTotal: number
+  coins: number
+  /** Every coin ever earned, spending left out. */
+  coinsEarned: number
+  /** Numbers other modules keep, e.g. `tcg.packsOpened`. */
+  activities: { key: string; label: string; value: number }[]
+  /** One per game played at least once, most played first. */
+  games: GameStats[]
+}
+
+export interface GameStats {
+  slug: string
+  name: string
+  gamesPlayed: number
+  bestScore: number
+  averageScore: number
+  playTimeMs: number
+  lastPlayedAt: string
+}
+
 export const HISTORY_PAGE_SIZE = 8
 
 export const profileKeys = {
   profile: [...userKeys.all, 'profile'] as const,
+  stats: [...userKeys.all, 'stats'] as const,
   achievements: [...userKeys.all, 'achievements'] as const,
   history: (page: number) => [...userKeys.all, 'history', page] as const,
+}
+
+export function useStats(enabled: boolean) {
+  return useQuery({
+    queryKey: profileKeys.stats,
+    queryFn: ({ signal }) => apiFetch<StatsResponse>('/api/users/me/stats', { signal }),
+    enabled,
+  })
 }
 
 export function useProfile(enabled: boolean) {

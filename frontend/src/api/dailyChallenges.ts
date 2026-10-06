@@ -6,16 +6,25 @@ export interface DailyChallenge {
   id: number
   title: string
   description: string
-  game: { slug: string; name: string }
+  /** The game it is played in; `null` for a challenge about something else (an activity). */
+  game: { slug: string; name: string } | null
+  /** What an activity's challenge counts, e.g. `TCG_PACK_OPENED`; `null` for a game's. */
+  activity: { code: string; name: string } | null
   /** The number to reach; 1 for "finish a game". */
   target: number
   xpReward: number
+  coinReward: number
   /** The day it belongs to, as `YYYY-MM-DD` in UTC. */
   date: string
+  /** For an activity's challenge, how far the signed-in player has got today. Absent for guests. */
+  progress?: number | null
   /** Whether the signed-in player has completed it. Absent for guests. */
   completed?: boolean
   completedAt?: string | null
 }
+
+/** Opening card packs, counted by the server for the card game's daily challenges. */
+export const TCG_PACK_OPENED = 'TCG_PACK_OPENED'
 
 /** Today's challenges, as returned by `GET /api/daily-challenges` and `GET /api/daily-challenges/me`. */
 export interface DailyChallengesResponse {
