@@ -6,7 +6,7 @@ import java.util.UUID;
 /**
  * A recorded score together with its rank among all scores of the same game.
  *
- * @param rank 1 for the best score; equal scores share a rank
+ * @param rank 1 for the best; every entry has its own rank, equal scores in the order they were set
  * @param userId the account that achieved it, or {@code null} for a guest
  * @param playerId the guest id sent with the run, or {@code null}. For comparing with the caller
  * only; it must never be sent to a client.

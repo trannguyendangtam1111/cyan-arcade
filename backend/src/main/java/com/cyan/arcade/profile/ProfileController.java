@@ -3,6 +3,7 @@ package com.cyan.arcade.profile;
 import java.util.List;
 
 import com.cyan.arcade.common.security.AuthenticatedUser;
+import com.cyan.arcade.leaderboard.PlayerRanks;
 import com.cyan.arcade.progression.AchievementStatus;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
@@ -54,6 +55,12 @@ class ProfileController {
 	@GetMapping("/stats")
 	StatsResponse stats(@AuthenticationPrincipal AuthenticatedUser user) {
 		return this.profileService.statsOf(user.id());
+	}
+
+	/** Where the player stands on every leaderboard: per game, today, this week and of all time. */
+	@GetMapping("/ranks")
+	PlayerRanks ranks(@AuthenticationPrincipal AuthenticatedUser user) {
+		return this.profileService.ranksOf(user.id());
 	}
 
 	@GetMapping("/achievements")

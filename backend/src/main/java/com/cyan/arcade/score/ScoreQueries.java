@@ -6,6 +6,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,30 +21,33 @@ public class ScoreQueries {
 
 	private final ScoreRepository scores;
 
-	ScoreQueries(ScoreRepository scores) {
-		this.scores = scores;
-	}
+	private final ScoreBoard board;
 
-	/** One page of a game's scores, best first, each with its overall rank. */
-	public Page<RankedScore> topScores(Long gameId, int page, int size) {
-		return this.scores.findRanked(gameId, PageRequest.of(page, size));
+	ScoreQueries(ScoreRepository scores, ScoreBoard board) {
+		this.scores = scores;
+		this.board = board;
 	}
 
 	/**
-	 * The caller's best score in a game and where it ranks. A signed-in player is looked up by
-	 * account; a guest by the id their browser sends.
+	 * One page of a game's ranking over a time window: each player's best score set in it, best
+	 * first, numbered 1, 2, 3, ... with no shared ranks (see {@link ScoreBoard}).
+	 * @param since the window's first moment, or {@code null} for no start
+	 * @param until the moment after the window, or {@code null} for no end
+	 */
+	public Page<RankedScore> ranking(Long gameId, Instant since, Instant until, int page, int size) {
+		return new PageImpl<>(this.board.page(gameId, since, until, page, size), PageRequest.of(page, size),
+				this.board.count(gameId, since, until));
+	}
+
+	/**
+	 * The caller's best score in a game over a time window and its rank. A signed-in player is
+	 * looked up by account; a guest by the id their browser sends.
 	 * @param userId the signed-in player, or {@code null}
 	 * @param playerId the guest id, or {@code null}
+	 * @return empty when the caller is unknown or has no score in the window
 	 */
-	public Optional<PlayerBest> bestOf(Long gameId, Long userId, UUID playerId) {
-		Optional<Integer> best = Optional.empty();
-		if (userId != null) {
-			best = this.scores.findBestScoreOfUser(gameId, userId);
-		}
-		else if (playerId != null) {
-			best = this.scores.findBestScoreOfGuest(gameId, playerId);
-		}
-		return best.map((score) -> new PlayerBest(score, this.scores.countByGameIdAndValueGreaterThan(gameId, score) + 1));
+	public Optional<PlayerBest> standingOf(Long gameId, Instant since, Instant until, Long userId, UUID playerId) {
+		return this.board.standing(gameId, since, until, userId, playerId);
 	}
 
 	public PlayerStats statsOf(Long userId) {

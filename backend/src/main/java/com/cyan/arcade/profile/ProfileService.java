@@ -9,6 +9,8 @@ import com.cyan.arcade.common.platform.ActivityStatistics;
 import com.cyan.arcade.economy.CoinService;
 import com.cyan.arcade.game.GameInfo;
 import com.cyan.arcade.game.GameService;
+import com.cyan.arcade.leaderboard.LeaderboardService;
+import com.cyan.arcade.leaderboard.PlayerRanks;
 import com.cyan.arcade.profile.GameHistoryResponse.Entry;
 import com.cyan.arcade.profile.ProfileResponse.Cosmetic;
 import com.cyan.arcade.progression.AchievementStatus;
@@ -54,8 +56,11 @@ public class ProfileService {
 
 	private final List<ActivityStatistics> activityStatistics;
 
+	private final LeaderboardService leaderboards;
+
 	ProfileService(UserService users, ScoreQueries scores, ProgressionService progression, GameService games,
-			CoinService coins, ShopService shop, ObjectProvider<ActivityStatistics> activityStatistics) {
+			CoinService coins, ShopService shop, ObjectProvider<ActivityStatistics> activityStatistics,
+			LeaderboardService leaderboards) {
 		this.users = users;
 		this.scores = scores;
 		this.progression = progression;
@@ -63,6 +68,7 @@ public class ProfileService {
 		this.coins = coins;
 		this.shop = shop;
 		this.activityStatistics = activityStatistics.orderedStream().toList();
+		this.leaderboards = leaderboards;
 	}
 
 	public ProfileResponse profileOf(Long userId) {
@@ -107,6 +113,11 @@ public class ProfileService {
 				this.scores.statsOf(userId).totalScore(), perGame.stream().mapToLong(GameStats::playTimeMs).sum(),
 				(int) achievements.stream().filter(AchievementStatus::unlocked).count(), achievements.size(),
 				this.coins.balanceOf(userId), this.coins.earnedBy(userId), activities, games);
+	}
+
+	/** The player's ranks on every leaderboard, worked out by the leaderboards from the scores. */
+	public PlayerRanks ranksOf(Long userId) {
+		return this.leaderboards.ranksOf(userId);
 	}
 
 	public GameHistoryResponse historyOf(Long userId, int page, int size) {

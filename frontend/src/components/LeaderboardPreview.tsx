@@ -27,7 +27,7 @@ export function LeaderboardPreview({ games }: { games: GameDefinition[] }) {
 
 function TopScores({ game }: { game: GameDefinition }) {
   // The first page of the real leaderboard, so this and the leaderboard page share one request.
-  const { data, isPending, isError, refetch } = useLeaderboard(game.slug, 0)
+  const { data, isPending, isError, refetch } = useLeaderboard(game.slug, 'ALL_TIME', 0)
   const boardUrl = `/leaderboard?game=${encodeURIComponent(game.slug)}`
 
   return (

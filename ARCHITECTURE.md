@@ -85,7 +85,7 @@ src/
 | `/games/:slug` | Game detail, today's challenge for the game, and the play area | Live; hosts the game, or shows "coming soon" if it has no module yet |
 | `/challenges` | The daily login reward (a 7-day run) and today's challenges | Live. Guests see the challenges and an invitation to sign in |
 | `/shop`       | Extra card packs, badges and titles for coins; the player's items, to wear | Live. Guests see what is for sale |
-| `/leaderboard` | Top scores per game, with the player's own best and rank | Live. Game and page are in the URL (`?game=2048&page=2`) |
+| `/leaderboard` | Per game and period (today, this week, all time): the player's own rank, a podium for the top three, the rest in a table | Live. Game, period and page are in the URL (`?game=2048&period=weekly&page=2`) |
 | `/profile`     | Level and XP progress, coins, the badge and title worn, statistics (platform, card game, per game), recent games, coin history, achievements, avatar, log out | Live. Guests see an invitation to sign in instead |
 | `/admin`       | The arcade at a glance, AI mode, unlimited packs, coin grants | Admins only; everyone else sees "Admins only", and the data is admin-only on the server |
 | `/login`, `/register` | Auth forms | Live. `?redirect=/games/snake` returns the player to where they came from (same-site paths only) |
@@ -341,7 +341,8 @@ com.cyan.arcade
                 DailyChallengeBonuses, ActivityChallenges, DailyChallengeService, DailyChallengeController, DTOs
   score/        GameSession and Score (entities), their repositories, GameSessionService (writes), ScoreQueries (reads),
                 GameSessionController, AbandonedSessionCleaner, DTOs
-  leaderboard/  LeaderboardService, LeaderboardController, LeaderboardResponse
+  leaderboard/  LeaderboardService, LeaderboardController, LeaderboardPeriod (DAILY, WEEKLY, ALL_TIME and their
+                UTC windows), LeaderboardResponse, PlayerRanks
   profile/      ProfileService, ProfileController, ProfileResponse, StatsResponse, GameHistoryResponse
   tcg/          the card game module, see below
 ```
@@ -351,7 +352,7 @@ Inside a feature: `XController` → `XService` → `XRepository`. Entities, repo
 Dependencies point one way:
 
 ```text
-profile ──► user, score, progression, game, economy, shop
+profile ──► user, score, progression, game, economy, shop, leaderboard
 leaderboard ──► score, user, game
 score ──► progression, game
 auth ──► user
@@ -381,7 +382,12 @@ tcg ──► common only (talks to the platform through common.platform)
 
 Features refer to each other by id, not by entity: `score` stores a `game_id` and asks `GameService` for a `GameInfo`, so it never sees the `Game` entity. This is deliberately simple validation, not anti-cheat. Stronger checks (replaying a run from its seed and inputs, for example) can be added inside this one service later.
 
-**Leaderboards own no data.** `leaderboard` is a thin feature on top of `score`: `ScoreQueries` (the read side of `score`) returns a page of scores with their rank, computed in SQL with a `RANK()` window function over all of the game's scores, plus the caller's best score and its rank. `LeaderboardService` turns that into the API response and decides which entries are the caller's.
+**Leaderboards own no data.** `leaderboard` is a thin, read-only feature on top of `score`, with no table of its own and no way to write:
+
+- **Periods** (`LeaderboardPeriod`) turn the server's clock into a window: `DAILY` from 00:00 UTC, `WEEKLY` from Monday 00:00 UTC, `ALL_TIME` without bounds. The window is computed with `ZoneOffset.UTC` explicitly, never the JVM's or the player's time zone, and is half-open (`start <= created_at < end`), so midnight belongs to the new day only.
+- **Ranking** is one SQL query in `score.ScoreBoard` (the read side of `score`): the window's scores of the game, each competitor's best by `DISTINCT ON` (an account, else a guest's browser id, else the run itself), numbered by `row_number()` over `score DESC, created_at, id`. The order is total, so ranks are never shared and pages are stable; `LIMIT`/`OFFSET` and a `count(DISTINCT …)` page it in the database, and the caller's own rank is the same query filtered to them. Nothing is loaded into memory or stored.
+- **Indexes**: the all-time board reads a game's scores through `(game_id, score DESC, created_at, id)`; the daily and weekly boards through `(game_id, created_at)` (V14).
+- `LeaderboardService` adds names and avatars (one lookup per page), marks the caller's entry, and gives the profile each game's daily, weekly and all-time standing (`GET /api/users/me/ranks`). Leaderboards pay no rewards: placement is not connected to coins or XP.
 
 **Guest identity.** A browser that is not signed in sends a random id in the `X-Player-Id` header (`GuestPlayer.HEADER`). It is stored with a guest's session and copied to its score, and is only ever compared with the caller's own id. It never appears in a response.
 
@@ -564,6 +570,7 @@ Other conventions:
 | `V9__create_tcg.sql` | The card game module: `tcg_games`, `tcg_rarities`, `tcg_sets`, `tcg_cards`, `tcg_packs`, `tcg_pack_cards`, `tcg_pack_slot_odds`, `tcg_pack_openings`, `tcg_pack_opening_cards`, `tcg_user_cards` |
 | `V10__session_cleanup_index_and_accent_contrast.sql` | A partial index on unfinished game sessions for the cleanup job; Tetris's accent one shade darker, for contrast |
 | `V12__add_user_roles.sql` | `users.role` (`USER` or `ADMIN`, checked); existing accounts become `USER`. The admin account itself is seeded by the application |
+| `V14__add_leaderboard_period_index.sql` | `scores (game_id, created_at)`, for the daily and weekly leaderboards |
 | `V13__create_economy.sql` | `user_wallets`, `coin_transactions` (with the unique reference index), `daily_logins`, `shop_items` (seeded with packs, badges and titles), `user_inventory`, `purchases`; `daily_challenges.coin_reward` and activity challenges (`activity`, goal `COUNT`, nullable `game_id`), `daily_challenge_progress`; indexes on `created_at`/`opened_at` for the dashboard's "today" figures. Only adds: existing rows keep their meaning |
 | `V11__real_card_games.sql` | Removes the old fictional demo card game and everything players did with it; adds external ids and display order to cards (the printed number is no longer unique), thumbnails, set series, logos and covers, a game's accent color and attribution, a pack's odds note; indexes for a set's cards in order and for cards by number |
 

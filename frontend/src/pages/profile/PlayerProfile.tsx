@@ -16,6 +16,7 @@ import { AchievementGrid } from './AchievementGrid'
 import { AvatarPicker } from './AvatarPicker'
 import { CoinHistory } from './CoinHistory'
 import { GameStatsTable } from './GameStatsTable'
+import { Rankings } from './Rankings'
 import { RecentGames } from './RecentGames'
 
 /** The profile of the signed-in player. */
@@ -36,6 +37,7 @@ export function PlayerProfile() {
           <Statistics profile={profile} stats={stats} />
         </div>
       </div>
+      <Rankings />
       {stats && stats.games.length > 0 && <GameStatsTable games={stats.games} />}
       <RecentGames />
       <AchievementGrid />

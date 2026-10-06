@@ -1,7 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { authKeys, userKeys, type AvatarKey, type SessionResponse } from './auth'
 import { apiFetch } from './client'
-import { leaderboardKeys } from './leaderboards'
+import { leaderboardKeys, type PlayerRanks } from './leaderboards'
 
 /** The signed-in player's profile, as returned by `GET /api/users/me`. */
 export interface ProfileResponse {
@@ -95,8 +95,18 @@ export const HISTORY_PAGE_SIZE = 8
 export const profileKeys = {
   profile: [...userKeys.all, 'profile'] as const,
   stats: [...userKeys.all, 'stats'] as const,
+  /** Where the player stands on every leaderboard. */
+  ranks: [...userKeys.all, 'ranks'] as const,
   achievements: [...userKeys.all, 'achievements'] as const,
   history: (page: number) => [...userKeys.all, 'history', page] as const,
+}
+
+export function usePlayerRanks(enabled: boolean) {
+  return useQuery({
+    queryKey: profileKeys.ranks,
+    queryFn: ({ signal }) => apiFetch<PlayerRanks>('/api/users/me/ranks', { signal }),
+    enabled,
+  })
 }
 
 export function useStats(enabled: boolean) {

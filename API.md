@@ -113,7 +113,8 @@ Platform codes: `VALIDATION_FAILED`, `BAD_REQUEST`, `UNAUTHORIZED`, `FORBIDDEN`,
 | `GET` | `/api/games`, `/api/games/{slug}` | public |
 | `POST` | `/api/game-sessions` | public |
 | `POST` | `/api/game-sessions/{id}/finish` | public; a signed-in player's session only by that player |
-| `GET` | `/api/leaderboards/{gameSlug}` | public |
+| `GET` | `/api/leaderboards/{gameSlug}?period=…` | public |
+| `GET` | `/api/users/me/ranks` | signed in |
 | `GET` | `/api/tcg/games`, `/api/tcg/games/{slug}` | public |
 | `GET` | `/api/tcg/sets`, `/api/tcg/sets/{id}` | public |
 | `GET` | `/api/tcg/cards?set={id}` | public |
@@ -593,46 +594,74 @@ There is no endpoint to read or list sessions.
 
 #### `GET /api/leaderboards/{gameSlug}`
 
-Returns one page of a game's recorded scores, best first. Public.
+One page of a game's leaderboard for a period. Public and read-only: there is no endpoint that writes to a leaderboard, and every entry is read from scores recorded through game sessions.
 
 | Query parameter | Default | Notes |
 | --------------- | ------- | ----- |
+| `period` | `ALL_TIME` | `DAILY`, `WEEKLY` or `ALL_TIME` |
 | `page` | `0` | Zero-based |
-| `size` | `10` | 1 to 50 |
+| `size` | `20` | 1 to 100 |
 
 ```json
 {
   "gameSlug": "2048",
+  "period": "WEEKLY",
+  "periodStart": "2026-10-05T00:00:00Z",
+  "periodEnd": "2026-10-12T00:00:00Z",
   "entries": [
     {
       "rank": 1,
       "player": { "username": "pixel", "avatar": "GHOST" },
       "score": 15200,
       "durationMs": 412000,
-      "achievedAt": "2026-09-30T13:28:40.975Z",
+      "achievedAt": "2026-10-06T13:28:40.975Z",
       "you": true
     },
-    { "rank": 2, "player": null, "score": 1512, "durationMs": 95000, "achievedAt": "2026-09-30T13:31:02.118Z", "you": false }
+    { "rank": 2, "player": null, "score": 1512, "durationMs": 95000, "achievedAt": "2026-10-06T13:31:02.118Z", "you": false }
   ],
   "page": 0,
-  "size": 10,
+  "size": 20,
   "totalEntries": 2,
   "totalPages": 1,
-  "player": { "bestScore": 15200, "rank": 1 }
+  "myRank": 1,
+  "myScore": 15200
 }
 ```
 
-- Every finished run is an entry, so one player can appear more than once.
-- `rank` is the position among **all** of the game's scores, not just this page. Equal scores share a rank and the next rank is skipped (1, 1, 3). Among equal scores, the one achieved first is listed first.
-- An entry's `player` is the username and avatar of the account that set the score, or `null` for a guest. Nothing else about an account is public.
-- `you` marks the caller's own entries, and the top-level `player` is the caller's best score and its rank, even if that entry is on another page. The caller is the signed-in player; for a guest it is the `X-Player-Id` header, matched only against scores made as a guest. So people who share a browser are never shown each other's scores as their own. `player` is `null` when the caller is unknown or has no score in the game.
+- **Periods are the server's, in UTC.** `DAILY` counts scores set from 00:00 UTC today, `WEEKLY` from Monday 00:00 UTC this week (ISO weeks), `ALL_TIME` every score. `periodStart` is the first moment counted and `periodEnd` the moment the next board starts (both `null` for all time). No request carries a date. In Vietnam (UTC+7) a new day's board starts at 07:00 local time, and a new week's on Monday at 07:00.
+- **Each player once.** An entry is a player's best score in the period: the account for a signed-in player, the browser's `X-Player-Id` for a guest (a guest run without one is an entry of its own). `totalEntries` is how many players are on the board.
+- **Ranks are deterministic and never shared.** Entries are ordered by score (highest first), then by when it was set (earlier first), then by the score's id, and numbered 1, 2, 3, ... over the whole board, not just the page. The order is total, so a rank never changes between requests unless a new score arrives, and pages never overlap or skip anyone.
+- An entry's `player` is the username and avatar of the account, or `null` for a guest. Nothing else about an account is public.
+- `you` marks the caller's entry. `myRank` and `myScore` are the caller's place and best score on this board, even when the entry is on another page, and `null` when the caller is unknown or has no score in the period; a rank is never made up. The caller is the signed-in player; for a guest it is the `X-Player-Id` header, matched only against scores made as a guest.
 - A page past the end returns an empty `entries` list, not an error.
+- Scores come only from `POST /api/game-sessions/{id}/finish`, with its checks. A leaderboard cannot be written to, by players or admins; `POST`, `PUT` and `DELETE` answer `405`.
 
 | Error | When |
 | ----- | ---- |
-| `400 VALIDATION_FAILED` | `page` is negative, or `size` is outside 1 to 50 |
-| `400 BAD_REQUEST` | `X-Player-Id` is not a UUID |
+| `400 VALIDATION_FAILED` | `page` is negative, or `size` is outside 1 to 100 |
+| `400 BAD_REQUEST` | `period` is not one of the three (they are case-sensitive), or `X-Player-Id` is not a UUID |
 | `404 NOT_FOUND` | No active game has that slug |
+
+#### `GET /api/users/me/ranks`
+
+Where the signed-in player stands on every board, for their profile. `401 UNAUTHORIZED` without a session.
+
+```json
+{
+  "bestRank": 3,
+  "bestRankGame": { "slug": "tetris", "name": "Tetris" },
+  "games": [
+    {
+      "game": { "slug": "snake", "name": "Snake" },
+      "daily": null,
+      "weekly": { "rank": 17, "score": 40 },
+      "allTime": { "rank": 120, "score": 52 }
+    }
+  ]
+}
+```
+
+One entry per active game, in catalog order. A period is `null` when the player has no score in it. `bestRank` is the best all-time rank in any game (`null` until there is one).
 
 ### Health
 

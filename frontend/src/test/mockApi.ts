@@ -4,7 +4,13 @@ import type { DailyChallenge } from '@/api/dailyChallenges'
 import type { CoinTransaction, DailyLoginStatus, InventoryEntry, ShopItem } from '@/api/economy'
 import type { GameResponse } from '@/api/games'
 import type { Rewards } from '@/api/gameSessions'
-import type { LeaderboardEntry, LeaderboardResponse } from '@/api/leaderboards'
+import type {
+  LeaderboardEntry,
+  LeaderboardPeriod,
+  LeaderboardResponse,
+  PlayerRanks,
+  Standing,
+} from '@/api/leaderboards'
 import type { AchievementStatus, GameHistoryEntry, ProfileResponse, StatsResponse } from '@/api/profile'
 
 export const catalogFixture: GameResponse[] = [
@@ -210,10 +216,15 @@ interface MockApiOptions {
   offline?: boolean
   /** HTTP status for `POST /api/game-sessions/{id}/finish`. Anything but 200 returns a problem. */
   finishStatus?: number
-  /** Scores per game slug, best first. Games not listed have an empty leaderboard. */
+  /**
+   * Board entries, best first, per game slug (every period) or per `slug:PERIOD` (that period
+   * only, e.g. `snake:WEEKLY`). Games not listed have empty boards.
+   */
   scores?: Record<string, Partial<LeaderboardEntry>[]>
-  /** The caller's standing per game slug. */
-  standings?: Record<string, LeaderboardResponse['player']>
+  /** The caller's rank and best score, per game slug or per `slug:PERIOD`, like `scores`. */
+  standings?: Record<string, Standing | null>
+  /** The signed-in player's ranks on every board (`GET /api/users/me/ranks`). */
+  ranks?: PlayerRanks
   /** Who is signed in when the test starts. Nobody by default. */
   user?: SessionUser | null
   /** Registered accounts as username → password, for the login and register endpoints. */
@@ -262,10 +273,11 @@ const defaultRewards: Rewards = {
 /** Builds the page of a leaderboard the way the backend would. */
 function leaderboardPage(
   gameSlug: string,
+  period: LeaderboardPeriod,
   scores: Partial<LeaderboardEntry>[],
   page: number,
   size: number,
-  player: LeaderboardResponse['player'],
+  mine: Standing | null,
 ): LeaderboardResponse {
   const entries = scores.slice(page * size, page * size + size).map((entry, index) => ({
     rank: page * size + index + 1,
@@ -276,7 +288,20 @@ function leaderboardPage(
     you: false,
     ...entry,
   }))
-  return { gameSlug, entries, page, size, totalEntries: scores.length, totalPages: Math.ceil(scores.length / size), player }
+  const timed = period !== 'ALL_TIME'
+  return {
+    gameSlug,
+    period,
+    periodStart: timed ? '2026-09-28T00:00:00Z' : null,
+    periodEnd: timed ? new Date(Date.now() + 5 * 60 * 60_000 + 12 * 60_000 + 30_000).toISOString() : null,
+    entries,
+    page,
+    size,
+    totalEntries: scores.length,
+    totalPages: Math.ceil(scores.length / size),
+    myRank: mine?.rank ?? null,
+    myScore: mine?.score ?? null,
+  }
 }
 
 /**
@@ -289,6 +314,7 @@ export function mockApi({
   finishStatus = 200,
   scores = {},
   standings = {},
+  ranks = { bestRank: null, bestRankGame: null, games: [] },
   user = null,
   accounts = {},
   profile = {},
@@ -524,6 +550,7 @@ export function mockApi({
       if (path === '/api/users/me') return json(profileOf(currentUser))
       if (path === '/api/users/me/achievements') return json(achievements)
       if (path === '/api/users/me/coins') return json({ balance, earned: balance + 500 })
+      if (path === '/api/users/me/ranks') return json(ranks)
       if (path === '/api/users/me/transactions') {
         const page = Number(url.searchParams.get('page') ?? 0)
         const size = Number(url.searchParams.get('size') ?? 10)
@@ -669,8 +696,12 @@ export function mockApi({
     const board = /^\/api\/leaderboards\/([^/]+)$/.exec(path)?.[1]
     if (board) {
       const page = Number(url.searchParams.get('page') ?? 0)
-      const size = Number(url.searchParams.get('size') ?? 10)
-      return json(leaderboardPage(board, scores[board] ?? [], page, size, standings[board] ?? null))
+      const size = Number(url.searchParams.get('size') ?? 20)
+      const period = (url.searchParams.get('period') ?? 'ALL_TIME') as LeaderboardPeriod
+      if (!['DAILY', 'WEEKLY', 'ALL_TIME'].includes(period)) return problem(400, 'BAD_REQUEST', 'Unknown period')
+      const key = `${board}:${period}`
+      const entries = scores[key] ?? scores[board] ?? []
+      return json(leaderboardPage(board, period, entries, page, size, standings[key] ?? standings[board] ?? null))
     }
 
     const slug = /^\/api\/games\/([^/]+)$/.exec(path)?.[1]
