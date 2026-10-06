@@ -57,6 +57,18 @@ public class ProgressionService {
 	}
 
 	/**
+	 * Makes this player's finished runs and coin changes happen one at a time until the current
+	 * transaction ends. Called before anything about the player's past runs is read (their best
+	 * score, their games today), so two runs finished at the same moment are judged one after the
+	 * other: only a score that really beats the best earns the personal-best reward, and the daily
+	 * limits hold.
+	 */
+	@Transactional
+	public void lockPlayer(Long userId) {
+		this.coins.lock(userId);
+	}
+
+	/**
 	 * Awards XP and coins for the run, unlocks any achievements it earned, collects bonuses from
 	 * other features, and reports what changed. Each coin reward refers to what it rewards (the
 	 * session, the achievement, the bonus), so none can be paid twice.
@@ -75,7 +87,10 @@ public class ProgressionService {
 			coinsEarned += pay(userId, CoinTransactionType.GAME_COMPLETION, this.rewards.gameCompletedCoins(),
 					session, "Finished a game of " + run.gameSlug());
 		}
-		if (run.personalBest()) {
+		// Likewise for new bests: a string of runs each a little better than the last still earns their
+		// XP, but only so many pay coins in a day.
+		if (run.personalBest() && this.coins.countToday(userId,
+				CoinTransactionType.HIGH_SCORE) < this.rewards.rewardedPersonalBestsPerDay()) {
 			coinsEarned += pay(userId, CoinTransactionType.HIGH_SCORE, this.rewards.personalBestCoins(), session,
 					"New best score in " + run.gameSlug());
 		}

@@ -14,11 +14,12 @@ interface GameShellProps {
   /** The playfield, including any overlays. */
   board: ReactNode
   stats: GameStat[]
-  mode: PlayMode
-  onModeChange: (mode: PlayMode) => void
+  /** Human or AI. Leave out, with `ai`, for a game that has no AI: it is always played by a human. */
+  mode?: PlayMode
+  onModeChange?: (mode: PlayMode) => void
   /** Whether this player has the game's AI (admins). Without it there is no Human/AI switch. */
-  aiAvailable: boolean
-  ai: AiPanelProps
+  aiAvailable?: boolean
+  ai?: AiPanelProps
   /** Omit for games where pausing a human makes no sense (turn-based games). */
   pause?: { paused: boolean; onToggle: () => void; disabled?: boolean }
   onRestart: () => void
@@ -38,9 +39,9 @@ interface GameShellProps {
 export function GameShell({
   board,
   stats,
-  mode,
+  mode = 'human',
   onModeChange,
-  aiAvailable,
+  aiAvailable = false,
   ai,
   pause,
   onRestart,
@@ -48,7 +49,7 @@ export function GameShell({
   touchControls,
   sidebarExtra,
 }: GameShellProps) {
-  const isAi = mode === 'ai'
+  const isAi = mode === 'ai' && ai !== undefined
 
   return (
     <div className="grid gap-6 p-4 sm:p-6 lg:grid-cols-[minmax(0,1fr)_19rem] lg:items-start">
@@ -58,7 +59,7 @@ export function GameShell({
       </div>
 
       <aside className="flex flex-col gap-4">
-        {aiAvailable && <PlayModeToggle mode={mode} onChange={onModeChange} />}
+        {aiAvailable && onModeChange && <PlayModeToggle mode={mode} onChange={onModeChange} />}
 
         <dl className="grid grid-cols-[repeat(auto-fit,minmax(5rem,1fr))] gap-2">
           {stats.map(({ label, value }) => (
@@ -71,7 +72,7 @@ export function GameShell({
 
         {sidebarExtra}
 
-        {isAi ? (
+        {isAi && ai ? (
           <AiPanel {...ai} />
         ) : (
           <div className="rounded-control bg-surface-muted p-4 text-sm text-ink-soft">{humanHelp}</div>

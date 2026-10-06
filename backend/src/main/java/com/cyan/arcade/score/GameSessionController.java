@@ -37,8 +37,9 @@ class GameSessionController {
 
 	@PostMapping("/{id}/finish")
 	ScoreResponse finish(@PathVariable UUID id, @Valid @RequestBody FinishGameSessionRequest request,
-			@AuthenticationPrincipal AuthenticatedUser user) {
-		return this.gameSessionService.finish(id, request.score(), request.detailsOrEmpty(), idOf(user));
+			@AuthenticationPrincipal AuthenticatedUser user,
+			@RequestHeader(name = GuestPlayer.HEADER, required = false) UUID playerId) {
+		return this.gameSessionService.finish(id, request.score(), request.detailsOrEmpty(), idOf(user), playerId);
 	}
 
 	private static Long idOf(AuthenticatedUser user) {

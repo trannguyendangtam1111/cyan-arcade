@@ -84,6 +84,7 @@ app:
     game-completed-coins: ${REWARDS_GAME_COMPLETED_COINS:5}
     personal-best-coins: ${REWARDS_PERSONAL_BEST_COINS:15}
     rewarded-games-per-day: ${REWARDS_GAMES_PER_DAY:40}
+    rewarded-personal-bests-per-day: ${REWARDS_PERSONAL_BESTS_PER_DAY:10}
   daily-login:
     # Coins for each day in a row a player claims the daily reward (one claim per UTC day). After the
     # last day the streak starts over; the last day also gives bonus-item (a shop item code).

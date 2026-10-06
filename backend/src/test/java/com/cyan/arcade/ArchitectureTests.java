@@ -1,5 +1,6 @@
 package com.cyan.arcade;
 
+import com.cyan.arcade.score.RunRules;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
@@ -10,6 +11,7 @@ import jakarta.persistence.Entity;
 import org.springframework.web.bind.annotation.RestController;
 
 import static com.tngtech.archunit.base.DescribedPredicate.not;
+import static com.tngtech.archunit.core.domain.JavaClass.Predicates.equivalentTo;
 import static com.tngtech.archunit.core.domain.JavaClass.Predicates.resideInAPackage;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
@@ -84,5 +86,29 @@ class ArchitectureTests {
 		.orShould()
 		.dependOnClassesThat()
 		.haveFullyQualifiedName("org.springframework.security.crypto.password.PasswordEncoder");
+
+	/**
+	 * A game's server-side rules ({@code gamerules}) are about its runs and nothing else. Of the
+	 * platform they may use only the contract a game implements, {@link RunRules}: never coins,
+	 * rewards, achievements, leaderboards, inventories or accounts, which the platform handles for
+	 * every game alike.
+	 */
+	@ArchTest
+	static final ArchRule gameRulesUseOnlyTheGameContract = noClasses().that()
+		.resideInAPackage("com.cyan.arcade.gamerules..")
+		.should()
+		.dependOnClassesThat(resideInAPackage("com.cyan.arcade..").and(not(resideInAPackage("com.cyan.arcade.gamerules..")))
+			.and(not(equivalentTo(RunRules.class))));
+
+	/**
+	 * And the platform knows no particular game: it finds a game's rules by its slug, so adding a
+	 * game changes nothing outside {@code gamerules} and the catalogs.
+	 */
+	@ArchTest
+	static final ArchRule thePlatformDependsOnNoGamesRules = noClasses().that()
+		.resideOutsideOfPackage("com.cyan.arcade.gamerules..")
+		.should()
+		.dependOnClassesThat()
+		.resideInAPackage("com.cyan.arcade.gamerules..");
 
 }

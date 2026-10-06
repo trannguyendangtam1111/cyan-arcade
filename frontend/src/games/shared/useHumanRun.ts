@@ -42,6 +42,8 @@ export function useHumanRun(gameSlug: string, { onGameStart, onGameOver }: GameP
     begin,
     finish,
     reset,
+    /** Time since the run began, by this device's clock. */
+    elapsedMs,
     /** Best score on this device, including the run that just finished. */
     best,
     /** Whether the run that just finished set a new best. */

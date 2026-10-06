@@ -8,7 +8,7 @@ Base path: `/api`. JSON in and out.
 - Request and response bodies are DTOs. JPA entities are never serialized.
 - Request bodies are validated with Bean Validation. Violations return `400 VALIDATION_FAILED`.
 - Timestamps are ISO-8601 in UTC. IDs are numeric unless noted.
-- Status codes: `200` OK, `201` Created, `204` No Content, `400` bad input, `401` not authenticated, `403` not allowed, `404` not found, `405` method not allowed, `409` state conflict (e.g. finishing a session twice), `429` too many attempts or over a daily limit, `500` unexpected.
+- Status codes: `200` OK, `201` Created, `204` No Content, `400` bad input, `401` not authenticated, `403` not allowed, `404` not found, `405` method not allowed, `409` state conflict (e.g. finishing a session twice), `410` gone (a game session left open too long), `429` too many attempts or over a daily limit, `500` unexpected.
 - Paged lists take `page` (zero-based) and `size`, and answer with `page`, `size`, `totalEntries` and `totalPages` next to the items.
 - The API is deny-by-default. Any path that isn't listed as public below returns `401 UNAUTHORIZED` to a caller who is not signed in.
 - Browsers send an `Origin` header with every `POST`. A reverse proxy in front of the API must forward the `Host` header unchanged, including the port, or the API will treat the site's own requests as cross-origin and answer `403`.
@@ -85,7 +85,7 @@ Every error, including 401 and 403 from the security layer, uses [RFC 9457 probl
 | `detail` | Human-readable explanation, safe to show to users. |
 | `errors` | Present only for validation failures. One entry per invalid field or parameter. |
 
-Platform codes: `VALIDATION_FAILED`, `BAD_REQUEST`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `METHOD_NOT_ALLOWED`, `CONFLICT`, `INTERNAL_ERROR`. Feature codes: `INVALID_CREDENTIALS`, `TOO_MANY_LOGIN_ATTEMPTS`, `USERNAME_TAKEN`, `SESSION_ALREADY_FINISHED`, `SCORE_OUT_OF_RANGE`, `PACK_NOT_AVAILABLE`, `DAILY_PACK_LIMIT_REACHED`.
+Platform codes: `VALIDATION_FAILED`, `BAD_REQUEST`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `METHOD_NOT_ALLOWED`, `CONFLICT`, `INTERNAL_ERROR`. Feature codes: `INVALID_CREDENTIALS`, `TOO_MANY_LOGIN_ATTEMPTS`, `USERNAME_TAKEN`, `SESSION_ALREADY_FINISHED`, `SESSION_EXPIRED`, `SCORE_REJECTED`, `PACK_NOT_AVAILABLE`, `DAILY_PACK_LIMIT_REACHED`.
 
 ## Endpoints
 
@@ -113,7 +113,7 @@ Platform codes: `VALIDATION_FAILED`, `BAD_REQUEST`, `UNAUTHORIZED`, `FORBIDDEN`,
 | `GET` | `/api/daily-challenges/me` | signed in |
 | `GET` | `/api/games`, `/api/games/{slug}` | public |
 | `POST` | `/api/game-sessions` | public |
-| `POST` | `/api/game-sessions/{id}/finish` | public; a signed-in player's session only by that player |
+| `POST` | `/api/game-sessions/{id}/finish` | public; a signed-in player's session only by that player, a guest's only with the same `X-Player-Id` |
 | `GET` | `/api/leaderboards/{gameSlug}?period=…` | public |
 | `GET` | `/api/users/me/ranks` | signed in |
 | `GET` | `/api/tcg/games`, `/api/tcg/games/{slug}` | public |
@@ -587,7 +587,9 @@ Ends the run and records its score.
 | Field | Notes |
 | ----- | ----- |
 | `score` | Required, zero or more |
-| `details` | Optional. Up to 10 whole numbers the game reports about the run, keyed by a short name (`length`, `lines`, `highestTile`, …). Used to decide achievements and daily challenges, and not stored |
+| `details` | Up to 10 whole numbers the game reports about the run, keyed by a short name. Each game has its own, and **they are required**: Snake `length` and `level`; 2048 `highestTile` and `moves`; Tetris `lines`, `level` and `pieces`; Minesweeper `rows`, `columns`, `mines`, `revealedCells`, `flagsUsed`, `won` (0 or 1), `moves` and `seconds`. They are checked against the score, and only a game's own are kept (others are ignored); they then decide achievements and daily challenges. Not stored |
+
+A guest finishes their run with the same `X-Player-Id` header they started it with.
 
 Responds `200 OK` with the recorded result:
 
@@ -616,19 +618,33 @@ Responds `200 OK` with the recorded result:
 }
 ```
 
-- `durationMs` is measured by the server, from the session's start to this request. The client does not report a duration.
+- `durationMs` is measured by the server, from the session's start to this request. The client does not report a duration; the server uses its own to judge the run (see [Score integrity](#score-integrity)).
 - `rewards` is `null` for a run that was started by a guest. Otherwise it says what this run earned and where the player stands afterwards. `achievements` lists only those unlocked by this run, and `bonuses` the daily challenges it completed. `xpEarned` and `coinsEarned` are the totals of everything; every coin is also a transaction in the player's [ledger](#coins). Finishing the same session again is refused, so nothing is paid twice.
 
 | Error | When |
 | ----- | ---- |
 | `400 VALIDATION_FAILED` | `score` is missing or negative, or `details` is malformed |
-| `400 SCORE_OUT_OF_RANGE` | The score is higher than the game can produce (Snake: 253, 2048: 4,000,000, Tetris: no limit). The session stays open |
+| `400 SCORE_REJECTED` | The run cannot have been played: the score is outside the game's range, the game's details are missing or do not match the score, or the run is faster than the game can be played. The answer is always "Score submission rejected." and never says which. Nothing is recorded or earned, and the session stays open |
 | `400 BAD_REQUEST` | The id is not a UUID |
-| `403 FORBIDDEN` | The session was started by a signed-in player and the caller is someone else, or not signed in |
+| `403 FORBIDDEN` | The session belongs to someone else: a signed-in player's, or a guest's started with a different `X-Player-Id` |
 | `404 NOT_FOUND` | No session has that id |
-| `409 SESSION_ALREADY_FINISHED` | The session was finished before. The first score stands |
+| `409 SESSION_ALREADY_FINISHED` | The session was finished before. The first score stands, and nothing is earned again (a retry after a lost answer gets this) |
+| `410 SESSION_EXPIRED` | The session was opened more than 24 hours ago (`GAME_SESSIONS_ABANDONED_AFTER`). Nothing is recorded |
 
 There is no endpoint to read or list sessions.
+
+#### Score integrity
+
+The games run in the browser, so the server cannot know what really happened in a run. What it does instead is refuse what **cannot** have happened, from each game's own rules (`score.RunRules`):
+
+| Game | A run must satisfy |
+| ---- | ------------------ |
+| Snake | `length` is the score plus the 3 cells the snake starts with; `level` goes up every 5 apples; no more apples than moves the time allows (the snake never moves faster than once every 70 ms) |
+| 2048 | `highestTile` is a power of two; the score is a multiple of 4, at least what building the highest tile scores and at most what the tiles on the board can have scored; the board holds no more than 8 + 4 per move; no more than 25 moves a second |
+| Tetris | `level` is one more than every 10 lines; the pieces placed fill the lines cleared and no more than the board; the score is between all singles and all fours for those lines, plus at most 44 drop points a piece; no more than 10 pieces a second |
+| Minesweeper | The board is 9 × 9 with 10 mines; `won` exactly when all 71 safe cells are uncovered; at most one flag per mine, on covered cells; every reveal uncovers a safe cell except a losing one, and the first is always safe; the score is exactly 10 a safe cell, plus 500 and `600 − seconds` (at least 0) for a cleared board; for a cleared board `seconds` must agree with the server's time (within 3 seconds); no more than 10 clicks a second |
+
+The time is the server's, from opening the session to finishing it, with 2 seconds added for the requests travelling. The limits are generous: an unusual but real run always passes. **This is practical integrity protection, not a perfect anti-cheat system**: a client that plays a fake run slowly enough, with consistent numbers, can still submit it. What it cannot do is submit scores no run could produce, finish a run twice, finish someone else's run, or earn any reward from a run the server refused.
 
 ### Leaderboards
 
@@ -674,7 +690,7 @@ One page of a game's leaderboard for a period. Public and read-only: there is no
 - An entry's `player` is the account's username (its identity, for a link to the public profile), display name and avatar, or `null` for a guest. Nothing else about an account is public. Entries are grouped by account, so changing a display name changes nothing about whose scores they are.
 - `you` marks the caller's entry. `myRank` and `myScore` are the caller's place and best score on this board, even when the entry is on another page, and `null` when the caller is unknown or has no score in the period; a rank is never made up. The caller is the signed-in player; for a guest it is the `X-Player-Id` header, matched only against scores made as a guest.
 - A page past the end returns an empty `entries` list, not an error.
-- Scores come only from `POST /api/game-sessions/{id}/finish`, with its checks. A leaderboard cannot be written to, by players or admins; `POST`, `PUT` and `DELETE` answer `405`.
+- Scores come only from `POST /api/game-sessions/{id}/finish`, with its checks: a refused run never reaches a leaderboard. A leaderboard cannot be written to, by players or admins; `POST`, `PUT` and `DELETE` answer `405`.
 
 | Error | When |
 | ----- | ---- |

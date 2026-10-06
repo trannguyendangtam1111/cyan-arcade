@@ -1,6 +1,6 @@
 # Cyan Arcade
 
-**Cyan Arcade is a modular full-stack game platform built with React and Spring Boot.** It is a cute, colorful browser arcade: Snake, 2048 and Tetris with AI players, leaderboards, accounts with XP and achievements, daily challenges, and booster packs of real **Pokémon** and **One Piece** trading cards, opened on the server.
+**Cyan Arcade is a modular full-stack game platform built with React and Spring Boot.** It is a cute, colorful browser arcade: Snake, 2048, Tetris and Minesweeper, with AI players for the first three, leaderboards, accounts with XP and achievements, daily challenges, and booster packs of real **Pokémon** and **One Piece** trading cards, opened on the server.
 
 It is a portfolio project. The goal is a polished, extensible platform where **adding a game means adding a module**: the platform is not rewritten and existing games are not touched.
 
@@ -26,12 +26,12 @@ It is a portfolio project. The goal is a polished, extensible platform where **a
 
 ## Status
 
-Everything listed below works end to end, in Docker, with 405 backend and 545 frontend tests passing. Nothing is a mock-up. See the [roadmap](#roadmap) for what is next and what is deliberately left out.
+Everything listed below works end to end, in Docker, with 431 backend and 594 frontend tests passing. Nothing is a mock-up. See the [roadmap](#roadmap) for what is next and what is deliberately left out.
 
 ## Features
 
 **Games**
-- **Snake, 2048 and Tetris**, playable with keyboard and touch.
+- **Snake, 2048, Tetris and Minesweeper**, playable with keyboard and touch. Minesweeper (9 × 9, 10 mines, a safe first click, a Reveal/Flag switch for phones) is the reference for [adding a game](ARCHITECTURE.md#how-to-add-a-new-game): a module of its own and one rules class on the server, and the leaderboards, rewards, achievements, challenges and statistics work for it unchanged.
 - **An AI mode for each, for admins**, written as classic algorithms that run in the browser (no AI service): a Hamiltonian-cycle Snake that fills the board, an expectimax 2048 player, and a Tetris player that searches every placement with one piece of lookahead. Speed control (0.25x to 8x), pause and restart.
 - Pure, deterministic game engines shared by the human player, the AI and the tests.
 
@@ -39,7 +39,7 @@ Everything listed below works end to end, in Docker, with 405 backend and 545 fr
 - **Server-validated scores**: every human run is a server-side game session, and its score is checked and stored in PostgreSQL.
 - **Leaderboards** per game for **today, this week and all time** (UTC; weeks from Monday): each player once with their best score, a podium for the top three, your own rank and best score even off the page, deterministic ranks without ties, and your ranks in every game on your profile.
 - **Accounts**: register, log in, log out. Passwords are stored only as bcrypt hashes; the session lives in an `HttpOnly` cookie with CSRF protection; repeated failed logins are throttled.
-- **Progression**: XP for every finished game, levels, and nine achievements, each worth XP and coins.
+- **Progression**: XP for every finished game, levels, and ten achievements, each worth XP and coins.
 - **Coins**: a platform-wide currency earned by playing, beating your best, achievements, daily challenges and the daily login reward, and spent in the shop. Every change is a row in an auditable ledger; the server decides every amount. See [Economy](#economy-coins-rewards-and-the-shop).
 - **Daily login reward**: once a day (UTC), more for every day in a row, a free card pack on day 7.
 - **Daily challenges**: a new challenge per game every day, plus one for card packs ("open 3 packs"), created by a scheduled job and worth XP and coins.
@@ -168,7 +168,7 @@ Vite proxies `/api` and `/actuator` to the backend, so the browser talks to one 
 
 ### Database
 
-- The schema is created and upgraded by **Flyway** when the backend starts (`backend/src/main/resources/db/migration`, `V1` to `V16`). There is no manual step.
+- The schema is created and upgraded by **Flyway** when the backend starts (`backend/src/main/resources/db/migration`, `V1` to `V17`). There is no manual step.
 - The **admin account** is created at the first start (see [Roles](#roles-players-and-admins)).
 - The game catalog comes from migrations; the card catalog comes from the card game import (see [Card games](#card-games)).
 - To start over with an empty database: `docker compose down -v`, then `docker compose up -d`.
@@ -202,6 +202,7 @@ The backend reads further settings from environment variables when run natively 
 | `DAILY_CHALLENGES_GENERATION_ENABLED` | `true` | Creates each day's challenges at startup and at midnight UTC |
 | `REWARDS_GAME_COMPLETED_COINS`, `REWARDS_PERSONAL_BEST_COINS` | `5`, `15` | Coins for finishing a game, and extra for beating your own best |
 | `REWARDS_GAMES_PER_DAY` | `40` | How many games a day (UTC) pay the coins for finishing; later ones still earn XP and best-score coins |
+| `REWARDS_PERSONAL_BESTS_PER_DAY` | `10` | How many new personal bests a day (UTC) pay the best-score coins; later ones still earn their XP |
 | `DAILY_LOGIN_REWARDS` | `50,60,70,80,100,125,200` | Coins for each day in a row of the daily login reward; then it starts over |
 | `DAILY_LOGIN_BONUS_ITEM` | `EXTRA_PACK` | The shop item given on top on the last day (empty for none) |
 | `TCG_IMPORT_SOURCES` | empty (`pokemon,one-piece` in the `import-tcg` profile) | Card game sources to import at startup. An ordinary start imports nothing |
@@ -305,8 +306,8 @@ npm run build
 
 | | Tests | Line coverage | Branch coverage | Report |
 | --- | --- | --- | --- | --- |
-| Backend | 405 | 97.6 % | 88.2 % | `backend/target/site/jacoco/index.html` |
-| Frontend | 545 | 97.0 % | 90.6 % | `frontend/coverage/index.html` |
+| Backend | 431 | 97.6 % | 87.1 % | `backend/target/site/jacoco/index.html` |
+| Frontend | 594 | 97.2 % | 90.9 % | `frontend/coverage/index.html` |
 
 - **Backend** integration tests run against a real PostgreSQL in Testcontainers, never an in-memory substitute, and go through HTTP with MockMvc. They cover registration, authentication and login throttling, score submission (including simultaneous finishes), leaderboards, achievements and XP, daily challenges, the coin ledger (simultaneous spending, rewards paid once, rollbacks), the daily login reward over several days and under simultaneous claims, the shop (replayed and simultaneous purchases), admin grants, and card packs: the odds over 100,000 simulated packs, duplicates, the daily limit under concurrent requests, and a failure halfway through an opening that must leave nothing behind. The card game sources are tested on recorded answers of the real APIs (no network): mapping, retries, idempotent re-imports, alternate arts and reprints.
 - **Frontend** tests cover the game engines and AIs, the input hooks, every page through the real route table against an in-memory fake of the API, and architecture rules (engines import nothing from React or the browser, games do not reach into each other, the card game is used only through its routes).
@@ -328,7 +329,7 @@ npm run build
 │       │   ├── admin/        # admin dashboard, coin grants, AI access
 │       │   └── tcg/          # the card game module: game, set, card, pack, opening, collection, dataimport
 │       └── resources/
-│           ├── db/migration/     # Flyway migrations V1 to V16
+│           ├── db/migration/     # Flyway migrations V1 to V17
 │           └── tcg/sources/      # which sets to import, rarities and pack layouts, per card game
 ├── frontend/                 # React + Vite SPA, served by nginx in Docker
 │   ├── nginx/                # nginx configuration and security headers
@@ -358,6 +359,8 @@ npm run build
 12. ✅ **Competitive leaderboards**: daily, weekly and all-time boards per game, one entry per player, deterministic ranks, your rank everywhere, a podium, ranks on the profile
 13. ✅ **Player identity**: display names, bios, public profiles, display names on leaderboards
 14. ✅ **Shop and rewards**: shop categories, item states (locked, owned, equipped, affordable), profile frames, pack rules in the shop, a grouped inventory, the reward history and clearer daily rewards
-15. **Next**: deployment to a host with HTTPS, login sessions that survive a restart (Spring Session), password reset, more games (Minesweeper, Memory) and multiplayer (Chess, Connect Four)
+15. ✅ **Score integrity**: each game's runs checked against its engine's rules and the server's clock, guest runs tied to their browser, expired sessions, players' runs judged one at a time, a daily limit on best-score coins. Practical protection, not perfect anti-cheat
+16. ✅ **New games**: a clean game boundary (game rules in their own backend package, guarded by architecture tests on both sides) and Minesweeper as its reference game
+17. **Next**: deployment to a host with HTTPS, login sessions that survive a restart (Spring Session), password reset, more games (Memory) and multiplayer (Chess, Connect Four)
 
 Known limits, on purpose for now: no email or password reset; scores made as a guest are not moved to an account created later; scores and the numbers games report about a run are validated for range but not replayed, so they are not cheat-proof; login throttling is kept in memory per backend instance; card images depend on the sources' image hosts being up; the admin account is fixed by configuration (there is no page to manage roles); coins can be farmed only as fast as scores can, since scores are not replayed (finishing a game pays coins for the first 40 games a day only).

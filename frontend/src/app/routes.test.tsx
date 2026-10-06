@@ -11,13 +11,13 @@ const requested = (fetchSpy: ReturnType<typeof mockApi>) =>
 
 /** In the catalog, but with no module in the frontend registry. */
 const unreleasedGame: GameResponse = {
-  id: 4,
-  slug: 'minesweeper',
-  name: 'Minesweeper',
-  description: 'Clear the field without detonating a mine.',
+  id: 5,
+  slug: 'memory',
+  name: 'Memory',
+  description: 'Flip the cards and find every pair.',
   category: 'PUZZLE',
-  thumbnailUrl: '/thumbnails/minesweeper.svg',
-  accentColor: '#ef4444',
+  thumbnailUrl: '/thumbnails/memory.svg',
+  accentColor: '#0d9488',
   featured: false,
 }
 
@@ -64,14 +64,14 @@ describe('games page', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Games' })).toBeInTheDocument()
     const snake = await screen.findByRole('link', { name: /snake/i })
     const names = screen.getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent)
-    expect(names).toEqual(['Snake', '2048', 'Tetris', 'Minesweeper'])
+    expect(names).toEqual(['Snake', '2048', 'Tetris', 'Memory'])
     expect(within(snake).getByText('Arcade')).toBeInTheDocument()
 
     // Snake, 2048 and Tetris have a registered module; a catalog-only game does not.
     for (const name of [/snake/i, /2048/, /tetris/i]) {
       expect(within(screen.getByRole('link', { name })).getByText('Play')).toBeInTheDocument()
     }
-    expect(within(screen.getByRole('link', { name: /minesweeper/i })).getByText('Coming soon')).toBeInTheDocument()
+    expect(within(screen.getByRole('link', { name: /memory/i })).getByText('Coming soon')).toBeInTheDocument()
   })
 
   it('shows an empty state when the catalog has no games', async () => {
@@ -85,11 +85,11 @@ describe('games page', () => {
 describe('game detail page', () => {
   it('shows catalog details and a coming-soon stage for a game without a module', async () => {
     mockApi({ games: [...catalogFixture, unreleasedGame] })
-    renderRoute('/games/minesweeper')
+    renderRoute('/games/memory')
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Minesweeper' })).toBeInTheDocument()
-    expect(screen.getByText('Clear the field without detonating a mine.')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Minesweeper is being built' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Memory' })).toBeInTheDocument()
+    expect(screen.getByText('Flip the cards and find every pair.')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Memory is being built' })).toBeInTheDocument()
   })
 
   it.each([

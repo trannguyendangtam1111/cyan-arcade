@@ -100,7 +100,7 @@ class CoinRewardsApiTests {
 	@Test
 	void everyAchievementShowsTheCoinsItIsWorth() throws Exception {
 		MockHttpSession session = Players.register(this.mockMvc);
-		Players.play(this.mockMvc, session, "tetris", 100, Map.of("lines", 12))
+		Players.play(this.mockMvc, session, "tetris", 1500, Map.of("lines", 12))
 			// 5 + 15, "First Coin" 100 and "Line Worker" 150.
 			.andExpect(jsonPath("$.rewards.coinsEarned").value(270))
 			.andExpect(jsonPath("$.rewards.achievements[*].code", containsInAnyOrder("FIRST_GAME", "TETRIS_10_LINES")));

@@ -2,7 +2,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { GameModule, GameProps } from '@/games/types'
 import { getRecentGameSlugs } from '@/lib/recentGames'
-import { CSRF_TOKEN, SESSION_ID, challengesFixture, mockApi, pixel } from '@/test/mockApi'
+import { CSRF_TOKEN, SESSION_ID, challengesFixture, mockApi, mockProblem, pixel } from '@/test/mockApi'
 import { renderRoute } from '@/test/renderWithProviders'
 
 // Registers a fake implementation for "snake" only. This proves the platform can host any game
@@ -125,10 +125,14 @@ describe('score keeping on the game page', () => {
       ['/api/game-sessions', { gameSlug: 'snake' }],
       [`/api/game-sessions/${SESSION_ID}/finish`, { score: 42, details: {} }],
     ])
-    // Both requests carry the CSRF token the server handed out.
-    for (const [, init] of fetchSpy.mock.calls.filter(([, init]) => init?.method === 'POST')) {
-      expect(init?.headers).toMatchObject({ 'X-XSRF-TOKEN': CSRF_TOKEN })
+    // Both requests carry the CSRF token the server handed out, and the guest id: a guest's run can
+    // only be finished by the browser that started it.
+    const posts = fetchSpy.mock.calls.filter(([, init]) => init?.method === 'POST')
+    for (const [, init] of posts) {
+      expect(init?.headers).toMatchObject({ 'X-XSRF-TOKEN': CSRF_TOKEN, 'X-Player-Id': expect.any(String) })
     }
+    const [started, finished] = posts.map(([, init]) => (init?.headers ?? {}) as Record<string, string>)
+    expect(started['X-Player-Id']).toBe(finished['X-Player-Id'])
   })
 
   it('shows a signed-in player what the run earned', async () => {
@@ -222,6 +226,65 @@ describe('score keeping on the game page', () => {
 
     expect(await screen.findByText(/couldn't be saved/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
+  })
+
+  it('says kindly that a rejected score was not accepted, without details or a retry', async () => {
+    mockApi({
+      user: pixel,
+      handlers: [
+        ({ path }) =>
+          path.endsWith('/finish') ? mockProblem(400, 'SCORE_REJECTED', 'Score submission rejected.') : undefined,
+      ],
+    })
+    renderRoute('/games/snake')
+    fireEvent.click(await screen.findByRole('button', { name: 'Start run' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Finish run' }))
+
+    const line = await screen.findByText(/couldn't be accepted/)
+    expect(line).toHaveTextContent("Your score of 42 couldn't be accepted.")
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
+    // Nothing earned, and nothing said about why.
+    expect(line.parentElement).not.toHaveTextContent(/XP|coins|rejected/)
+  })
+
+  it('explains a run that was left open too long', async () => {
+    mockApi({
+      handlers: [
+        ({ path }) =>
+          path.endsWith('/finish') ? mockProblem(410, 'SESSION_EXPIRED', 'This game session has expired') : undefined,
+      ],
+    })
+    renderRoute('/games/snake')
+    fireEvent.click(await screen.findByRole('button', { name: 'Start run' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Finish run' }))
+
+    expect(await screen.findByText(/left open too long/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
+  })
+
+  it('shows no second reward when a retry finds the score already saved', async () => {
+    let attempts = 0
+    mockApi({
+      user: pixel,
+      handlers: [
+        ({ path }) => {
+          if (!path.endsWith('/finish')) return undefined
+          attempts++
+          // The first answer is lost; by the retry, the server already has the score.
+          return attempts === 1
+            ? mockProblem(503, 'INTERNAL_ERROR', 'Unavailable')
+            : mockProblem(409, 'SESSION_ALREADY_FINISHED', 'This game session has already been finished')
+        },
+      ],
+    })
+    renderRoute('/games/snake')
+    fireEvent.click(await screen.findByRole('button', { name: 'Start run' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Finish run' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Try again' }))
+
+    expect(await screen.findByText(/already saved/)).toHaveTextContent('Score 42 was already saved.')
+    expect(screen.queryByText(/XP/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /log in to earn/i })).not.toBeInTheDocument()
   })
 
   it('sends nothing for a result that has no started run', async () => {

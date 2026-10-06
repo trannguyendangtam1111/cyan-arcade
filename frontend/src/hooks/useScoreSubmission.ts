@@ -2,7 +2,9 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useRef, useState } from 'react'
 import { ApiError } from '@/api/client'
 import {
+  SCORE_REJECTED,
   SESSION_ALREADY_FINISHED,
+  SESSION_EXPIRED,
   finishGameSession,
   startGameSession,
   type GameSessionResponse,
@@ -15,8 +17,22 @@ import type { GameResult } from '@/games/types'
 export type ScoreSubmission =
   | { status: 'idle' }
   | { status: 'saving'; score: number }
-  | { status: 'saved'; score: number; rewards: Rewards | null }
-  | { status: 'failed'; score: number; canRetry: boolean }
+  /** `alreadySaved`: an earlier attempt had reached the server, so this one earned nothing more. */
+  | { status: 'saved'; score: number; rewards: Rewards | null; alreadySaved?: boolean }
+  /**
+   * `rejected`: the server did not accept the run; `expired`: it was open too long; `error`: it
+   * could not be saved for any other reason.
+   */
+  | { status: 'failed'; score: number; canRetry: boolean; reason: FailureReason }
+
+export type FailureReason = 'rejected' | 'expired' | 'error'
+
+/** What a refusal from the server means for the player. */
+function reasonOf(error: unknown): FailureReason {
+  if (error instanceof ApiError && error.code === SCORE_REJECTED) return 'rejected'
+  if (error instanceof ApiError && error.code === SESSION_EXPIRED) return 'expired'
+  return 'error'
+}
 
 interface Run {
   /** Resolves to the server session; rejects if it could not be created. */
@@ -59,7 +75,7 @@ export function useScoreSubmission(gameSlug: string) {
         session = await run.session
       } catch {
         // The session never existed, so there is nothing to finish and nothing to retry.
-        if (isCurrent()) setSubmission({ status: 'failed', score, canRetry: false })
+        if (isCurrent()) setSubmission({ status: 'failed', score, canRetry: false, reason: 'error' })
         return
       }
 
@@ -76,7 +92,11 @@ export function useScoreSubmission(gameSlug: string) {
         const alreadySaved = error instanceof ApiError && error.code === SESSION_ALREADY_FINISHED
         // Retrying only helps when the server was unreachable or failed, not when it said no.
         const canRetry = !(error instanceof ApiError && error.isClientError)
-        setSubmission(alreadySaved ? { status: 'saved', score, rewards: null } : { status: 'failed', score, canRetry })
+        setSubmission(
+          alreadySaved
+            ? { status: 'saved', score, rewards: null, alreadySaved: true }
+            : { status: 'failed', score, canRetry, reason: reasonOf(error) },
+        )
       }
     },
     [gameSlug, queryClient],

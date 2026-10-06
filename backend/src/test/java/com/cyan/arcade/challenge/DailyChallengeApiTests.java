@@ -28,6 +28,7 @@ import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -144,7 +145,7 @@ class DailyChallengeApiTests {
 		given(this.today, "tetris", "Tidy Up", ChallengeGoal.DETAIL, "lines", 5, 30);
 		MockHttpSession session = Players.register(this.mockMvc);
 
-		Players.play(this.mockMvc, session, "tetris", 300, Map.of("lines", 6))
+		Players.play(this.mockMvc, session, "tetris", 1000, Map.of("lines", 6))
 			.andExpect(jsonPath("$.rewards.bonuses", hasSize(1)))
 			.andExpect(jsonPath("$.rewards.bonuses[0].type").value("DAILY_CHALLENGE"))
 			.andExpect(jsonPath("$.rewards.bonuses[0].title").value("Tidy Up"))
@@ -175,7 +176,7 @@ class DailyChallengeApiTests {
 		given(this.today, "tetris", "Tidy Up", ChallengeGoal.DETAIL, "lines", 5, 30);
 		MockHttpSession session = Players.register(this.mockMvc);
 
-		Players.play(this.mockMvc, session, "tetris", 300, Map.of("lines", 4))
+		Players.play(this.mockMvc, session, "tetris", 450, Map.of("lines", 4))
 			.andExpect(jsonPath("$.rewards.bonuses").isEmpty())
 			.andExpect(jsonPath("$.rewards.xpEarned").value(85));
 
@@ -184,13 +185,46 @@ class DailyChallengeApiTests {
 	}
 
 	@Test
+	void aNewGamesChallengeWorksLikeAnyOther() throws Exception {
+		// Minesweeper's "Clear a board": the number it reports, like Tetris's lines.
+		given(this.today, "minesweeper", "Mine Free", ChallengeGoal.DETAIL, "won", 1, 50);
+		MockHttpSession session = Players.register(this.mockMvc);
+
+		Players.play(this.mockMvc, session, "minesweeper", 300).andExpect(jsonPath("$.rewards.bonuses").isEmpty());
+		Players.play(this.mockMvc, session, "minesweeper", 1210)
+			.andExpect(jsonPath("$.rewards.bonuses[0].title").value("Mine Free"))
+			.andExpect(jsonPath("$.rewards.bonuses[0].coins").value(100));
+		mine(session).andExpect(jsonPath("$.completedCount").value(1));
+	}
+
+	@Test
+	void aRejectedRunCompletesNothing() throws Exception {
+		given(this.today, "tetris", "Tidy Up", ChallengeGoal.DETAIL, "lines", 5, 30);
+		MockHttpSession session = Players.register(this.mockMvc);
+		String run = Players.startGame(this.mockMvc, session, "tetris");
+
+		// Six lines claimed with a score six lines cannot have: refused, so the challenge never hears of it.
+		this.mockMvc
+			.perform(post("/api/game-sessions/{id}/finish", run).session(session)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"score\":100,\"details\":{\"lines\":6,\"level\":1,\"pieces\":15}}"))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("SCORE_REJECTED"));
+
+		mine(session).andExpect(jsonPath("$.completedCount").value(0));
+		this.mockMvc.perform(get("/api/users/me").session(session))
+			.andExpect(jsonPath("$.xp").value(0))
+			.andExpect(jsonPath("$.coins").value(0));
+	}
+
+	@Test
 	void aChallengeIsRewardedOnlyOnce() throws Exception {
 		given(this.today, "tetris", "Tidy Up", ChallengeGoal.DETAIL, "lines", 5, 30);
 		MockHttpSession session = Players.register(this.mockMvc);
-		Players.play(this.mockMvc, session, "tetris", 300, Map.of("lines", 6));
+		Players.play(this.mockMvc, session, "tetris", 1000, Map.of("lines", 6));
 
 		// Reaching the target again the same day: just the 10 XP for finishing a game.
-		Players.play(this.mockMvc, session, "tetris", 200, Map.of("lines", 9))
+		Players.play(this.mockMvc, session, "tetris", 950, Map.of("lines", 9))
 			.andExpect(jsonPath("$.rewards.bonuses").isEmpty())
 			.andExpect(jsonPath("$.rewards.xpEarned").value(10));
 
@@ -326,11 +360,11 @@ class DailyChallengeApiTests {
 		this.generator.generateFor(this.today);
 
 		this.mockMvc.perform(get("/api/daily-challenges"))
-			.andExpect(jsonPath("$.challenges", hasSize(4)))
-			.andExpect(jsonPath("$.challenges[0:3].game.slug", contains("snake", "2048", "tetris")))
-			.andExpect(jsonPath("$.challenges[3].game").value(nullValue()))
-			.andExpect(jsonPath("$.challenges[3].activity.code").value("TCG_PACK_OPENED"))
-			.andExpect(jsonPath("$.challenges[3].activity.name").value("Card packs"));
+			.andExpect(jsonPath("$.challenges", hasSize(5)))
+			.andExpect(jsonPath("$.challenges[0:4].game.slug", contains("snake", "2048", "tetris", "minesweeper")))
+			.andExpect(jsonPath("$.challenges[4].game").value(nullValue()))
+			.andExpect(jsonPath("$.challenges[4].activity.code").value("TCG_PACK_OPENED"))
+			.andExpect(jsonPath("$.challenges[4].activity.name").value("Card packs"));
 	}
 
 	@Test

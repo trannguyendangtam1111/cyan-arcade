@@ -37,10 +37,10 @@ class ChallengeRulesTests {
 
 	@Test
 	void aGameWithoutChallengesOfItsOwnStillGetsOne() {
-		ChallengeTemplate template = this.templates.pick("minesweeper", 3, SOME_DAY);
+		ChallengeTemplate template = this.templates.pick("memory", 3, SOME_DAY);
 
 		assertThat(template.goal()).isEqualTo(ChallengeGoal.PLAY);
-		assertThat(template.describe("Minesweeper")).isEqualTo("Finish a game of Minesweeper.");
+		assertThat(template.describe("Memory")).isEqualTo("Finish a game of Memory.");
 	}
 
 	@Test

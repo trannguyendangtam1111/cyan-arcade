@@ -87,7 +87,9 @@ describe('useScoreSubmission', () => {
     act(() => hook.current.onGameStart())
     act(() => hook.current.onGameOver(result))
 
-    await waitFor(() => expect(hook.current.submission).toEqual({ status: 'failed', score: 12, canRetry: false }))
+    await waitFor(() =>
+      expect(hook.current.submission).toEqual({ status: 'failed', score: 12, canRetry: false, reason: 'error' }),
+    )
     expect(finish).not.toHaveBeenCalled()
   })
 
@@ -96,7 +98,9 @@ describe('useScoreSubmission', () => {
     const { result: hook } = renderHook(() => useScoreSubmission('snake'))
     act(() => hook.current.onGameStart())
     act(() => hook.current.onGameOver(result))
-    await waitFor(() => expect(hook.current.submission).toEqual({ status: 'failed', score: 12, canRetry: true }))
+    await waitFor(() =>
+      expect(hook.current.submission).toEqual({ status: 'failed', score: 12, canRetry: true, reason: 'error' }),
+    )
 
     act(() => hook.current.retry())
 
@@ -112,7 +116,51 @@ describe('useScoreSubmission', () => {
     act(() => hook.current.onGameStart())
     act(() => hook.current.onGameOver(result))
 
-    await waitFor(() => expect(hook.current.submission).toEqual({ status: 'saved', score: 12, rewards: null }))
+    await waitFor(() =>
+      expect(hook.current.submission).toEqual({ status: 'saved', score: 12, rewards: null, alreadySaved: true }),
+    )
+  })
+
+  it('does not count a retry that finds the score saved as a second reward', async () => {
+    // The first answer was lost on the way back; the retry finds the run finished.
+    finish
+      .mockRejectedValueOnce(new ApiError(0, 'NETWORK_ERROR', 'offline'))
+      .mockRejectedValueOnce(new ApiError(409, 'SESSION_ALREADY_FINISHED', 'already finished'))
+    const { result: hook } = renderHook(() => useScoreSubmission('snake'))
+    act(() => hook.current.onGameStart())
+    act(() => hook.current.onGameOver(result))
+    await waitFor(() => expect(hook.current.submission.status).toBe('failed'))
+
+    act(() => hook.current.retry())
+
+    await waitFor(() =>
+      expect(hook.current.submission).toEqual({ status: 'saved', score: 12, rewards: null, alreadySaved: true }),
+    )
+    expect(finish).toHaveBeenCalledTimes(2)
+  })
+
+  it('reports a rejected score without offering to send it again', async () => {
+    finish.mockRejectedValue(new ApiError(400, 'SCORE_REJECTED', 'Score submission rejected.'))
+    const { result: hook } = renderHook(() => useScoreSubmission('snake'))
+
+    act(() => hook.current.onGameStart())
+    act(() => hook.current.onGameOver(result))
+
+    await waitFor(() =>
+      expect(hook.current.submission).toEqual({ status: 'failed', score: 12, canRetry: false, reason: 'rejected' }),
+    )
+  })
+
+  it('reports a run left open too long', async () => {
+    finish.mockRejectedValue(new ApiError(410, 'SESSION_EXPIRED', 'This game session has expired'))
+    const { result: hook } = renderHook(() => useScoreSubmission('snake'))
+
+    act(() => hook.current.onGameStart())
+    act(() => hook.current.onGameOver(result))
+
+    await waitFor(() =>
+      expect(hook.current.submission).toEqual({ status: 'failed', score: 12, canRetry: false, reason: 'expired' }),
+    )
   })
 
   it('passes the numbers a game reports about its run, and nothing else', async () => {

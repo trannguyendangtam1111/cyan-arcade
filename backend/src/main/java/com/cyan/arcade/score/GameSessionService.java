@@ -15,6 +15,8 @@ import com.cyan.arcade.game.GameService;
 import com.cyan.arcade.progression.CompletedRun;
 import com.cyan.arcade.progression.ProgressionService;
 import com.cyan.arcade.progression.Rewards;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -25,13 +27,21 @@ import org.springframework.transaction.annotation.Transactional;
  * accepted only by finishing that session. Every check on a submitted score lives here, which is
  * also where stronger verification (replays, signed runs) can be added later without touching
  * the games.
+ *
+ * <p>Finishing is one transaction, in this order: the session is locked and checked (its owner,
+ * not finished yet, not expired), the run is checked against its game's rules using the time the
+ * server measured, the session is closed, the player is locked so their runs are judged one at a
+ * time, then the rewards are decided and paid and the score is recorded. Any failure leaves
+ * nothing behind: no score, no XP, no coins, no achievement, no challenge progress.
  */
 @Service
 public class GameSessionService {
 
 	static final String SESSION_ALREADY_FINISHED = "SESSION_ALREADY_FINISHED";
 
-	static final String SCORE_OUT_OF_RANGE = "SCORE_OUT_OF_RANGE";
+	static final String SESSION_EXPIRED = "SESSION_EXPIRED";
+
+	private static final Logger log = LoggerFactory.getLogger(GameSessionService.class);
 
 	private final GameSessionRepository sessions;
 
@@ -41,11 +51,18 @@ public class GameSessionService {
 
 	private final ProgressionService progression;
 
+	private final RunValidator validator;
+
+	private final Duration sessionLifetime;
+
 	private final Clock clock;
 
 	GameSessionService(GameSessionRepository sessions, ScoreRepository scores, GameService games,
-			ProgressionService progression, Clock clock) {
+			ProgressionService progression, RunValidator validator,
+			AbandonedSessionCleaner.SessionProperties sessionProperties, Clock clock) {
 		this.clock = clock;
+		this.validator = validator;
+		this.sessionLifetime = sessionProperties.abandonedAfter();
 		this.sessions = sessions;
 		this.scores = scores;
 		this.games = games;
@@ -67,14 +84,18 @@ public class GameSessionService {
 
 	/**
 	 * @param callerUserId the signed-in player making the request, or {@code null} for a guest
-	 * @param details game-specific numbers about the run, used for achievements
+	 * @param callerPlayerId the guest id the request carries, or {@code null}
+	 * @param details game-specific numbers about the run, used for achievements and challenges once
+	 * they are checked against the score
 	 */
 	@Transactional
-	public ScoreResponse finish(UUID sessionId, int score, Map<String, Integer> details, Long callerUserId) {
+	public ScoreResponse finish(UUID sessionId, int score, Map<String, Integer> details, Long callerUserId,
+			UUID callerPlayerId) {
 		GameSession session = this.sessions.findByIdForUpdate(sessionId)
 			.orElseThrow(() -> new NotFoundException("Game session", sessionId));
-		// A run started by a signed-in player is theirs alone: nobody else can put a score on it.
-		if (!session.mayBeFinishedBy(callerUserId)) {
+		// A run is its owner's alone: an account's, or the browser's that started it as a guest.
+		if (!session.mayBeFinishedBy(callerUserId, callerPlayerId)) {
+			log.warn("Score rejected: session={} reason=not the owner", sessionId);
 			throw new ApiException(HttpStatus.FORBIDDEN, ErrorCodes.FORBIDDEN,
 					"This game session belongs to another player");
 		}
@@ -82,18 +103,20 @@ public class GameSessionService {
 			throw new ConflictException(SESSION_ALREADY_FINISHED, "This game session has already been finished");
 		}
 
-		GameInfo game = this.games.requireGame(session.getGameId());
-		if (!game.allowsScore(score)) {
-			throw new ApiException(HttpStatus.BAD_REQUEST, SCORE_OUT_OF_RANGE,
-					"A score of %d is not possible in %s".formatted(score, game.slug()));
+		// The run's length is the server's: from when the session was opened until now.
+		Instant now = this.clock.instant();
+		Duration elapsed = Duration.between(session.getStartedAt(), now);
+		if (elapsed.compareTo(this.sessionLifetime) > 0) {
+			throw new ApiException(HttpStatus.GONE, SESSION_EXPIRED, "This game session has expired");
 		}
 
-		Instant now = this.clock.instant();
+		GameInfo game = this.games.requireGame(session.getGameId());
+		Map<String, Integer> checked = this.validator.check(session, game, score, details, elapsed);
 		session.finish(now);
-		long durationMs = Duration.between(session.getStartedAt(), now).toMillis();
+		long durationMs = elapsed.toMillis();
 
 		// Guests get their score recorded and nothing else; only accounts earn rewards.
-		Rewards rewards = (session.getUserId() != null) ? reward(session, game, score, details) : null;
+		Rewards rewards = (session.getUserId() != null) ? reward(session, game, score, checked) : null;
 		int xpAwarded = (rewards != null) ? rewards.xpEarned() : 0;
 		boolean personalBest = rewards != null && rewards.personalBest();
 		Score recorded = this.scores.save(new Score(session, score, durationMs, xpAwarded, personalBest, now));
@@ -115,6 +138,8 @@ public class GameSessionService {
 	/** Describes the run to the progression rules, which decide what it earns. */
 	private Rewards reward(GameSession session, GameInfo game, int score, Map<String, Integer> details) {
 		Long userId = session.getUserId();
+		// The player's other runs wait until this one is decided, so what is read next is final.
+		this.progression.lockPlayer(userId);
 		// Both looked up before this run's score is saved: the best so far, and the games so far.
 		int previousBest = this.scores.findBestScoreOfUser(game.id(), userId).orElse(0);
 		long gamesPlayed = this.scores.countByUserId(userId) + 1;

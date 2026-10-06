@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 240" role="img" aria-label="Minesweeper">
+  <rect width="400" height="240" fill="#e11d48"/>
+  <circle cx="340" cy="30" r="100" fill="#fb7185" opacity=".45"/>
+  <g font-family="ui-rounded, 'Arial Rounded MT Bold', Arial, sans-serif" font-weight="700" text-anchor="middle">
+    <g transform="translate(102 22)">
+      <rect width="196" height="196" rx="20" fill="#881337" opacity=".35" y="6"/>
+      <rect width="196" height="196" rx="20" fill="#fff1f2"/>
+      <rect x="12" y="12" width="52" height="52" rx="10" fill="#fecdd3"/>
+      <rect x="72" y="12" width="52" height="52" rx="10" fill="#ffffff"/><text x="98" y="49" font-size="30" fill="#2563eb">1</text>
+      <rect x="132" y="12" width="52" height="52" rx="10" fill="#fecdd3"/>
+      <rect x="12" y="72" width="52" height="52" rx="10" fill="#ffffff"/><text x="38" y="109" font-size="30" fill="#16a34a">2</text>
+      <rect x="72" y="72" width="52" height="52" rx="10" fill="#ffffff"/>
+      <rect x="132" y="72" width="52" height="52" rx="10" fill="#fecdd3"/>
+      <circle cx="158" cy="98" r="13" fill="#1f2937"/>
+      <rect x="156" y="78" width="4" height="40" rx="2" fill="#1f2937"/>
+      <rect x="138" y="96" width="40" height="4" rx="2" fill="#1f2937"/>
+      <circle cx="154" cy="94" r="3.5" fill="#ffffff"/>
+      <rect x="12" y="132" width="52" height="52" rx="10" fill="#ffffff"/><text x="38" y="169" font-size="30" fill="#dc2626">3</text>
+      <rect x="72" y="132" width="52" height="52" rx="10" fill="#fecdd3"/>
+      <path d="M92 144 v28 M92 144 l16 7 -16 7" stroke="#be123c" stroke-width="4" fill="#e11d48" stroke-linejoin="round" stroke-linecap="round"/>
+      <rect x="86" y="170" width="14" height="4" rx="2" fill="#881337"/>
+      <rect x="132" y="132" width="52" height="52" rx="10" fill="#ffffff"/><text x="158" y="169" font-size="30" fill="#2563eb">1</text>
+    </g>
+  </g>
+</svg>

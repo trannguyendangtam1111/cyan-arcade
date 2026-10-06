@@ -46,6 +46,10 @@ export interface RewardBonus {
 
 /** Returned when a session is finished a second time. */
 export const SESSION_ALREADY_FINISHED = 'SESSION_ALREADY_FINISHED'
+/** Returned when the server does not accept the run as played. It never says why. */
+export const SCORE_REJECTED = 'SCORE_REJECTED'
+/** Returned when a session was left open too long to be finished. */
+export const SESSION_EXPIRED = 'SESSION_EXPIRED'
 
 export function startGameSession(gameSlug: string): Promise<GameSessionResponse> {
   return apiFetch<GameSessionResponse>('/api/game-sessions', {
@@ -57,7 +61,8 @@ export function startGameSession(gameSlug: string): Promise<GameSessionResponse>
 }
 
 /**
- * @param details game-specific numbers about the run (lines, highest tile, ...), used for achievements
+ * @param details game-specific numbers about the run (lines, highest tile, ...). The server checks
+ * them against the score and uses them for achievements and challenges.
  */
 export function finishGameSession(
   sessionId: string,
@@ -67,5 +72,7 @@ export function finishGameSession(
   return apiFetch<ScoreResponse>(`/api/game-sessions/${encodeURIComponent(sessionId)}/finish`, {
     method: 'POST',
     body: { score, details },
+    // A guest's run can only be finished by the browser that started it.
+    headers: playerHeaders(),
   })
 }

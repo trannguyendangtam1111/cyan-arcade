@@ -74,7 +74,7 @@ export function useTetrisGame(props: GameProps<TetrisAI>) {
   const act = (action: TetrisAction) => {
     if (getState().status !== 'playing') return
     const after = apply(action)
-    if (after.status === 'over') run.finish(after.score, { lines: after.lines, level: after.level })
+    if (after.status === 'over') run.finish(after.score, { lines: after.lines, level: after.level, pieces: after.pieces })
   }
 
   // Human mode: gravity pulls the piece down, faster at every level. AI mode: the AI plays one

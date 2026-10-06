@@ -6,8 +6,10 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
+import com.cyan.arcade.HonestRuns;
 import com.cyan.arcade.IntegrationTest;
 import com.cyan.arcade.Players;
 import com.cyan.arcade.game.GameService;
@@ -364,7 +366,7 @@ class LeaderboardApiTests {
 
 		this.mockMvc.perform(get("/api/users/me/ranks").session(me))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.games[*].game.slug", contains("snake", "2048", "tetris")))
+			.andExpect(jsonPath("$.games[*].game.slug", contains("snake", "2048", "tetris", "minesweeper")))
 			// This week 3,000 beats my 1,000; of all time my older 5,000 is the best.
 			.andExpect(jsonPath("$.games[1].daily.rank").value(2))
 			.andExpect(jsonPath("$.games[1].daily.score").value(1000))
@@ -470,9 +472,15 @@ class LeaderboardApiTests {
 		String sessionId = JsonPath.read(
 				this.mockMvc.perform(start).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(),
 				"$.id");
+		// Finished as the game would: after a while, with its details, from the browser that started it.
+		HonestRuns.playFor(sessionId);
 		MockHttpServletRequestBuilder finish = post("/api/game-sessions/{id}/finish", sessionId)
 			.contentType(MediaType.APPLICATION_JSON)
-			.content("{\"score\":%d}".formatted(score));
+			.content("{\"score\":%d,\"details\":%s}".formatted(score,
+					HonestRuns.json(HonestRuns.detailsFor(GAME, score, Map.of()))));
+		if (playerId != null) {
+			finish.header(PLAYER_HEADER, playerId);
+		}
 		if (session != null) {
 			finish.session(session);
 		}

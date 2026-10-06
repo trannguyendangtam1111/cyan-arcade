@@ -18,7 +18,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * Test helpers that act as a player through the public API: signing up, and playing a game from
- * start to finish. Nothing here reaches around the API into services or the database.
+ * start to finish. The one thing reached around the API is time: a run is finished as if it had
+ * been played for a while, with the details its game would report ({@link HonestRuns}).
  */
 public final class Players {
 
@@ -94,10 +95,15 @@ public final class Players {
 		return JsonPath.read(body, "$.id");
 	}
 
-	/** Finishes a run with a score and optional game-specific details. */
+	/**
+	 * Finishes a run with a score, as the game would: after playing for a while, and with the details
+	 * the game reports. Details given here are sent as they are, in place of the game's own.
+	 */
 	public static ResultActions finishGame(MockMvc mockMvc, MockHttpSession session, String sessionId, int score,
 			Map<String, Integer> details) throws Exception {
-		String detailsJson = details.entrySet()
+		HonestRuns.playFor(sessionId);
+		String detailsJson = HonestRuns.detailsFor(HonestRuns.gameOf(sessionId), score, details)
+			.entrySet()
 			.stream()
 			.map((entry) -> "\"%s\":%d".formatted(entry.getKey(), entry.getValue()))
 			.collect(Collectors.joining(",", "{", "}"));

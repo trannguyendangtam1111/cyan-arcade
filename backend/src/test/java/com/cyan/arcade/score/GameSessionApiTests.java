@@ -10,6 +10,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
+import com.cyan.arcade.HonestRuns;
 import com.cyan.arcade.IntegrationTest;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.Test;
@@ -153,14 +154,14 @@ class GameSessionApiTests {
 		String id = startedSessionId("snake");
 
 		// Snake on a 16x16 board cannot score more than 253.
-		finish(id, 254).andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("SCORE_OUT_OF_RANGE"));
+		finish(id, 254).andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("SCORE_REJECTED"));
 		assertThat(scoreCount(id)).isZero();
 
 		finish(id, 253).andExpect(status().isOk());
 	}
 
 	@Test
-	void gamesWithoutAMaximumAcceptLargeScores() throws Exception {
+	void gamesWithoutAMaximumAcceptLargeScoresOfALongRun() throws Exception {
 		finish(startedSessionId("tetris"), 25_000_000).andExpect(status().isOk());
 	}
 
@@ -272,10 +273,16 @@ class GameSessionApiTests {
 		return JsonPath.read(start(gameSlug).andReturn().getResponse().getContentAsString(), "$.id");
 	}
 
+	/** Finishes a run as its game would report it, after playing for a while (see {@link HonestRuns}). */
 	private ResultActions finish(String sessionId, int score) throws Exception {
+		String details = "{}";
+		if (sessionId.matches("[0-9a-f-]{36}")) {
+			HonestRuns.playFor(sessionId);
+			details = HonestRuns.json(HonestRuns.detailsFor(HonestRuns.gameOf(sessionId), score, Map.of()));
+		}
 		return this.mockMvc.perform(post("/api/game-sessions/{id}/finish", sessionId)
 			.contentType(MediaType.APPLICATION_JSON)
-			.content("{\"score\":%d}".formatted(score)));
+			.content("{\"score\":%d,\"details\":%s}".formatted(score, details)));
 	}
 
 	private int scoreCount(String sessionId) {

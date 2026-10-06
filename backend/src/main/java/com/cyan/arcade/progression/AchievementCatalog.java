@@ -33,7 +33,10 @@ class AchievementCatalog {
 			Achievement.forDetail("TETRIS_10_LINES", "Line Worker", "Clear 10 lines in one game of Tetris.",
 					Reward.of(100, 150), "tetris", "lines", 10),
 			Achievement.forDetail("TETRIS_40_LINES", "Marathon", "Clear 40 lines in one game of Tetris.",
-					Reward.of(250, 400), "tetris", "lines", 40));
+					Reward.of(250, 400), "tetris", "lines", 40),
+
+			Achievement.forDetail("MINESWEEPER_CLEAR", "All Clear", "Clear a board in Minesweeper.",
+					Reward.of(100, 150), "minesweeper", "won", 1));
 
 	List<Achievement> all() {
 		return ALL;

@@ -182,9 +182,13 @@ function ScoreStatus({ submission, onRetry, gameSlug }: ScoreStatusProps) {
         <>
           <CircleCheck aria-hidden className="size-4 text-success" />
           <span>
-            Score <strong>{submission.score}</strong> saved.
+            Score <strong>{submission.score}</strong> {submission.alreadySaved ? 'was already saved.' : 'saved.'}
           </span>
-          {submission.rewards ? <RewardBadges rewards={submission.rewards} /> : <GuestHint gameSlug={gameSlug} />}
+          {submission.rewards ? (
+            <RewardBadges rewards={submission.rewards} />
+          ) : (
+            !submission.alreadySaved && <GuestHint gameSlug={gameSlug} />
+          )}
           <Link
             to={`/leaderboard?game=${encodeURIComponent(gameSlug)}`}
             className="ml-auto rounded font-bold text-brand-700 hover:text-brand-900"
@@ -197,7 +201,17 @@ function ScoreStatus({ submission, onRetry, gameSlug }: ScoreStatusProps) {
         <>
           <CircleAlert aria-hidden className="size-4 text-danger" />
           <span>
-            Your score of <strong>{submission.score}</strong> couldn't be saved.
+            {submission.reason === 'rejected' ? (
+              <>
+                Your score of <strong>{submission.score}</strong> couldn't be accepted.
+              </>
+            ) : submission.reason === 'expired' ? (
+              <>This game was left open too long to save its score. Start a new game to play on.</>
+            ) : (
+              <>
+                Your score of <strong>{submission.score}</strong> couldn't be saved.
+              </>
+            )}
           </span>
           {submission.canRetry && (
             <button

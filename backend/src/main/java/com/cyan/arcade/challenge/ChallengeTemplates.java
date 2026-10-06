@@ -47,7 +47,10 @@ class ChallengeTemplates {
 			List.of(ChallengeTemplate.detail("Tidy Up", "Clear 5 lines in one game of Tetris.", "lines", 5, 30, 60),
 					ChallengeTemplate.detail("Clean Sweep", "Clear 10 lines in one game of Tetris.", "lines", 10, 50,
 							100),
-					ChallengeTemplate.score("Four Digits", "Score 1,000 points in one game of Tetris.", 1000, 40, 80)));
+					ChallengeTemplate.score("Four Digits", "Score 1,000 points in one game of Tetris.", 1000, 40, 80)),
+			"minesweeper",
+			List.of(ChallengeTemplate.score("Careful Steps", "Score 300 points in one game of Minesweeper.", 300, 25,
+					50), ChallengeTemplate.detail("Mine Free", "Clear a board in Minesweeper.", "won", 1, 50, 100)));
 
 	private static final List<Activity> ACTIVITIES = List.of(new Activity(PlayerActivity.TCG_PACK_OPENED, "Card packs",
 			List.of(ChallengeTemplate.count("Pack Opener", "Open 3 card packs today.", 3, 30, 60),

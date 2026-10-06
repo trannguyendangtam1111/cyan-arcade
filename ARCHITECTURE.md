@@ -13,6 +13,7 @@ Browser (React SPA)
 Spring Boot (modular monolith, package by feature)
   ├── common/   errors · security · time · scheduling · platform (contracts with modules)
   ├── platform: game/  score/  leaderboard/  user/  auth/  profile/  progression/  challenge/
+  ├── gamerules/: each game's server-side rules (RunRules), nothing else
   │             economy/  dailylogin/  shop/  admin/
   └── tcg/      game · set · card · pack · opening · collection · dataimport
           │  JPA (platform) and JdbcClient (tcg, set-based work) · Flyway owns the schema
@@ -25,7 +26,7 @@ PostgreSQL ◄── import job (tcg.dataimport, run on demand) ◄── TCGdex
 1. **The platform is game-agnostic.** Platform code never contains a specific game's logic or UI. The hub renders every game from one type, `GameDefinition`.
 2. **Games are independent.** A game module may use the platform, never another game.
 3. **Game loops never hit the network.** Client-side games run entirely in the browser and submit one result at the end of a run. The server owns *truth that matters*: identity, persisted scores, randomness for rewards (TCG), and collections.
-4. **Don't trust the client.** Scores are tied to server-issued game sessions and validated centrally. Who a player is comes from the server-side session, never from the request. The design leaves room for server-side replay verification later.
+4. **Don't trust the client.** Scores are tied to server-issued game sessions and validated centrally, against each game's own rules and the time the server measured. Who a player is comes from the server-side session, never from the request. The design leaves room for server-side replay verification later.
 5. **Keep it simple.** Build abstractions when a second use appears, not before. Create packages and tables when a feature needs them.
 
 ## The game catalog: one source of truth
@@ -341,7 +342,9 @@ com.cyan.arcade
   challenge/    ChallengeTemplates, DailyChallengeGenerator, DailyChallengeScheduler, DailyChallengeStore,
                 DailyChallengeBonuses, ActivityChallenges, DailyChallengeService, DailyChallengeController, DTOs
   score/        GameSession and Score (entities), their repositories, GameSessionService (writes), ScoreQueries (reads),
-                GameSessionController, AbandonedSessionCleaner, DTOs
+                GameSessionController, AbandonedSessionCleaner, DTOs; RunRules (the contract a game implements on
+                the server) and RunValidator (picks a game's rules by its slug)
+  gamerules/    one RunRules bean per game: SnakeRunRules, Game2048RunRules, TetrisRunRules, MinesweeperRunRules
   leaderboard/  LeaderboardService, LeaderboardController, LeaderboardPeriod (DAILY, WEEKLY, ALL_TIME and their
                 UTC windows), LeaderboardResponse, PlayerRanks
   profile/      ProfileService, ProfileController, ProfileResponse, StatsResponse, GameHistoryResponse
@@ -376,12 +379,15 @@ tcg ──► common only (talks to the platform through common.platform)
 
 **Score submission is centralized.** `GameSessionService` is the only way a score enters the system:
 
-- A score can only be recorded by finishing a session that exists and is still open.
+- A score can only be recorded by finishing a session that exists, is still open and was opened less than 24 hours ago (`410 SESSION_EXPIRED` after that).
+- Only its owner can finish it: the signed-in player who started it, or, for a guest's run, a request with the same `X-Player-Id` it was started with. Knowing the session's id is not enough.
 - The session row is locked while it is finished, so simultaneous attempts are handled one after the other and exactly one succeeds. A unique constraint on `scores.game_session_id` backs this up in the database.
-- The score must be non-negative and no higher than the game's `max_score` (a column on `games`; `NULL` means no limit).
-- The server measures the run's duration itself.
+- The server measures the run's duration itself, and judges the run with it (`RunValidator`): the score must be within the game's `max_score` (a column on `games`; `NULL` means no limit), and the game's `RunRules` must accept it. Each game states what any real run of it satisfies, worked out from its engine: the details it must report and how they relate to the score (a Snake is 3 cells plus one per apple; a 2048 score is a multiple of 4 and bounded by the highest tile and the moves; Tetris lines bound its score), and how fast it can be played (a Snake move every 70 ms at most, 25 moves of 2048 or 10 Tetris pieces a second). Only the game's own details go on to rewards. A refused run gets `400 SCORE_REJECTED` with a message that says nothing about why; the reason, the game, the session and whether it was a guest are logged as a warning.
+- **The order inside the one transaction**: lock the session and check its owner, state and age; check the run; close the session; lock the player (`ProgressionService.lockPlayer`, the wallet's row lock) so their runs are judged one at a time; read their best score and games so far; decide and pay the rewards; record the score. If anything fails, nothing is left behind: no score, XP, coins, achievement or challenge progress.
 
-Features refer to each other by id, not by entity: `score` stores a `game_id` and asks `GameService` for a `GameInfo`, so it never sees the `Game` entity. This is deliberately simple validation, not anti-cheat. Stronger checks (replaying a run from its seed and inputs, for example) can be added inside this one service later.
+Features refer to each other by id, not by entity: `score` stores a `game_id` and asks `GameService` for a `GameInfo`, so it never sees the `Game` entity.
+
+**This is practical integrity protection, not anti-cheat.** The games run in the browser, so the server cannot replay a run; it can only refuse what no run could produce. A modified client that fakes a run slowly enough, with numbers that agree with each other, is still accepted. Closing that gap would mean recording each run's seed and inputs and replaying them on the server (the engines are deterministic, so this can be added inside `GameSessionService` later). Starting a session is public and not rate limited; unfinished sessions are cleaned up after a day.
 
 **Leaderboards own no data.** `leaderboard` is a thin, read-only feature on top of `score`, with no table of its own and no way to write:
 
@@ -415,7 +421,7 @@ Features refer to each other by id, not by entity: `score` stores a `game_id` an
 `progression` is the only place that knows any reward rule. `GameSessionService` describes a finished run to it as a `CompletedRun` (who, which game, the score, the numbers the game reported, whether it was a personal best, how many games the player has now finished) and gets back `Rewards`. Controllers and games contain no reward logic.
 
 - **XP** (`XpRules`): 10 for finishing a game, 25 more for beating your own best in that game, plus the XP of any achievement unlocked.
-- **Coins** (`RewardProperties`, configurable): 5 for finishing a game (the first 40 games of a day only, so very short runs cannot be farmed), 15 more for a best, plus each achievement's and bonus's coins. Progression decides them and pays them through `CoinService`, each with a reference to what it rewards (the session, the achievement code, the challenge), so a repeat pays nothing.
+- **Coins** (`RewardProperties`, configurable): 5 for finishing a game (the first 40 games of a day only, so very short runs cannot be farmed), 15 more for a best (the first 10 new bests of a day only, so a string of runs each a point better than the last cannot be farmed; later bests still earn their XP), plus each achievement's and bonus's coins. Progression decides them and pays them through `CoinService`, each with a reference to what it rewards (the session, the achievement code, the challenge), so a repeat pays nothing.
 - **Levels** (`Levels`) are derived from XP and never stored: level `n` starts at `100 · n · (n − 1) / 2` XP, so each level takes 100 XP more than the last.
 - **Achievements** are data: a code, a name, a reward (XP and coins) and a rule, which is a function of one `CompletedRun`. `AchievementCatalog` lists them, and most are one line:
 
@@ -441,7 +447,7 @@ Each day every game in the catalog has one challenge, and so does every **activi
 - **Once only.** Completing is an `INSERT … ON CONFLICT DO NOTHING` on `(user_id, daily_challenge_id)`, and the coins refer to the challenge.
 - **Activities are events.** A module reports what a player did as a `PlayerActivity` (defined in `common.platform`), published in its own transaction; the card game publishes `TCG_PACK_OPENED` for every opening. `ActivityChallenges` listens, adds one to the player's `daily_challenge_progress` for today's challenge of that activity (an atomic upsert), and on reaching the target completes it and has `ProgressionService.award` pay it, all in the opening's transaction. The module never learns that challenges exist, and a new activity is a new event type plus a line in `ChallengeTemplates`.
 
-Rules that depend on a game's own numbers (`lines`, `highestTile`) use the `details` the client reports. They are bounded and validated but not verified, the same trust level as the score itself.
+Rules that depend on a game's own numbers (`lines`, `highestTile`) use the `details` the client reports, after the server has checked them against the score and the time (see score submission above) and kept only the game's own. A refused run reaches neither achievements nor challenges.
 
 ### The economy: coins, the daily login reward, the shop
 
@@ -574,6 +580,7 @@ Other conventions:
 | `V9__create_tcg.sql` | The card game module: `tcg_games`, `tcg_rarities`, `tcg_sets`, `tcg_cards`, `tcg_packs`, `tcg_pack_cards`, `tcg_pack_slot_odds`, `tcg_pack_openings`, `tcg_pack_opening_cards`, `tcg_user_cards` |
 | `V10__session_cleanup_index_and_accent_contrast.sql` | A partial index on unfinished game sessions for the cleanup job; Tetris's accent one shade darker, for contrast |
 | `V12__add_user_roles.sql` | `users.role` (`USER` or `ADMIN`, checked); existing accounts become `USER`. The admin account itself is seeded by the application |
+| `V17__add_minesweeper.sql` | Minesweeper's catalog row (`max_score` 1,810). Data only |
 | `V16__add_profile_frames.sql` | Four `COSMETIC` shop items, profile frames (300 to 2,500 coins, levels 1 to 6). Data only |
 | `V15__add_display_name_and_bio.sql` | `users.display_name` (2 to 24 characters, trimmed; existing accounts get their username) and `users.bio` (up to 160, trimmed, `NULL` for none) |
 | `V14__add_leaderboard_period_index.sql` | `scores (game_id, created_at)`, for the daily and weekly leaderboards |
@@ -640,17 +647,38 @@ Nothing here blocks it. A later real-time feature could add a WebSocket endpoint
 
 ## How to add a new game
 
-**Client-side game** (e.g. Minesweeper):
+### The game boundary
 
-1. **Catalog**: add a Flyway migration that inserts the game's row (slug, name, description, category, thumbnail URL, accent color, display order).
-2. **Artwork**: add `frontend/public/thumbnails/minesweeper.svg`.
-3. **Implementation**: create `frontend/src/games/minesweeper/` with a pure engine in `engine/` plus tests, and a `MinesweeperGame.tsx` that wraps it in `GameShell` and calls `onGameOver`. For an AI mode, add an `ai/` folder implementing `GameAI`, take it from the `ai` prop (never import it), and declare `loadAi` in the module: the platform does the rest, for admins only.
-4. **Register**: export its `GameModule` from `games/minesweeper/index.ts` and add it to `gameModules` in `games/registry.ts`.
+A game and the platform meet at two narrow contracts, one on each side, and Minesweeper (`frontend/src/games/minesweeper`, `gamerules/MinesweeperRunRules`) is the reference implementation of both.
 
-After steps 1 and 2 the game already appears in the hub as "coming soon". After step 4 it is playable, its scores are saved, it has a leaderboard, finishing it earns XP and counts towards the games-played achievements, and it gets a daily challenge ("Finish a game of …"), all without further work.
+| A game owns | The platform owns |
+| ----------- | ----------------- |
+| Its engine and state (pure, seeded, deterministic), input, rendering and UI | Accounts, game sessions, storing scores and the score checks' pipeline |
+| Its scoring, and the numbers (`details`) it reports with a run | Leaderboards, XP, coins, achievements, daily challenges, statistics, the shop |
+| What any real run of it satisfies (`RunRules`, on the server) | Choosing the game's rules by its slug, refusing runs, paying rewards once |
 
-5. **Achievements and challenges of its own** (optional): pass the numbers worth rewarding as the second argument of `finish(score, { … })`, and add lines for them to `AchievementCatalog` and `ChallengeTemplates`.
-6. **Spotlight** (optional): set `featured = TRUE` in the game's migration to put it on the home page.
+- **In the browser**, a game is a `GameModule` (`games/types.ts`): a slug, its controls and a lazy root component that receives `onGameStart` and `onGameOver(result)`. `useHumanRun` gives it `begin()`, `finish(score, details)`, `reset()` and the run's clock. Display metadata (name, description, colour, artwork) comes from the backend catalog, never from the module. Shared pieces: `GameShell` (the frame; its AI props are optional), `BoardOverlay`, `useEngine`, `useTicker`, `random.ts`.
+- **On the server**, a game is a row in `games` and a `RunRules` bean in `gamerules`: which details it reports, and `problemWith(score, details, elapsed)`. `RunValidator` picks it by slug; nothing else in the platform knows any game.
+- **Guarded by tests**: in the frontend (`games/architecture.test.ts`), engines and types know nothing of React, the browser or the clock, a game never imports another game, the API, or the platform's pages, hooks, layouts or the card game, and only games with an AI ship one. In the backend (ArchUnit), `gamerules` may use only `RunRules` (no coins, rewards, achievements, leaderboards, inventories or accounts), and no platform class depends on `gamerules`. An integration test requires every game in the catalog to have its `RunRules`.
+
+### Adding Game X
+
+1. **Catalog**: a Flyway migration inserting the game's row: slug, name, description, category, thumbnail URL, accent colour (white text on it at 4.5:1 or more), display order and `max_score`. The hub lists it as "coming soon" from here on.
+2. **Artwork**: `frontend/public/thumbnails/<slug>.svg`.
+3. **Engine**: `frontend/src/games/<slug>/engine/` with `types/`: pure functions `update(state, action)`, randomness from a seed in the state (`games/shared/random`), plus tests. Compute the score and the details there.
+4. **UI**: a hook (`hooks/use<Game>Game.ts`) binding the engine with `useEngine` and reporting the run with `useHumanRun`, components in `components/`, and `<Game>Game.tsx` laying them out in `GameShell`.
+5. **Register**: `games/<slug>/index.ts` exporting `defineGameModule({ slug, controls, Component: lazy(...) })`, added to `gameModules` in `games/registry.ts`. The game is now playable at `/games/<slug>`, its scores are saved and ranked daily, weekly and all-time, finishing it earns XP and coins, counts for the games-played achievements and statistics, and it gets a daily "Finish a game of …" challenge.
+6. **Server rules**: `gamerules/<Game>RunRules` implementing `RunRules`, from the engine's own rules (board, points per action, fastest pace), generous enough that no real run is refused. Until it exists the game's scores are only checked against `max_score`, and the catalog test fails as a reminder.
+7. **Optional**: lines in `AchievementCatalog` and `ChallengeTemplates` for the game's own numbers (Minesweeper has "All Clear" and "Mine Free" on `won`); an AI in `ai/` with `loadAi` (admins only); `featured = TRUE` for the home page spotlight.
+
+Nothing in the leaderboards, economy, profile, achievements code, shop, authentication or session code changes.
+
+### Minesweeper
+
+- **Engine** (`minesweeperEngine.ts`): a 9 × 9 board with 10 mines, laid from the seed at the first reveal and never on or next to that cell, so every game opens safely. Reveals flood out over empty cells; flags (at most one per mine) protect cells from a stray click; the game is won when all 71 safe cells are uncovered and lost on a mine.
+- **Score**: 10 a safe cell uncovered, plus 500 and a point for every second under ten minutes for a cleared board (at most 1,810). Flags never score. The details it reports are the board, `revealedCells`, `flagsUsed`, `won`, `moves` and `seconds`.
+- **Server rules** (`MinesweeperRunRules`): the board must be the game's, the result consistent (a win is exactly 71 cells; moves fit the cells uncovered), the score exactly what the details give, and for a cleared board the player's seconds must agree with the server's time. No AI.
+- **Limit**: as for every game, a modified client that plays a fake but consistent run at a believable pace is accepted. And because a win's time is checked against the server's clock, a cleared board whose result is resent long after the game (a retry after a network failure) is refused.
 
 **Server-backed game**: follow the card game module (`com.cyan.arcade.tcg` and `frontend/src/tcg`): a backend package of its own under `/api/<name>/**` with `<name>_`-prefixed tables, using only `common`, and a frontend module that the app mounts as one route object. Platform features must not depend on it.
 

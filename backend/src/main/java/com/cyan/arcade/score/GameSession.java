@@ -12,9 +12,9 @@ import jakarta.persistence.Table;
  * One run of a game, from start to finish. The client opens a session when a run starts and may
  * close it exactly once with the final score.
  *
- * <p>The id is a random UUID so that it cannot be guessed: for a guest, knowing the id is what
- * proves a score submission belongs to the run. A run started by a signed-in player can only be
- * finished by that player.
+ * <p>The id is a random UUID so that it cannot be guessed. A run started by a signed-in player can
+ * only be finished by that player; a guest's run, only by a request carrying the same guest id it
+ * was started with (when it was started with one), so knowing the id alone is not enough.
  */
 @Entity
 @Table(name = "game_sessions")
@@ -63,9 +63,16 @@ class GameSession {
 		return this.finishedAt != null;
 	}
 
-	/** Whether the given caller ({@code null} for a guest) may finish this run. */
-	boolean mayBeFinishedBy(Long callerUserId) {
-		return this.userId == null || this.userId.equals(callerUserId);
+	/**
+	 * Whether the given caller may finish this run.
+	 * @param callerUserId the signed-in player, or {@code null}
+	 * @param callerPlayerId the guest id the request carries, or {@code null}
+	 */
+	boolean mayBeFinishedBy(Long callerUserId, UUID callerPlayerId) {
+		if (this.userId != null) {
+			return this.userId.equals(callerUserId);
+		}
+		return this.playerId == null || this.playerId.equals(callerPlayerId);
 	}
 
 	UUID getId() {

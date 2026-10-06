@@ -42,7 +42,7 @@ const pureFiles = gameFolders.flatMap((game) =>
 
 describe('game engines and AIs', () => {
   it('exist for every game', () => {
-    expect(gameFolders.sort()).toEqual(['2048', 'snake', 'tetris'])
+    expect(gameFolders.sort()).toEqual(['2048', 'minesweeper', 'snake', 'tetris'])
     expect(pureFiles.length).toBeGreaterThan(10)
   })
 
@@ -73,6 +73,14 @@ describe('game modules', () => {
     }
   })
 
+  it.each(gameFolders)('%s talks to the platform only through its module contract', (game) => {
+    // A game gets onGameStart/onGameOver and reports a result; coins, rewards, leaderboards, accounts
+    // and the card game are the platform's. Shared UI pieces (`@/components`, `@/lib`) are fine.
+    for (const path of sourceFiles(join(SRC, 'games', game))) {
+      expect(imports(path).filter((specifier) => /^@\/(pages|hooks|layouts|tcg|app|test)\//.test(specifier)), name(path)).toEqual([])
+    }
+  })
+
   it('never call the API themselves: the platform submits scores', () => {
     for (const path of sourceFiles(join(SRC, 'games'))) {
       expect(imports(path).filter((specifier) => specifier.startsWith('@/api/') && !path.endsWith('registry.ts') && !path.endsWith('types.ts')), name(path)).toEqual([])
@@ -86,7 +94,15 @@ describe('AI mode', () => {
   const runtimeImports = (path: string) =>
     [...code(path).matchAll(/^import\s+(?!type\s)[^;]*?\s+from\s+'([^']+)'/gm)].map((match) => match[1])
 
-  it.each(gameFolders)('%s ships its AI in a chunk of its own, loaded only through the module', (game) => {
+  /** Games with an AI; a game without one (Minesweeper) declares no `loadAi` and has no `ai/` folder. */
+  const gamesWithAi = gameFolders.filter((game) => statSync(join(SRC, 'games', game, 'ai'), { throwIfNoEntry: false })?.isDirectory())
+
+  it('are the games that have one', () => {
+    expect(gamesWithAi.sort()).toEqual(['2048', 'snake', 'tetris'])
+    expect(code(join(SRC, 'games', 'minesweeper', 'index.ts'))).not.toMatch(/loadAi/)
+  })
+
+  it.each(gamesWithAi)('%s ships its AI in a chunk of its own, loaded only through the module', (game) => {
     // A real import of the AI anywhere in the game would put the AI in the game's chunk, which every
     // player downloads. Only the module's `loadAi` reaches it, with a dynamic import.
     for (const path of sourceFiles(join(SRC, 'games', game)).filter((file) => !name(file).includes('/ai/'))) {
