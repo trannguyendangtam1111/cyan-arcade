@@ -3,6 +3,7 @@ package com.cyan.arcade.challenge;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.stream.IntStream;
 
 import com.cyan.arcade.progression.CompletedRun;
@@ -87,11 +88,11 @@ class ChallengeRulesTests {
 	}
 
 	private static DailyChallenge challenge(ChallengeGoal goal, String detail, int target) {
-		return new DailyChallenge(1L, SOME_DAY, 1L, "Title", "Description", goal, detail, target, 30);
+		return new DailyChallenge(1L, SOME_DAY, 1L, null, null, "Title", "Description", goal, detail, target, 30, 60);
 	}
 
 	private static CompletedRun run(int score, Map<String, Integer> details) {
-		return new CompletedRun(1L, "tetris", score, details, false, 1);
+		return new CompletedRun(UUID.randomUUID(), 1L, "tetris", score, details, false, 1);
 	}
 
 }

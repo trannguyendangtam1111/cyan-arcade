@@ -10,6 +10,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.config.Customizer;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.web.SecurityFilterChain;
@@ -36,10 +37,15 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
  * {@link SpaCsrfTokenRequestHandler}. That includes the requests guests may make.</li>
  * <li><b>Deny by default.</b> Public endpoints are listed here; everything else needs a signed-in
  * player.</li>
+ * <li><b>Roles.</b> Every account is a {@link Role#USER} or an {@link Role#ADMIN}. Admin-only
+ * endpoints ({@code /api/admin/**}, and {@code /api/ai/**} for AI mode) need {@code ROLE_ADMIN}
+ * here, and their controllers say so again with {@code @PreAuthorize}, so neither a gap in this
+ * list nor a new handler can open them up. A player gets {@code 403}, a guest {@code 401}.</li>
  * </ul>
  */
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(CorsProperties.class)
+@EnableMethodSecurity
 class SecurityConfig {
 
 	static final String LOGOUT_URL = "/api/auth/logout";
@@ -64,8 +70,9 @@ class SecurityConfig {
 				.permitAll()
 				// Public, read-only platform endpoints.
 				// Today's daily challenges are public; "/api/daily-challenges/me" is not listed and needs a session.
+				// So is what the shop sells; buying, coins, inventories and the daily login reward are not.
 				.requestMatchers(HttpMethod.GET, "/api/games", "/api/games/**", "/api/leaderboards/**",
-						"/api/daily-challenges", "/api/auth/session")
+						"/api/daily-challenges", "/api/shop/items", "/api/auth/session")
 				.permitAll()
 				// The card catalog can be browsed by anyone. Opening packs, collections and opening
 				// histories are not listed and need a session.
@@ -77,6 +84,9 @@ class SecurityConfig {
 				// Guests may play and submit scores; a run started while signed in belongs to that player.
 				.requestMatchers(HttpMethod.POST, "/api/game-sessions", "/api/game-sessions/*/finish")
 				.permitAll()
+				// Administration and the games' AI mode: admins only.
+				.requestMatchers("/api/admin/**", "/api/ai/**")
+				.hasRole(Role.ADMIN.name())
 				.anyRequest()
 				.authenticated());
 		return http.build();

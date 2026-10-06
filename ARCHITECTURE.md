@@ -4,18 +4,20 @@ Cyan Arcade is a **modular monolith**: one deployable backend and one SPA, split
 
 ```text
 Browser (React SPA)
-  ├── Platform UI: hub, catalog, leaderboards, profile, sign-in
+  ├── Platform UI: hub, catalog, challenges, shop, leaderboards, profile, admin, sign-in
   ├── Game modules: games/snake, games/2048, games/tetris     (game loops run here)
   └── Card game module: tcg/                                  (loaded on demand under /tcg)
           │  HTTPS → nginx: static files, and /api proxied to the backend
+          │  card images straight from the card games' image hosts (TCGdex, OPTCG API)
           ▼
 Spring Boot (modular monolith, package by feature)
-  ├── common/   errors · security · time · scheduling
+  ├── common/   errors · security · time · scheduling · platform (contracts with modules)
   ├── platform: game/  score/  leaderboard/  user/  auth/  profile/  progression/  challenge/
+  │             economy/  dailylogin/  shop/  admin/
   └── tcg/      game · set · card · pack · opening · collection · dataimport
           │  JPA (platform) and JdbcClient (tcg, set-based work) · Flyway owns the schema
           ▼
-PostgreSQL
+PostgreSQL ◄── import job (tcg.dataimport, run on demand) ◄── TCGdex · OPTCG API
 ```
 
 ## Guiding rules
@@ -59,13 +61,15 @@ A game that is in the catalog but has no registered module is listed as "coming 
 src/
   app/          App.tsx (providers), routes.tsx, queryClient.ts
   api/          client.ts (fetch wrapper + ApiError + CSRF header), auth.ts, profile.ts, games.ts,
-                gameSessions.ts, leaderboards.ts, dailyChallenges.ts, system.ts
+                gameSessions.ts, leaderboards.ts, dailyChallenges.ts, economy.ts (coins, daily login, shop),
+                admin.ts, system.ts
   components/   ui/ (Button, Card, Badge, Modal, Avatar, RankBadge, PageHeader, LoadingState, EmptyState,
-                ErrorState), GameCard, GameGrid, DailyChallenges, LeaderboardPreview, JumpBackIn, ApiStatus,
-                brand/Logo
+                ErrorState, CoinAmount), GameCard, GameGrid, DailyChallenges, DailyLogin, PlayerStrip, ItemIcon,
+                LeaderboardPreview, JumpBackIn, ApiStatus, brand/Logo
   hooks/        useGameCatalog, useRecentGames, useScoreSubmission, useCountdown, useDocumentTitle
-  layouts/      AppLayout (header nav with the signed-in player, mobile tab bar, footer), navigation.ts
-  pages/        Home, Games, GameDetail, Leaderboard, profile/ (ProfilePage and its sections),
+  layouts/      AppLayout (header nav with the coins and the signed-in player, mobile tab bar, footer), navigation.ts
+  pages/        Home, Games, GameDetail, Challenges, Shop, Leaderboard, Admin (+ AdminDashboard),
+                profile/ (ProfilePage and its sections),
                 auth/ (Login, Register, the shared AuthForm), NotFound, RouteError
   lib/          tiny utilities
   styles/       Tailwind entry + design tokens
@@ -76,11 +80,14 @@ src/
 
 | Route          | Page | Status |
 | -------------- | ---- | ------ |
-| `/`            | The hub: hero, daily challenges, recently played, featured games, top scores, categories | Live |
+| `/`            | The hub: hero, the player's coins, level and daily reward, daily challenges, recently played, featured games, card packs, top scores, recent achievements, categories | Live |
 | `/games`       | Full catalog with a category filter | Live. The filter is in the URL (`?category=puzzle`) |
 | `/games/:slug` | Game detail, today's challenge for the game, and the play area | Live; hosts the game, or shows "coming soon" if it has no module yet |
+| `/challenges` | The daily login reward (a 7-day run) and today's challenges | Live. Guests see the challenges and an invitation to sign in |
+| `/shop`       | Extra card packs, badges and titles for coins; the player's items, to wear | Live. Guests see what is for sale |
 | `/leaderboard` | Top scores per game, with the player's own best and rank | Live. Game and page are in the URL (`?game=2048&page=2`) |
-| `/profile`     | Level and XP progress, statistics, recent games, achievements, avatar, log out | Live. Guests see an invitation to sign in instead |
+| `/profile`     | Level and XP progress, coins, the badge and title worn, statistics (platform, card game, per game), recent games, coin history, achievements, avatar, log out | Live. Guests see an invitation to sign in instead |
+| `/admin`       | The arcade at a glance, AI mode, unlimited packs, coin grants | Admins only; everyone else sees "Admins only", and the data is admin-only on the server |
 | `/login`, `/register` | Auth forms | Live. `?redirect=/games/snake` returns the player to where they came from (same-site paths only) |
 | `/tcg/...` | Card packs: games, sets, packs and opening, collection, history | Live. See [The card game module](#the-card-game-module-tcg) |
 
@@ -98,10 +105,12 @@ The home page is assembled from independent sections. Each one loads its own dat
 
 | Section | Data | Notes |
 | ------- | ---- | ----- |
+| Your progress (`PlayerStrip`) | `GET /api/users/me/coins`, `/api/users/me`, `/api/daily-login` | Signed in only: coins, level progress, and today's login reward with its claim button |
 | Daily challenges (`DailyChallenges`) | `GET /api/daily-challenges`, or `/me` when signed in | Each card takes its color from its game. A countdown shows when the next set arrives and the list reloads when it does. The day and the reset time come from the server |
 | Jump back in (`JumpBackIn`) | `localStorage` | The games played last on this device (`lib/recentGames.ts`), recorded when a human run starts. Per device, like the in-game best score, so it works for guests. Hidden until there is something to show |
 | Featured games | The catalog | Games with `featured = true`; the first three if none are marked |
 | Top scores (`LeaderboardPreview`) | `GET /api/leaderboards/{slug}` | The first page of the real leaderboard, so it shares its cache with the leaderboard page |
+| Recent achievements | `GET /api/users/me/achievements` | Signed in only, and only once there is one: the three latest unlocks |
 | Browse by category | The catalog | Only categories that have games; links to `/games?category=…` |
 
 Nothing on the hub names a game: every section renders from the catalog and the API. A new game shows up in all of them by being added to the catalog.
@@ -140,15 +149,17 @@ interface GameModule {
   slug: string                          // same slug as the backend catalog
   controls: { keyboard: boolean; touch: boolean }
   Component: ComponentType<GameProps>   // lazy(() => import('./SnakeGame'))
+  loadAi?: () => Promise<() => GameAI>  // () => import('./ai/snakeAi').then((ai) => ai.createSnakeAi)
 }
 
-interface GameProps {
+interface GameProps<Ai> {
   onGameStart(): void                    // a human run began
   onGameOver(result: GameResult): void   // it ended: { score, durationMs, metadata? }
+  ai?: () => Ai                          // the game's AI, for admins only; without it, no AI mode
 }
 ```
 
-`GameDetailPage` loads the definition by slug, applies its accent, and renders `module.Component` inside `Suspense`. Each game ships in its own bundle chunk. When a run ends, the game calls `onGameOver` and the platform takes care of score submission. A game knows nothing about accounts, XP or achievements.
+A module is declared with `defineGameModule`, which checks that its `loadAi` gives the AI its component expects. `GameDetailPage` loads the definition by slug, applies its accent, and renders `module.Component` inside `Suspense`, with `ai` from `useGameAi` (admins only, see [AI mode](#ai-mode)). Each game ships in its own bundle chunk. When a run ends, the game calls `onGameOver` and the platform takes care of score submission. A game knows nothing about accounts, XP or achievements.
 
 ### Inside a game module
 
@@ -213,7 +224,13 @@ interface GameAI<State, Action> {
 }
 ```
 
-There is no shared algorithm. The AIs are classic, deterministic game-playing algorithms that run locally in the browser. They use no external service, no backend call, and no machine-learning model.
+There is no shared algorithm. The AIs are classic, deterministic game-playing algorithms that run locally in the browser. They use no external service and no machine-learning model.
+
+**AI mode is for admins.** Because the AIs run in the browser, what is guarded is the AI's code itself:
+
+1. Nothing in a game imports its AI. Only the module's `loadAi` reaches it, with a dynamic `import()`, so the build puts each AI in a file of its own under `assets/ai/` (`vite.config.ts`). A test rejects any static import of an AI from game code.
+2. `useGameAi` (the platform) calls `loadAi` only for a session whose role is `ADMIN`, and only after `GET /api/ai/access` has answered `204`; a player gets `403`, a guest `401`. It passes the AI to the game as `ai`; without it the game shows no Human/AI switch.
+3. nginx serves `/assets/ai/*` only through `auth_request` to that same endpoint, with the request's own session cookie, so a player cannot download the AI by its address either. (The Vite dev server has no such check.)
 
 | Game | Algorithm | Key files |
 | ---- | --------- | --------- |
@@ -257,19 +274,21 @@ tcg/
   routes.tsx, lazyPages.ts   /tcg/* routes; the pages are one chunk fetched on first visit
   TcgLayout.tsx              purple accent, Packs / Collection / History navigation, packs left today
   api.ts                     types, query keys and hooks for /api/tcg (the player's own data under the user's keys)
+  accent.ts                  a card game's own color (`gameAccent`), purple when it has none
   pages/                     TcgHome, TcgGame, TcgSet, TcgPack, TcgCollection, TcgOpenings
   opening/                   openingMachine.ts (pure) and PackOpening.tsx (the staged reveal)
-  components/                CardFace and CardBack, CardTile, CardDetail, RarityBadge, CompletionBar, ...
+  components/                CardFace and CardBack, CardImage, PackArt, SetBanner, Attribution, CardTile,
+                             CardDetail, RarityBadge, CompletionBar, ...
   rarity.ts                  how each rarity tier looks
 ```
 
 | Route | Page |
 | ----- | ---- |
-| `/tcg` | The card games, and how complete the player's collection is |
-| `/tcg/:gameSlug` | A game's sets, each with the player's progress |
+| `/tcg` | "Choose your TCG": the card games, and how complete the player's collection is |
+| `/tcg/:gameSlug` | A game's sets, grouped by series, each with the player's progress |
 | `/tcg/:gameSlug/:setCode` | A set: its packs, and a gallery of its cards with owned and missing ones marked |
 | `/tcg/packs/:packId` | A pack: open it, and its odds in the open |
-| `/tcg/collection` | Owned cards with quantities, completion overall and per set (`?set=` narrows the cards) |
+| `/tcg/collection` | Owned cards with quantities, completion overall and per set (`?game=` and `?set=` narrow it) |
 | `/tcg/openings` | Opened packs, newest first, with the cards each gave |
 
 **Opening a pack** is a small state machine (`openingMachine.ts`) driven by the server's answer, a timer and the player:
@@ -284,6 +303,12 @@ The request goes out first and the animation starts only once the server has ans
 
 **Rarity tiers.** Each card game names its own rarities. The platform only understands the tier, 1 to 5, and styles by it (`rarity.ts`), so a new game with "Secret Rare" or "Super Rare" needs no frontend change.
 
+**Real cards on screen.**
+- *Each game in its own color.* A game's pages, buttons, completion bars and card backs take its `accentColor` (Pokémon yellow, One Piece red) through `--accent` and the readable `--accent-ink`; the card hub stays purple and the arcade stays cyan.
+- *Images as the sources serve them.* Grids use a card's `thumbnailUrl` when the source has one (TCGdex's small image), a closer look and the pack opening the full image. Image hosts now and then answer with a momentary error, so `CardImage` asks once more after 1.5 s and then shows the card's name instead of a broken image.
+- *No invented artwork.* The sources have no pack art, and the arcade does not make any up: `PackArt` draws a foil wrapper in the game's color around the set's real logo and one of its real cards (`SetBanner` does the same for sets). The card back is the arcade's own, never a publisher's.
+- *Attribution.* Every page of a game ends with its `attribution`: where the data and images come from, whose they are, and that the arcade is not affiliated with them. A pack's `oddsNote` sits above its odds table.
+
 ## Backend
 
 Packages are organized **by feature**, not by layer:
@@ -293,22 +318,31 @@ com.cyan.arcade
   CyanArcadeApplication
   common/
     error/      GlobalExceptionHandler, Problems, ApiException (+ NotFound/Conflict), ErrorCodes
-    security/   SecurityConfig, AuthenticatedUser (the principal), SpaCsrfTokenRequestHandler, GuestPlayer,
-                CorsProperties, ProblemDetailSecurityHandler
+    security/   SecurityConfig, AuthenticatedUser (the principal), Role (USER, ADMIN), SpaCsrfTokenRequestHandler,
+                GuestPlayer, CorsProperties, ProblemDetailSecurityHandler
     time/       TimeConfig (the server's UTC Clock)
     scheduling/ SchedulingConfig (switches every @Scheduled job on or off)
+    platform/   contracts between the platform and modules it must not know: PlayerActivity (event),
+                BonusPacks (extra card packs), ActivityStatistics (a module's numbers)
   game/         Game (entity), GameCategory, GameRepository, GameService, GameController, GameResponse (DTO), GameInfo
   user/         User (entity), Avatar, UserRepository, UserService, UserAccount, UserCredentials
   auth/         AuthConfig (password encoder, authentication manager), AuthService, AuthController,
-                LoginAttemptLimiter, request and response DTOs
-  progression/  Levels, XpRules, Achievement, AchievementCatalog, UnlockedAchievements, ProgressionService, Rewards,
-                BonusSource and Bonus (how other features add rewards)
+                LoginAttemptLimiter, AdminAccountSeeder, request and response DTOs
+  admin/        AdminController (/api/admin/**: overview, stats, user search, coin grants), AdminService,
+                AiAccessController (/api/ai/access): admins only
+  economy/      CoinService (the only way a balance changes), CoinStore, CoinTransactionType, CoinReference,
+                CoinController (/api/users/me/coins, /transactions)
+  dailylogin/   DailyLoginService, DailyLoginStore, DailyLoginProperties, DailyLoginController
+  shop/         ShopService, ShopStore, ItemHandler with PackItems (also BonusPacks) and CollectibleItems,
+                ShopController (/api/shop/**, /api/users/me/inventory)
+  progression/  Levels, XpRules, RewardProperties, Achievement, AchievementCatalog, UnlockedAchievements,
+                ProgressionService, Rewards, BonusSource and Bonus (how other features add rewards)
   challenge/    ChallengeTemplates, DailyChallengeGenerator, DailyChallengeScheduler, DailyChallengeStore,
-                DailyChallengeBonuses, DailyChallengeService, DailyChallengeController, DTOs
+                DailyChallengeBonuses, ActivityChallenges, DailyChallengeService, DailyChallengeController, DTOs
   score/        GameSession and Score (entities), their repositories, GameSessionService (writes), ScoreQueries (reads),
                 GameSessionController, AbandonedSessionCleaner, DTOs
   leaderboard/  LeaderboardService, LeaderboardController, LeaderboardResponse
-  profile/      ProfileService, ProfileController, ProfileResponse, GameHistoryResponse
+  profile/      ProfileService, ProfileController, ProfileResponse, StatsResponse, GameHistoryResponse
   tcg/          the card game module, see below
 ```
 
@@ -317,12 +351,16 @@ Inside a feature: `XController` → `XService` → `XRepository`. Entities, repo
 Dependencies point one way:
 
 ```text
-profile ──► user, score, progression, game
+profile ──► user, score, progression, game, economy, shop
 leaderboard ──► score, user, game
 score ──► progression, game
 auth ──► user
-challenge ──► progression, game
-progression ──► user
+challenge ──► progression, economy, game
+progression ──► user, economy
+dailylogin ──► economy, shop
+shop ──► economy, progression, user
+admin ──► user, score, economy, progression
+tcg ──► common only (talks to the platform through common.platform)
 ```
 
 `ArchitectureTests` (ArchUnit) enforces:
@@ -353,7 +391,11 @@ Features refer to each other by id, not by entity: `score` stores a `game_id` an
 - **Passwords** are hashed with bcrypt through Spring Security's delegating encoder, so each hash records its algorithm (`{bcrypt}…`) and the algorithm can be upgraded later without a migration. Hashes never leave `user` and `auth`: every other feature sees `UserAccount`, which has no password field at all. Request records that carry a password override `toString` so it cannot reach a log.
 - **Login gives nothing away.** An unknown username and a wrong password produce the same response, and an unknown username still costs a hash comparison, so neither the answer nor its timing reveals which usernames exist.
 - **Session fixation and CSRF.** Signing in changes the session id and replaces the CSRF token. Every request that changes something must send the token from the `XSRF-TOKEN` cookie in the `X-XSRF-TOKEN` header, which a page on another site cannot do. This applies to the public `POST` endpoints too.
-- **The principal is tiny.** The session holds `AuthenticatedUser(id, username)`, defined in `common.security` so any feature can ask who is calling without depending on `auth`.
+- **The principal is tiny.** The session holds `AuthenticatedUser(id, username, role)`, defined in `common.security` so any feature can ask who is calling without depending on `auth`.
+- **Roles.** Every account has exactly one `Role`: `USER` or `ADMIN`, stored in `users.role` and fixed when the account is created. Registering always makes a `USER`. At sign-in the role becomes the session's only authority (`ROLE_USER` or `ROLE_ADMIN`) and goes into the principal, so a role change takes effect at the next sign-in. Authorization always goes by the role, never by a username:
+  - **Admin-only endpoints** (`/api/admin/**`, `/api/ai/**`) need `ROLE_ADMIN` in `SecurityConfig`, and their controllers say so again with `@PreAuthorize("hasRole('ADMIN')")` (`@EnableMethodSecurity`), so neither a forgotten URL rule nor a new handler opens them. A player gets `403 FORBIDDEN`, a guest `401 UNAUTHORIZED`; a test calls the controllers without the URL rules to prove the second check.
+  - **Admin privileges inside a feature** are decided where the rule lives, from the principal's role: `PackOpeningService.hasDailyLimit(player)` is the one place that exempts admins from the daily pack allowance; nothing else about opening a pack differs.
+- **The admin account** is created at startup by `AdminAccountSeeder` when no account has the configured username (`ADMIN_USERNAME`, `ADMIN_PASSWORD`; development defaults `admin` / `11112002`; `ADMIN_SEED_ENABLED=false` to skip). The password goes through the same encoder as every other one, and is never logged. The seed is idempotent: an existing account is never changed or recreated, and a player who registered the admin name first is not promoted (a warning is logged instead).
 - **Only your own data.** Every profile endpoint is under `/api/users/me` and takes the player from the session. There is no endpoint that accepts a user id, so there is nothing to get wrong about who may read whose data. `PATCH /api/users/me` accepts one field, the avatar; XP, level and username cannot be set by a client.
 - **Scores and ownership.** A run belongs to whoever started it: the signed-in player, or else the guest. Only that signed-in player can finish their session (`403` for anyone else). On leaderboards a signed-in caller is matched by account only, and a guest only against guests' scores, so people sharing a browser never see each other's scores as their own.
 - **Login attempts are limited.** `LoginAttemptLimiter` counts failed logins per username and client address. After 5 within 5 minutes (configurable), further attempts for that pair are refused with `429 TOO_MANY_LOGIN_ATTEMPTS` **before the password is checked**, so a guesser learns nothing and costs no hashing; a successful login clears the count. Counting per pair keeps someone from locking a player out from another address. The counts are in memory, bounded to 10,000 pairs, and lost on restart: a speed bump, not a vault door. Behind the nginx proxy every request comes from the proxy's address, so there the limit is effectively per username.
@@ -364,21 +406,22 @@ Features refer to each other by id, not by entity: `score` stores a `game_id` an
 `progression` is the only place that knows any reward rule. `GameSessionService` describes a finished run to it as a `CompletedRun` (who, which game, the score, the numbers the game reported, whether it was a personal best, how many games the player has now finished) and gets back `Rewards`. Controllers and games contain no reward logic.
 
 - **XP** (`XpRules`): 10 for finishing a game, 25 more for beating your own best in that game, plus the XP of any achievement unlocked.
+- **Coins** (`RewardProperties`, configurable): 5 for finishing a game (the first 40 games of a day only, so very short runs cannot be farmed), 15 more for a best, plus each achievement's and bonus's coins. Progression decides them and pays them through `CoinService`, each with a reference to what it rewards (the session, the achievement code, the challenge), so a repeat pays nothing.
 - **Levels** (`Levels`) are derived from XP and never stored: level `n` starts at `100 · n · (n − 1) / 2` XP, so each level takes 100 XP more than the last.
-- **Achievements** are data: a code, a name, an XP value and a rule, which is a function of one `CompletedRun`. `AchievementCatalog` lists them, and most are one line:
+- **Achievements** are data: a code, a name, a reward (XP and coins) and a rule, which is a function of one `CompletedRun`. `AchievementCatalog` lists them, and most are one line:
 
   ```java
-  Achievement.forDetail("TETRIS_40_LINES", "Marathon", "Clear 40 lines in one game of Tetris.", 250, "tetris", "lines", 40)
+  Achievement.forDetail("TETRIS_40_LINES", "Marathon", "Clear 40 lines in one game of Tetris.", Reward.of(250, 400), "tetris", "lines", 40)
   ```
 
   Adding an achievement means adding a line there. Unlocking, XP, the API and the profile page all work from the list.
 - **Once only.** Unlocking is an `INSERT … ON CONFLICT DO NOTHING` on `(user_id, achievement_code)`, and XP is added with a single `UPDATE`, so two runs finishing at the same moment cannot award an achievement twice or lose XP.
-- **Same transaction.** The score, the XP and the achievements are written together when a session is finished. What a run earned is stored on its score row, which is how the game history can show it later.
+- **Same transaction.** The score, the XP, the coins and the achievements are written together when a session is finished. What a run earned is stored on its score row, which is how the game history can show it later.
 - Guests get their score recorded and earn nothing.
 
 ### Daily challenges
 
-Each day every game in the catalog has one challenge. A challenge is met by a single run: finish a game (`PLAY`), reach a score (`SCORE`), or reach a value in a number the game reports (`DETAIL`, e.g. `lines`).
+Each day every game in the catalog has one challenge, and so does every **activity** (something done outside the games, such as opening card packs). A game's challenge is met by a single run: finish a game (`PLAY`), reach a score (`SCORE`), or reach a value in a number the game reports (`DETAIL`, e.g. `lines`). An activity's is met by doing it `target` times in the day (`COUNT`). Each pays XP and coins.
 
 - **Templates are data.** `ChallengeTemplates` lists what each game can be given, one line per challenge, plus challenges that fit any game. A game with no lines of its own still gets one every day.
 - **Rotation is deterministic.** A game's templates take turns by date, so a day always produces the same set, every template comes around, and tomorrow's is never today's.
@@ -386,9 +429,24 @@ Each day every game in the catalog has one challenge. A challenge is met by a si
 - **Rows are snapshots.** A generated challenge stores its own title, description, goal and reward, so past days stay meaningful when templates change.
 - **The server's date, always.** "Today" is `LocalDate.now(clock)` with a UTC `Clock` bean. No endpoint accepts a date, and a run counts for the day on which it finishes.
 - **Completion goes through progression.** `progression` defines a small interface, `BonusSource`, and asks every implementation what a finished run earned. `DailyChallengeBonuses` answers with today's challenges for that game that the run met and the player had not completed. So XP is still granted in exactly one place, in the same transaction as the score, and `progression` does not depend on `challenge`.
-- **Once only.** Completing is an `INSERT … ON CONFLICT DO NOTHING` on `(user_id, daily_challenge_id)`.
+- **Once only.** Completing is an `INSERT … ON CONFLICT DO NOTHING` on `(user_id, daily_challenge_id)`, and the coins refer to the challenge.
+- **Activities are events.** A module reports what a player did as a `PlayerActivity` (defined in `common.platform`), published in its own transaction; the card game publishes `TCG_PACK_OPENED` for every opening. `ActivityChallenges` listens, adds one to the player's `daily_challenge_progress` for today's challenge of that activity (an atomic upsert), and on reaching the target completes it and has `ProgressionService.award` pay it, all in the opening's transaction. The module never learns that challenges exist, and a new activity is a new event type plus a line in `ChallengeTemplates`.
 
 Rules that depend on a game's own numbers (`lines`, `highestTile`) use the `details` the client reports. They are bounded and validated but not verified, the same trust level as the score itself.
+
+### The economy: coins, the daily login reward, the shop
+
+Coins are a platform service, not a feature of any game: `economy.CoinService` is the only code that changes a balance, and every feature that pays or charges goes through it. There is no "Snake coins" or "Tetris coins" code: a new game earns coins by finishing sessions, like every game.
+
+- **A ledger with a balance beside it.** `coin_transactions` holds every change (signed `amount`, `balance_after`, `type`, `reference_type`/`reference_id`, `description`, `created_by` for admin grants); `user_wallets` holds the balance for cheap reads. Both are written in the caller's transaction, so they cannot disagree.
+- **One change at a time per player.** Every change first locks the player's wallet row (`INSERT … ON CONFLICT DO NOTHING`, then `SELECT … FOR UPDATE`). Under that lock it checks the new balance (never below zero, else `409 INSUFFICIENT_COINS` and nothing changes), inserts the ledger row and sets the balance. A `CHECK (balance >= 0)` backs it up in the database.
+- **Paid once.** A unique index on `(user_id, type, reference_id)` lets a player have one transaction of each type per thing: a game session, an achievement code, a challenge id, a day, a purchase id, an admin's request id. A second credit for the same reference returns nothing and pays nothing, whoever asks and however often.
+- **The server sets every amount**, from configuration and data: `RewardProperties`, the achievement catalog, the challenge rows, `DailyLoginProperties`, the shop's prices. The only amount a request carries is an admin's grant, which is validated (1 to 100,000), admin-only, and recorded with the admin.
+- **The daily login reward** (`dailylogin`): one `daily_logins` row per player and UTC date, whose primary key refuses a second claim (`409 DAILY_LOGIN_ALREADY_CLAIMED`), even at the same moment. The streak is yesterday's plus one, or one after a missed day; the coins come from a configurable list (50 … 200 over 7 days), and the last day adds a shop item (an Extra Pack) through `ShopService.give`.
+- **The shop** (`shop`): items are rows in `shop_items` (type, price, units per purchase, how many one may own, the level that unlocks it). A purchase locks the wallet, finds an earlier purchase with the same client request id (and answers with it, `repeated`), checks level and ownership, records the purchase, debits the price and calls the `ItemHandler` for the item's type, all in one transaction. `PackItems` keeps packs as a count in `user_inventory` and is the platform's `BonusPacks`; `CollectibleItems` handles badges, titles and cosmetics (one owned, the first one worn).
+- **Extra packs reach the card game through `common.platform.BonusPacks`.** `PackOpeningService` asks for one only when a player's daily allowance is used up, inside the opening's transaction and its per-player lock, so a failed opening keeps the pack. Admins have no allowance and never use one. The card game does not know the shop exists.
+- **Statistics** come from the features that own them: `ScoreQueries` (per game: games, best, average, play time, last played, one `GROUP BY` over the player's scores through the `(user_id, game_id)` index), `CoinService` (balance, coins earned), progression (achievements) and every `common.platform.ActivityStatistics` bean (the card game's packs opened and cards collected). The profile asks for them on its own endpoint, not on every page.
+- **The admin dashboard** (`AdminService`) counts users, active users (a finished game or a coin change in the last 7 days), games, coins in circulation and the modules' numbers, all time and since midnight UTC. Each is one aggregate, the "today" ones through indexes on `created_at`/`opened_at`; nothing is cached or precomputed.
 
 ### Scheduled jobs
 
@@ -401,7 +459,7 @@ All jobs are plain in-process `@Scheduled` methods, switched on in one place (`c
 
 ## The card game module (TCG)
 
-`com.cyan.arcade.tcg` is a module of its own. **Nothing in the platform knows it exists** (enforced by ArchUnit), and the generic game system has no card concepts: a card game is not a row in `games`, and opening a pack is not a score. The module uses only `common` (errors, the signed-in player, the clock); its tables refer to `users` and nothing else outside `tcg_`.
+`com.cyan.arcade.tcg` is a module of its own. **Nothing in the platform knows it exists** (enforced by ArchUnit), and the generic game system has no card concepts: a card game is not a row in `games`, and opening a pack is not a score. The module uses only `common` (errors, the signed-in player, the clock); its tables refer to `users` and nothing else outside `tcg_`. It meets the platform only through `common.platform`: it publishes a `PlayerActivity` for every opened pack (daily challenges count them), asks `BonusPacks` for an extra pack once a player's allowance is gone (the shop sells them), and implements `ActivityStatistics` (`tcg.stats.TcgStatistics`: packs opened, cards collected) for the profile and the admin dashboard.
 
 ```text
 tcg/
@@ -410,15 +468,21 @@ tcg/
   card/        TcgCardService, CardResponse     cards with their set, game, rarity and metadata
   pack/        TcgPackService, PackBlueprint    packs, their odds and their card pools
   opening/     PackOpeningService, PackRoller   opening packs, the daily allowance, the history
+  stats/       TcgStatistics                    the module's numbers, for the platform
   collection/  CollectionService                who owns how many of which card
   dataimport/  TcgDatasetImporter, TcgDatasetImportRunner, TcgDataset   bringing card games in
+               TcgSource, SourceConfig, SourceHttp                     what every source shares
+    pokemon/   PokemonSource, TcgdexClient, PokemonDatasetMapper       the Pokémon TCG, from TCGdex
+    onepiece/  OnePieceSource, OptcgApiClient, OnePieceDatasetMapper   the One Piece Card Game, from OPTCG API
 ```
 
 The parts depend on each other one way (`set → game`, `card → set`, `pack → set`, `opening → pack, card, collection`, `collection → card`), and `dataimport` is the only writer of the catalog tables.
 
-**Several card games, not one.** Everything is keyed by a game: rarities, sets, cards and packs belong to one, and the database enforces it (a card's set and rarity must be of the card's own game, through composite foreign keys). A game names its own rarities and gives each a tier from 1 to 5, the one thing the platform interprets. A card's `metadata` is a JSON object the platform stores and returns untouched, so each game can carry its own fields (type, HP, flavor text, cost, ...).
+**Several card games, not one.** Everything is keyed by a game: rarities, sets, cards and packs belong to one, and the database enforces it (a card's set and rarity must be of the card's own game, through composite foreign keys). A game names its own rarities and gives each a tier from 1 to 5, the one thing the platform interprets. A card's `metadata` is a JSON object the platform stores and returns untouched, so each game carries its own fields (a Pokémon's HP and types, a One Piece card's cost, power and printed rarity) without a column for any of them.
 
-**A pack** has a card pool (`tcg_pack_cards`) and rarity rules (`tcg_pack_slot_odds`): one row per slot and rarity with a weight, for example slot 5 = rare 75, epic 20, legendary 5. The odds are public (`GET /api/tcg/packs/{id}`), and the importer refuses a pack that promises a rarity its pool does not contain, so the published odds are the real ones.
+**Real cards, without assumptions about any game.** A card is identified by its source's `external_id` (`sv01-001`, `OP01-120_p1`), unique within its game; its printed `card_number` is not unique, because real sets print alternate arts under the same number. A set lists its cards in the source's order (`display_order`: "10" would sort before "2" as text). A card may have a smaller `thumbnail_url` besides its `image_url`; a set may have a logo (`image_url`), a `series` and a `cover_image_url` (one of its rarest cards); a game has an `accent_color` and an `attribution`. All of these are optional, so a game whose source lacks one still fits.
+
+**A pack** has a card pool (`tcg_pack_cards`) and rarity rules (`tcg_pack_slot_odds`): one row per slot and rarity with a weight, for example the last slot of a Pokémon booster = rare 700, double rare 210, ultra rare 75. Every game brings its own layout: how many cards, which slots, which rarities each slot can be (special and alternate-art slots included) and from which pool. The odds are public (`GET /api/tcg/packs/{id}`) with an `odds_note` saying where they come from, and the importer refuses a pack that promises a rarity its pool does not contain, so the published odds are the ones the server uses. Neither Pokémon nor One Piece publishes official pull rates, so their odds are labelled as **simulator probabilities**.
 
 ### Opening a pack
 
@@ -427,11 +491,13 @@ React                               PackOpeningService.open (one transaction)
   POST /api/tcg/packs/{id}/open ──►   who: the signed-in player, from the session (401 otherwise)
   (no body)                           which: the pack's blueprint (404 unknown, 409 withdrawn or empty)
                                       lock: this player's openings, one at a time
-                                      allowance: packs opened today < limit (429 otherwise)
+                                      allowance: packs opened today < limit, or else one
+                                                 extra pack used up (429 when neither)
                                       roll: PackRoller picks the cards with a SecureRandom
                                       save: the opening row
                                       collect: +1 copy per card, new or duplicate
                                       save: the opening's cards, each marked new or not
+                                      publish: PlayerActivity (TCG_PACK_OPENED), counted by challenges
            ◄── 201 { opening, allowance }
   reveal animation
 ```
@@ -448,18 +514,31 @@ The platform features use JPA entities. The card module reads and writes with `J
 
 ### Importing card games
 
-Card data is never fetched from elsewhere while the application runs. It goes `source → adapter → dataset file → import → PostgreSQL`, and the application works from its own database.
+Card data is never fetched while players use the arcade. It goes
 
-- **One format**, `TcgDataset`: a game, its rarities, its sets with their cards and packs, the packs' slots (`{"count": 3, "odds": {"common": 100}}`) and, optionally, their card pools (by card number; left out, a pack draws from its whole set).
-- **The job** (`TcgDatasetImportRunner`) runs at startup, before requests are served: first the datasets bundled in `classpath:tcg/datasets/*.json`, then any files in `app.tcg.import.files`.
-- **Validated as a whole first**: Bean Validation for the shape, then the cross-references (unknown rarities, duplicate numbers, pool cards not in the set, odds for a rarity the pool cannot deliver). Every problem is reported at once, and a broken dataset stops the startup instead of half-stocking the arcade.
-- **Idempotent**: upserts on natural keys (game slug, set code, card number, pack code). Importing again changes nothing; a corrected dataset updates in place and keeps every id, so collections and histories stay valid. Nothing is deleted: a card dropped from a dataset stays in the catalog and only leaves the pools.
-- **The bundled game** and all its art are generated by `tools/tcg/build-cyan-critters.mjs`. The art is original SVG, drawn from shapes and colors.
+```text
+external source ──► TcgSource (client + mapper) ──► TcgDataset ──► TcgDatasetImporter ──► PostgreSQL ──► the arcade
+```
+
+and opening packs, browsing cards and collections only read PostgreSQL. Only card images are loaded from elsewhere, by the browser, from the sources' image hosts.
+
+| Source | Game | How it is read | Requests per import |
+| ------ | ---- | -------------- | ------------------- |
+| `pokemon`: [TCGdex](https://tcgdex.dev) GraphQL API (open source, no key) | Pokémon TCG | A set's details, then its cards with their rarities, by GraphQL | 2 per set (50) |
+| `one-piece`: [OPTCG API](https://optcgapi.com) REST API (fan-run, no key) | One Piece Card Game | The list of sets, then each set's cards | 1 + 1 per set (21) |
+
+- **A source** (`TcgSource`) is a client for the API and a pure mapper from its answers to the one format, `TcgDataset`. The mappers are tested on recorded answers, without the network. `SourceHttp` retries a 5xx or a broken connection a few times with a growing pause; a 4xx stops at once.
+- **What to take is configuration**, not code: `tcg/sources/pokemon.json` and `one-piece.json` list the sets, the game's rarities with the source's names for them and their tiers, the pack layouts (`packProfiles`), and, for One Piece, which rarity an alternate art gets by its kind of print (`variantRarities`: SP, Manga, parallel of a secret rare, ...). A set's pack only keeps the odds for rarities the set has. A rarity the configuration does not know stops the import, listing it: a new kind of card needs a decision on its tier and odds, not a guess.
+- **One format**, `TcgDataset`: a game, its rarities, its sets with their cards and packs, the packs' slots (`{"count": 3, "odds": {"common": 100}}`) and, optionally, their card pools (by card key; left out, a pack draws from its whole set). A hand-written dataset file can be imported too (`app.tcg.import.files`), for a game with no API.
+- **The job** (`TcgDatasetImportRunner`) does nothing on an ordinary start. `app.tcg.import.sources` names the sources to run; the `import-tcg` profile sets it to `pokemon,one-piece`, runs on a port of its own, and exits when done (`docker compose run --rm backend --spring.profiles.active=import-tcg`, or `./mvnw spring-boot:run -Dspring-boot.run.profiles=import-tcg`). There is no import endpoint.
+- **Validated as a whole first**: Bean Validation for the shape, then the cross-references (unknown rarities, duplicate cards or external ids, pool cards not in the set, odds for a rarity the pool cannot deliver). Every problem is reported at once, and a broken dataset is not written at all.
+- **Idempotent**: one transaction per game, upserts on stable keys (game slug, set code, card external id, pack code). Importing again creates no duplicates and reports `0 new`; a newer source adds its new cards and updates the others in place, keeping every id, so collections and histories stay valid. A card a source moves to another set is moved, not copied. Nothing is deleted: a card dropped by a source stays in the catalog and only leaves the pools.
+- **Real data's quirks** are handled in the mappers: TCGdex numbers sort as numbers; OPTCG API's names carry the kind of print ("Shanks (Parallel) (Manga)") and sometimes a disambiguator ("Rob Lucci (092)"), which become the variant and are dropped from the name; a print it lists twice under one id gets the kind of print added to the id; a reprint listed in two sets belongs to the set its number comes from.
 
 Other conventions:
 
 - **Errors**: controllers just throw. `GlobalExceptionHandler` maps `ApiException` subclasses, validation failures, framework errors (404, 405, malformed JSON), and unexpected exceptions to one problem-detail shape. Unexpected errors are logged and returned without internal details. The security filter chain uses the same shape for 401 and 403.
-- **Security**: HTTP Basic and form login are off; the app's own JSON endpoints sign players in. Everything is denied by default, and public endpoints are allow-listed in `SecurityConfig`: health, info, `GET /api/games/**`, `GET /api/leaderboards/**`, `GET /api/daily-challenges`, `GET /api/auth/session`, the card catalog (`GET /api/tcg/games`, `/sets`, `/cards`, `/packs` and single ones), registering, logging in and out, and the two game-session `POST` endpoints.
+- **Security**: HTTP Basic and form login are off; the app's own JSON endpoints sign players in. Everything is denied by default, and public endpoints are allow-listed in `SecurityConfig`: health, info, `GET /api/games/**`, `GET /api/leaderboards/**`, `GET /api/daily-challenges`, `GET /api/auth/session`, the card catalog (`GET /api/tcg/games`, `/sets`, `/cards`, `/packs` and single ones), registering, logging in and out, and the two game-session `POST` endpoints. Everything under `/api/admin/**` and `/api/ai/**` needs `ROLE_ADMIN` (see [Accounts and authentication](#accounts-and-authentication)); everything else needs a signed-in player of either role.
 - **CORS**: allowed origins come from `app.cors.allowed-origins` (`CORS_ALLOWED_ORIGINS`), defaulting to the Vite dev server.
 - **Configuration**: `application.yml` with environment-variable overrides; every setting under `app.*` is documented there and in the README. `open-in-view` is off. Hibernate runs with `ddl-auto: validate`, so Flyway owns the schema.
 - **Time**: everything that depends on "now" or "today" takes it from one UTC `Clock` bean (`common.time`), never from the request, so tests can control it.
@@ -484,11 +563,17 @@ Other conventions:
 | `V8__create_daily_challenges.sql` | `daily_challenges`, `daily_challenge_completions` |
 | `V9__create_tcg.sql` | The card game module: `tcg_games`, `tcg_rarities`, `tcg_sets`, `tcg_cards`, `tcg_packs`, `tcg_pack_cards`, `tcg_pack_slot_odds`, `tcg_pack_openings`, `tcg_pack_opening_cards`, `tcg_user_cards` |
 | `V10__session_cleanup_index_and_accent_contrast.sql` | A partial index on unfinished game sessions for the cleanup job; Tetris's accent one shade darker, for contrast |
+| `V12__add_user_roles.sql` | `users.role` (`USER` or `ADMIN`, checked); existing accounts become `USER`. The admin account itself is seeded by the application |
+| `V13__create_economy.sql` | `user_wallets`, `coin_transactions` (with the unique reference index), `daily_logins`, `shop_items` (seeded with packs, badges and titles), `user_inventory`, `purchases`; `daily_challenges.coin_reward` and activity challenges (`activity`, goal `COUNT`, nullable `game_id`), `daily_challenge_progress`; indexes on `created_at`/`opened_at` for the dashboard's "today" figures. Only adds: existing rows keep their meaning |
+| `V11__real_card_games.sql` | Removes the old fictional demo card game and everything players did with it; adds external ids and display order to cards (the printed number is no longer unique), thumbnails, set series, logos and covers, a game's accent color and attribution, a pack's odds note; indexes for a set's cards in order and for cards by number |
 
 ```text
 games 1 ──< game_sessions 1 ──0..1 scores >── 1 games
 users 1 ──< game_sessions        users 1 ──< scores        users 1 ──< user_achievements
 games 1 ──< daily_challenges 1 ──< daily_challenge_completions >── 1 users
+                daily_challenges 1 ──< daily_challenge_progress >── 1 users
+users 1 ──0..1 user_wallets      users 1 ──< coin_transactions      users 1 ──< daily_logins
+shop_items 1 ──< user_inventory >── 1 users      shop_items 1 ──< purchases >── 1 users
 
 tcg_games 1 ──< tcg_rarities, tcg_sets 1 ──< tcg_cards, tcg_packs
 tcg_packs 1 ──< tcg_pack_cards >── 1 tcg_cards           (the pool)
@@ -497,13 +582,17 @@ users 1 ──< tcg_pack_openings 1 ──< tcg_pack_opening_cards >── 1 tcg
 users 1 ──< tcg_user_cards >── 1 tcg_cards               (the collection)
 ```
 
-- `users`: `username` (3 to 20 letters, digits or underscores, enforced by a check constraint and unique through an index on `lower(username)`), `password_hash`, `avatar`, `xp`, `created_at`. The level is not a column; it is computed from `xp`.
+- `users`: `username` (3 to 20 letters, digits or underscores, enforced by a check constraint and unique through an index on `lower(username)`), `password_hash`, `avatar`, `role` (`USER` or `ADMIN`), `xp`, `created_at`. The level is not a column; it is computed from `xp`.
 - `game_sessions`: UUID id, `game_id`, `user_id` (the account, nullable), `player_id` (the guest, nullable), `started_at`, `finished_at` (`NULL` while the run is open).
 - `scores`: one row per finished session (`game_session_id` is unique), plus `game_id`, `user_id`, `player_id`, `score`, `duration_ms`, `xp_awarded`, `personal_best`, `created_at`. The index on `(game_id, score DESC, created_at, id)` matches the leaderboard order, and two partial indexes on `user_id` serve the game history and "my best".
 - `user_achievements`: `(user_id, achievement_code)` as the primary key, plus `unlocked_at`. The achievements themselves are defined in code because each one has a rule, so the code is a plain string rather than a foreign key.
 - `daily_challenges`: `challenge_date` (a UTC date), `game_id`, `title`, `description`, `goal` (`PLAY`, `SCORE` or `DETAIL`), `detail` (which reported number, for `DETAIL`), `target`, `xp_reward`. Unique on `(challenge_date, game_id)`: one challenge per game per day.
-- `daily_challenge_completions`: `(user_id, daily_challenge_id)` as the primary key, plus `completed_at`.
-- `tcg_cards`: `card_number` (text, unique within its set), `name`, `image_url`, `metadata` (`jsonb`, must be an object), and `game_id`, `set_id`, `rarity_id`, where composite foreign keys `(set_id, game_id)` and `(rarity_id, game_id)` keep a card inside its own game.
+- `daily_challenge_completions`: `(user_id, daily_challenge_id)` as the primary key, plus `completed_at`. Since V13 a challenge is about a game (`game_id`) or an activity (`activity`, `activity_name`, goal `COUNT`, unique per day), never both, and pays `coin_reward` too; `daily_challenge_progress` counts a player's activity towards it.
+- `user_wallets`: one row per player with coins, `balance >= 0`. `coin_transactions`: the ledger (`amount <> 0`, `balance_after >= 0`, `type` checked against the seven kinds, a reference type and id given together or not at all), unique on `(user_id, type, reference_id)`, indexed by `(user_id, created_at DESC, id DESC)` and `created_at`.
+- `daily_logins`: `(user_id, login_date)` as the primary key, `streak`, `coins`, `claimed_at`.
+- `shop_items`: `code` (unique), `type` (`PACK`, `BADGE`, `TITLE`, `COSMETIC`), `price > 0`, `quantity`, `max_owned`, `min_level`, `icon`, `active`. `user_inventory`: `(user_id, item_id)`, `quantity >= 0`, `equipped`. `purchases`: price and quantity at the time, unique on `(user_id, request_id)`.
+- `tcg_cards`: `external_id` (unique within its game: the source's id), `card_number` (text, printed on the card, shared by alternate arts), `name`, `image_url`, `thumbnail_url`, `display_order`, `metadata` (`jsonb`, must be an object), and `game_id`, `set_id`, `rarity_id`, where composite foreign keys `(set_id, game_id)` and `(rarity_id, game_id)` keep a card inside its own game. Indexed by `(game_id, external_id)` (the import's key), `(set_id, display_order, id)` (a set's cards in order), `(game_id, card_number)` and `rarity_id`.
+- `tcg_sets`, `tcg_games`, `tcg_packs`: a set's `external_id` (unique within its game), `series`, logo and `cover_image_url`; a game's `accent_color` (`#rrggbb`) and `attribution`; a pack's `odds_note`. Their images are optional.
 - `tcg_user_cards`: `(user_id, card_id)` as the primary key, `quantity > 0`, first and last time obtained. `tcg_pack_openings` and `tcg_pack_opening_cards` record every opening and what it gave, with `was_new` per card.
 - Indexes follow the queries: every foreign key that is looked up has one, and the ones that are only ever checked on insert (a pack opening's `pack_id`, an opening card's `card_id`) deliberately do not.
 - A run has one owner: `user_id` for a signed-in player, otherwise `player_id` for a guest, otherwise neither. Scores made as a guest stay guest scores; they are not moved to an account created later.
@@ -516,15 +605,19 @@ users 1 ──< tcg_user_cards >── 1 tcg_cards               (the collection
 ```text
 browser ──► frontend (nginx, :3000) ──/api/──► backend (Spring Boot, :8080) ──► postgres (:5432)
                  │                                  ▲
-                 └── the built SPA, thumbnails,     └── 127.0.0.1:8080 for local tools only
-                     card art (static files)            postgres on 127.0.0.1:5433 likewise
+                 └── the built SPA and game         └── 127.0.0.1:8080 for local tools only
+                     thumbnails (static files)          postgres on 127.0.0.1:5433 likewise
+
+docker compose run --rm backend --spring.profiles.active=import-tcg
+                     a one-off backend that imports the card games into postgres and exits
 ```
 
 - **One origin.** nginx serves the app and proxies `/api/` to the backend, so the browser never makes a cross-origin request and the session cookie stays `SameSite=Lax`. It forwards `Host` with its port (`$http_host`): without the port, Spring would see the site's own `POST`s as cross-origin and refuse them.
 - **Start order by health.** PostgreSQL has a `pg_isready` health check, the backend's image checks `/actuator/health/readiness`, and each service waits for the one before it to be healthy. All three restart unless stopped.
 - **Only the app is public.** The backend and the database are published on `127.0.0.1` only, for development tools. Through nginx, `/actuator/health` is reachable and every other Actuator path returns 404.
-- **Security headers** on everything nginx serves (`frontend/nginx/security-headers.conf`): a Content Security Policy that allows scripts, styles, fonts and requests from the site only (images also from HTTPS hosts, for card games whose art is hosted elsewhere; inline styles because React sets per-element styles such as a game's accent color), `X-Content-Type-Options`, `X-Frame-Options: DENY`, a referrer policy and a permissions policy. API responses get theirs from Spring Security.
-- **Caching**: fingerprinted build output for a year, thumbnails and card art for a day, and `index.html` never, so a new release is picked up at once.
+- **Security headers** on everything nginx serves (`frontend/nginx/security-headers.conf`): a Content Security Policy that allows scripts, styles, fonts and requests from the site only (images also from HTTPS hosts, for the card images served by TCGdex and OPTCG API; inline styles because React sets per-element styles such as a game's accent color), `X-Content-Type-Options`, `X-Frame-Options: DENY`, a referrer policy and a permissions policy. API responses get theirs from Spring Security.
+- **AI code for admins only.** `/assets/ai/*` (the games' AIs) is served only when an `auth_request` subrequest to the backend's `GET /api/ai/access`, carrying the browser's own cookies, answers `204`; a player gets the backend's `403`, a guest its `401`. Those files are cached `private`, never by a shared cache.
+- **Caching**: fingerprinted build output for a year, thumbnails for a day, and `index.html` never, so a new release is picked up at once. Card images are cached by the browser as their hosts say (a year, for TCGdex).
 - **Images**: the backend is built with the Maven Wrapper in a JDK image and runs as a non-root user in a JRE image; the frontend is built with Node and served by nginx.
 - Settings come from `.env` (see `.env.example`), each with a working default.
 
@@ -538,7 +631,7 @@ Nothing here blocks it. A later real-time feature could add a WebSocket endpoint
 
 1. **Catalog**: add a Flyway migration that inserts the game's row (slug, name, description, category, thumbnail URL, accent color, display order).
 2. **Artwork**: add `frontend/public/thumbnails/minesweeper.svg`.
-3. **Implementation**: create `frontend/src/games/minesweeper/` with a pure engine in `engine/` plus tests, and a `MinesweeperGame.tsx` that wraps it in `GameShell` and calls `onGameOver`. Add an `ai/` folder implementing `GameAI` if the game should have an AI mode.
+3. **Implementation**: create `frontend/src/games/minesweeper/` with a pure engine in `engine/` plus tests, and a `MinesweeperGame.tsx` that wraps it in `GameShell` and calls `onGameOver`. For an AI mode, add an `ai/` folder implementing `GameAI`, take it from the `ai` prop (never import it), and declare `loadAi` in the module: the platform does the rest, for admins only.
 4. **Register**: export its `GameModule` from `games/minesweeper/index.ts` and add it to `gameModules` in `games/registry.ts`.
 
 After steps 1 and 2 the game already appears in the hub as "coming soon". After step 4 it is playable, its scores are saved, it has a leaderboard, finishing it earns XP and counts towards the games-played achievements, and it gets a daily challenge ("Finish a game of …"), all without further work.
@@ -548,6 +641,10 @@ After steps 1 and 2 the game already appears in the hub as "coming soon". After 
 
 **Server-backed game**: follow the card game module (`com.cyan.arcade.tcg` and `frontend/src/tcg`): a backend package of its own under `/api/<name>/**` with `<name>_`-prefixed tables, using only `common`, and a frontend module that the app mounts as one route object. Platform features must not depend on it.
 
-**Another card game** needs no code at all: write its dataset (or an adapter that produces one) and import it, with `TCG_IMPORT_FILES` or by adding it to `tcg/datasets/`. Its card art can be served from anywhere over HTTPS.
+**Another card game** (say, Lorcana) needs no change to the tables, the API or the pages:
+
+1. **Source**: a package under `tcg/dataimport/` with a client for its API and a pure mapper to `TcgDataset`, as a `TcgSource` component with its own id. Test the mapper on recorded answers.
+2. **Configuration**: `tcg/sources/<game>.json` with its sets, rarities and tiers, pack layouts (marked as simulator odds unless the publisher gives real ones), accent color and attribution; and its URL and configuration path under `app.tcg.sources`.
+3. **Import** it with `TCG_IMPORT_SOURCES=<id>`. A game with no API can instead be written as a dataset file and imported with `TCG_IMPORT_FILES`.
 
 You don't edit existing games or platform internals in either case.

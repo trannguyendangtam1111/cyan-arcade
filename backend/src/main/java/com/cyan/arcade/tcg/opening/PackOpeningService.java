@@ -13,6 +13,10 @@ import java.util.random.RandomGenerator;
 import java.util.stream.Collectors;
 
 import com.cyan.arcade.common.error.ApiException;
+import com.cyan.arcade.common.platform.BonusPacks;
+import com.cyan.arcade.common.platform.PlayerActivity;
+import com.cyan.arcade.common.security.AuthenticatedUser;
+import com.cyan.arcade.common.security.Role;
 import com.cyan.arcade.tcg.card.CardResponse;
 import com.cyan.arcade.tcg.card.TcgCardService;
 import com.cyan.arcade.tcg.collection.CollectionService;
@@ -25,6 +29,9 @@ import com.cyan.arcade.tcg.pack.PackBlueprint;
 import com.cyan.arcade.tcg.pack.PackRef;
 import com.cyan.arcade.tcg.pack.TcgPackService;
 
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -53,16 +60,34 @@ public class PackOpeningService {
 
 	private final OpeningProperties properties;
 
+	private final BonusPacks bonusPacks;
+
+	private final ApplicationEventPublisher events;
+
 	private final Clock clock;
 
+	/**
+	 * @param bonusPacks extra packs the platform gives players beyond the allowance, if it gives any
+	 */
+	@Autowired
 	PackOpeningService(TcgPackService packs, TcgCardService cards, CollectionService collections,
-			PackOpeningStore openings, RandomGenerator random, OpeningProperties properties, Clock clock) {
+			PackOpeningStore openings, RandomGenerator random, OpeningProperties properties,
+			ObjectProvider<BonusPacks> bonusPacks, ApplicationEventPublisher events, Clock clock) {
+		this(packs, cards, collections, openings, random, properties, bonusPacks.getIfAvailable(() -> BonusPacks.NONE),
+				events, clock);
+	}
+
+	PackOpeningService(TcgPackService packs, TcgCardService cards, CollectionService collections,
+			PackOpeningStore openings, RandomGenerator random, OpeningProperties properties, BonusPacks bonusPacks,
+			ApplicationEventPublisher events, Clock clock) {
 		this.packs = packs;
 		this.cards = cards;
 		this.collections = collections;
 		this.openings = openings;
 		this.random = random;
 		this.properties = properties;
+		this.bonusPacks = bonusPacks;
+		this.events = events;
 		this.clock = clock;
 	}
 
@@ -70,23 +95,27 @@ public class PackOpeningService {
 	 * Opens a pack for a player.
 	 *
 	 * <p>Either everything happens (the opening is recorded, every card is in the collection) or,
-	 * if any step fails, nothing does.
+	 * if any step fails, nothing does. Admins open packs the same way; they only skip the daily
+	 * allowance (see {@link #hasDailyLimit}).
 	 */
 	@Transactional
-	public OpenPackResponse open(Long userId, Long packId) {
+	public OpenPackResponse open(AuthenticatedUser player, Long packId) {
+		Long userId = player.id();
 		PackBlueprint pack = this.packs.blueprint(packId);
 		if (!pack.active()) {
 			throw notAvailable("This pack can no longer be opened");
 		}
 
 		Instant now = this.clock.instant();
-		if (this.properties.isLimited()) {
+		if (hasDailyLimit(player)) {
 			// From here to the end of the transaction this player's openings happen one at a time,
 			// so the count below cannot be out of date by the time the new opening is saved.
 			this.openings.lockOpeningsOf(userId);
-			if (allowanceAt(userId, now).usedUp()) {
+			// Once today's allowance is gone, an extra pack the player has (bought in the shop, say)
+			// is used instead. It is used up in this transaction, so a failed opening keeps it.
+			if (allowanceAt(player, now).usedUp() && !this.bonusPacks.useOne(userId)) {
 				throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, DAILY_PACK_LIMIT_REACHED,
-						"You have opened all %d of today's packs. More tomorrow!"
+						"You have opened all %d of today's packs. Get extra packs in the shop, or come back tomorrow!"
 							.formatted(this.properties.dailyPackLimit()));
 			}
 		}
@@ -114,12 +143,22 @@ public class PackOpeningService {
 		}
 		OpeningResponse opening = new OpeningResponse(openingId, this.packs.refs(Set.of(packId)).get(packId), now,
 				pulledCards);
-		return new OpenPackResponse(opening, allowanceAt(userId, now));
+		// Lets the platform count it (daily challenges), in this transaction.
+		this.events.publishEvent(new PlayerActivity(userId, PlayerActivity.TCG_PACK_OPENED, openingId.toString(), now));
+		return new OpenPackResponse(opening, allowanceAt(player, now));
 	}
 
 	@Transactional(readOnly = true)
-	public AllowanceResponse allowanceOf(Long userId) {
-		return allowanceAt(userId, this.clock.instant());
+	public AllowanceResponse allowanceOf(AuthenticatedUser player) {
+		return allowanceAt(player, this.clock.instant());
+	}
+
+	/**
+	 * The one rule about who the daily allowance applies to: everyone, when there is one, except
+	 * admins. Decided by the role the player signed in with, never by a name.
+	 */
+	private boolean hasDailyLimit(AuthenticatedUser player) {
+		return this.properties.isLimited() && !player.hasRole(Role.ADMIN);
 	}
 
 	/** One page of a player's own opened packs, newest first. */
@@ -150,17 +189,18 @@ public class PackOpeningService {
 	}
 
 	/** The day that counts is the server's, in UTC, like everywhere else in the arcade. */
-	private AllowanceResponse allowanceAt(Long userId, Instant now) {
+	private AllowanceResponse allowanceAt(AuthenticatedUser player, Instant now) {
 		LocalDate today = LocalDate.ofInstant(now, ZoneOffset.UTC);
 		Instant startOfDay = today.atStartOfDay(ZoneOffset.UTC).toInstant();
 		Instant resetsAt = today.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
-		long openedToday = this.openings.countSince(userId, startOfDay);
+		long openedToday = this.openings.countSince(player.id(), startOfDay);
 
-		if (!this.properties.isLimited()) {
-			return new AllowanceResponse(null, openedToday, null, resetsAt);
+		if (!hasDailyLimit(player)) {
+			return new AllowanceResponse(null, openedToday, null, 0, resetsAt);
 		}
 		int limit = this.properties.dailyPackLimit();
-		return new AllowanceResponse(limit, openedToday, (int) Math.max(0, limit - openedToday), resetsAt);
+		return new AllowanceResponse(limit, openedToday, (int) Math.max(0, limit - openedToday),
+				this.bonusPacks.countOf(player.id()), resetsAt);
 	}
 
 	private static ApiException notAvailable(String message) {

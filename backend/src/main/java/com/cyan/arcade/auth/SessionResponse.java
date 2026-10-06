@@ -1,5 +1,6 @@
 package com.cyan.arcade.auth;
 
+import com.cyan.arcade.common.security.Role;
 import com.cyan.arcade.user.Avatar;
 import com.cyan.arcade.user.UserAccount;
 
@@ -13,10 +14,12 @@ public record SessionResponse(boolean authenticated, SessionUser user) {
 	static final SessionResponse GUEST = new SessionResponse(false, null);
 
 	static SessionResponse of(UserAccount account) {
-		return new SessionResponse(true, new SessionUser(account.id(), account.username(), account.avatar()));
+		return new SessionResponse(true,
+				new SessionUser(account.id(), account.username(), account.avatar(), account.role()));
 	}
 
-	public record SessionUser(Long id, String username, Avatar avatar) {
+	/** @param role what the player may do; the app shows AI mode and admin pages for {@code ADMIN} */
+	public record SessionUser(Long id, String username, Avatar avatar, Role role) {
 	}
 
 }

@@ -21,8 +21,8 @@ class CollectionStore {
 		this.jdbc = jdbc;
 	}
 
-	record SetRow(Long id, String code, String name, String imageUrl, GameRef game, int totalCards, int ownedCards,
-			long copies) {
+	record SetRow(Long id, String code, String name, String imageUrl, String coverImageUrl, GameRef game,
+			int totalCards, int ownedCards, long copies) {
 	}
 
 	record OwnedRow(Long cardId, int quantity, Instant firstObtainedAt, Instant lastObtainedAt) {
@@ -56,7 +56,7 @@ class CollectionStore {
 	 */
 	List<SetRow> findProgress(Long userId, String gameSlug) {
 		StatementSpec query = this.jdbc.sql("""
-				SELECT s.id, s.code, s.name, s.image_url, g.slug AS game_slug, g.name AS game_name,
+				SELECT s.id, s.code, s.name, s.image_url, s.cover_image_url, g.slug AS game_slug, g.name AS game_name,
 				       count(c.id) AS total_cards,
 				       count(uc.card_id) AS owned_cards,
 				       coalesce(sum(uc.quantity), 0) AS copies
@@ -73,17 +73,18 @@ class CollectionStore {
 		}
 		return query
 			.query((row, index) -> new SetRow(row.getLong("id"), row.getString("code"), row.getString("name"),
-					row.getString("image_url"), new GameRef(row.getString("game_slug"), row.getString("game_name")),
+					row.getString("image_url"), row.getString("cover_image_url"),
+					new GameRef(row.getString("game_slug"), row.getString("game_name")),
 					row.getInt("total_cards"), row.getInt("owned_cards"), row.getLong("copies")))
 			.list();
 	}
 
-	/** One page of the cards a player owns, ordered by game, set and card number. */
+	/** One page of the cards a player owns, ordered by game, set and the set's own order. */
 	List<OwnedRow> findOwned(Long userId, String gameSlug, Long setId, int page, int size) {
 		return filtered("""
 				SELECT uc.card_id, uc.quantity, uc.first_obtained_at, uc.last_obtained_at
 				""", """
-				ORDER BY g.display_order, g.name, s.display_order, s.name, c.card_number, c.id
+				ORDER BY g.display_order, g.name, s.display_order, s.name, c.display_order, c.id
 				LIMIT :size OFFSET :offset
 				""", userId, gameSlug, setId).param("size", size)
 			.param("offset", (long) page * size)

@@ -51,6 +51,11 @@ class ProfileController {
 		return this.profileService.historyOf(user.id(), page, size);
 	}
 
+	@GetMapping("/stats")
+	StatsResponse stats(@AuthenticationPrincipal AuthenticatedUser user) {
+		return this.profileService.statsOf(user.id());
+	}
+
 	@GetMapping("/achievements")
 	List<AchievementStatus> achievements(@AuthenticationPrincipal AuthenticatedUser user) {
 		return this.profileService.achievementsOf(user.id());

@@ -20,9 +20,10 @@ import org.springframework.stereotype.Repository;
 class TcgPackStore {
 
 	private static final String SELECT_PACKS = """
-			SELECT p.id, p.code, p.name, p.description, p.image_url, p.active,
+			SELECT p.id, p.code, p.name, p.description, p.image_url, p.odds_note, p.active,
 			       s.id AS set_id, s.code AS set_code, s.name AS set_name,
-			       g.slug AS game_slug, g.name AS game_name, g.active AS game_active,
+			       s.image_url AS set_logo_url, s.cover_image_url,
+			       g.slug AS game_slug, g.name AS game_name, g.active AS game_active, g.accent_color,
 			       (SELECT count(*) FROM tcg_pack_cards pc WHERE pc.pack_id = p.id) AS pool_size
 			FROM tcg_packs p
 			JOIN tcg_sets s ON s.id = p.set_id
@@ -36,11 +37,13 @@ class TcgPackStore {
 	}
 
 	/** @param available whether the pack and its game are both active */
-	record PackRow(Long id, String code, String name, String description, String imageUrl, boolean available,
-			SetRef set, GameRef game, int poolSize) {
+	record PackRow(Long id, String code, String name, String description, String imageUrl, String setLogoUrl,
+			String coverImageUrl, String accentColor, String oddsNote, boolean available, SetRef set, GameRef game,
+			int poolSize) {
 
 		PackRef toRef() {
-			return new PackRef(this.id, this.code, this.name, this.imageUrl, this.set, this.game);
+			return new PackRef(this.id, this.code, this.name, this.imageUrl, this.setLogoUrl, this.coverImageUrl,
+					this.accentColor, this.set, this.game);
 		}
 
 	}
@@ -108,7 +111,8 @@ class TcgPackStore {
 
 	private static PackRow toPack(ResultSet row, int index) throws SQLException {
 		return new PackRow(row.getLong("id"), row.getString("code"), row.getString("name"),
-				row.getString("description"), row.getString("image_url"),
+				row.getString("description"), row.getString("image_url"), row.getString("set_logo_url"),
+				row.getString("cover_image_url"), row.getString("accent_color"), row.getString("odds_note"),
 				row.getBoolean("active") && row.getBoolean("game_active"),
 				new SetRef(row.getLong("set_id"), row.getString("set_code"), row.getString("set_name")),
 				new GameRef(row.getString("game_slug"), row.getString("game_name")), row.getInt("pool_size"));

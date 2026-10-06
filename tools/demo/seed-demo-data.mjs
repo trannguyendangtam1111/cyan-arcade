@@ -2,17 +2,25 @@
 // a few accounts, finished games on every leaderboard, and some opened card packs.
 //
 //   node tools/demo/seed-demo-data.mjs [base-url]      (default http://localhost:3000)
+//   node tools/demo/seed-demo-data.mjs --packs-only    (players exist already: only open their card packs)
 //
-// Meant for a freshly reset development database (docker compose down -v && docker compose up -d).
+// Meant for a freshly reset development database (docker compose down -v && docker compose up -d),
+// after the card games were imported (docker compose run --rm backend --spring.profiles.active=import-tcg).
 // Runs are started together and finished one after the other over about two minutes, so their
 // durations, which the server measures itself, look like real games.
 //
 // The demo accounts all use the password below. It exists only for local demos; never reuse it.
 
-const BASE_URL = (process.argv[2] ?? 'http://localhost:3000').replace(/\/$/, '')
+const BASE_URL = (process.argv.slice(2).find((arg) => !arg.startsWith('--')) ?? 'http://localhost:3000').replace(
+  /\/$/,
+  '',
+)
 const DEMO_PASSWORD = 'arcade-demo-2026'
 
-/** Each player: avatar, finished games as [game, score, details], and packs to open as [set, pack, count]. */
+/**
+ * Each player: avatar, finished games as [game, score, details], and booster packs to open as
+ * [card game, set code, count]. The card games must have been imported first (the import-tcg profile).
+ */
 const players = [
   {
     username: 'PixelPioneer',
@@ -24,9 +32,9 @@ const players = [
       ['snake', 18, { length: 21, level: 4 }],
     ],
     packs: [
-      ['pixel-meadow', 'sunrise', 3],
-      ['pixel-meadow', 'twilight', 2],
-      ['neon-depths', 'tide', 2],
+      ['pokemon', 'sv03-5', 3],
+      ['pokemon', 'base1', 2],
+      ['one-piece', 'op01', 3],
     ],
   },
   {
@@ -37,7 +45,10 @@ const players = [
       ['tetris', 6830, { lines: 41, level: 5 }],
       ['2048', 3196, { highestTile: 256, moves: 301 }],
     ],
-    packs: [['neon-depths', 'abyss', 2]],
+    packs: [
+      ['one-piece', 'op13', 2],
+      ['pokemon', 'sv08-5', 2],
+    ],
   },
   {
     username: 'ByteBandit',
@@ -121,10 +132,34 @@ async function signIn(player) {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
+/** Opens each player's booster packs. */
+async function openPacks(clients) {
+  const sets = await new Client().request('GET', '/api/tcg/sets')
+  for (const player of players) {
+    for (const [gameSlug, setCode, count] of player.packs) {
+      const set = sets.find((candidate) => candidate.game.slug === gameSlug && candidate.code === setCode)
+      if (!set) throw new Error(`No set ${gameSlug}/${setCode}: import the card games first (profile import-tcg)`)
+      const [pack] = await new Client().request('GET', `/api/tcg/packs?set=${set.id}`)
+      for (let opened = 0; opened < count; opened++) {
+        const { opening } = await clients.get(player.username).request('POST', `/api/tcg/packs/${pack.id}/open`)
+        const names = opening.cards.map((pulled) => `${pulled.card.name} (${pulled.card.rarity.name})`)
+        console.log(`  ${player.username} opened ${pack.name}: ${names.join(', ')}`)
+      }
+    }
+  }
+}
+
 async function main() {
   console.log(`Seeding ${BASE_URL}`)
   const clients = new Map()
   for (const player of players) clients.set(player.username, await signIn(player))
+
+  // --packs-only: the players and their games are there already; only open their packs.
+  if (process.argv.includes('--packs-only')) {
+    await openPacks(clients)
+    console.log(`Done: packs opened for ${players.length} players.`)
+    return
+  }
 
   // Start every run now...
   const runs = []
@@ -150,19 +185,7 @@ async function main() {
   console.log(`Started ${runs.length} games; finishing them over the next two minutes...`)
 
   // Card packs, while the games run.
-  const sets = await new Client().request('GET', '/api/tcg/sets?game=cyan-critters')
-  for (const player of players) {
-    for (const [setCode, packCode, count] of player.packs) {
-      const set = sets.find((candidate) => candidate.code === setCode)
-      const packs = await new Client().request('GET', `/api/tcg/packs?set=${set.id}`)
-      const pack = packs.find((candidate) => candidate.code === packCode)
-      for (let opened = 0; opened < count; opened++) {
-        const { opening } = await clients.get(player.username).request('POST', `/api/tcg/packs/${pack.id}/open`)
-        const names = opening.cards.map((pulled) => `${pulled.card.name} (${pulled.card.rarity.name})`)
-        console.log(`  ${player.username} opened ${pack.name}: ${names.join(', ')}`)
-      }
-    }
-  }
+  await openPacks(clients)
 
   await Promise.all(finishing)
   console.log(`Done: ${players.length} players, ${runs.length} finished games.`)

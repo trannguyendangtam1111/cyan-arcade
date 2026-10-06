@@ -51,7 +51,7 @@ class AuthService {
 	/** Creates the account and signs the new player in straight away. */
 	UserAccount register(RegisterRequest registration, HttpServletRequest request, HttpServletResponse response) {
 		UserAccount account = this.users.create(registration.username(), this.passwordEncoder.encode(registration.password()));
-		signIn(new AuthenticatedUser(account.id(), account.username()), request, response);
+		signIn(new AuthenticatedUser(account.id(), account.username(), account.role()), request, response);
 		return account;
 	}
 
@@ -73,14 +73,17 @@ class AuthService {
 			throw new ApiException(HttpStatus.UNAUTHORIZED, INVALID_CREDENTIALS, "Wrong username or password");
 		}
 		this.attempts.recordSuccess(login.username(), address);
-		signIn(new AuthenticatedUser(verified.getId(), verified.getUsername()), request, response);
+		signIn(new AuthenticatedUser(verified.getId(), verified.getUsername(), verified.getRole()), request, response);
 		return this.users.get(verified.getId());
 	}
 
-	/** Starts a session for the player: from now on, requests with the session cookie are theirs. */
+	/**
+	 * Starts a session for the player: from now on, requests with the session cookie are theirs, with
+	 * the authority of their role ({@code ROLE_USER} or {@code ROLE_ADMIN}). A role is read at sign-in.
+	 */
 	private void signIn(AuthenticatedUser user, HttpServletRequest request, HttpServletResponse response) {
 		Authentication authentication = UsernamePasswordAuthenticationToken.authenticated(user, null,
-				AuthConfig.PLAYER_AUTHORITIES);
+				user.role().authorities());
 		// Fresh session id and fresh CSRF token at the moment of signing in.
 		this.sessionStrategy.onAuthentication(authentication, request, response);
 

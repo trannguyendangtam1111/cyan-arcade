@@ -1,5 +1,7 @@
 package com.cyan.arcade.score;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -41,6 +43,20 @@ interface ScoreRepository extends Repository<Score, Long> {
 
 	@Query("select coalesce(sum(cast(s.value as long)), 0) from Score s where s.userId = :userId")
 	long sumScoresOfUser(Long userId);
+
+	/** A player's numbers per game, in one pass over their scores (served by the user/game index). */
+	@Query("""
+			select new com.cyan.arcade.score.GameStats(
+			    s.gameId, count(s), max(s.value), avg(s.value), coalesce(sum(s.durationMs), 0), max(s.createdAt))
+			from Score s
+			where s.userId = :userId
+			group by s.gameId
+			""")
+	List<GameStats> findStatsByGame(Long userId);
+
+	long count();
+
+	long countByCreatedAtGreaterThanEqual(Instant since);
 
 	/** A player's finished games, newest first. */
 	@Query(value = """

@@ -1,0 +1,20 @@
+# A one-off run that imports or updates the real card games, then exits:
+#
+#   ./mvnw spring-boot:run -Dspring-boot.run.profiles=import-tcg
+#   docker compose run --rm backend --spring.profiles.active=import-tcg
+#
+# Only these sources are contacted, and only by this run; the arcade itself reads the database.
+# The web layer still starts (security and controllers are part of the context), on a port of its
+# own so the run does not collide with an arcade that is already up.
+server:
+  port: 0
+
+app:
+  scheduling:
+    enabled: false
+  daily-challenges:
+    generation-enabled: false
+  tcg:
+    import:
+      sources: ${TCG_IMPORT_SOURCES:pokemon,one-piece}
+      exit-when-done: true

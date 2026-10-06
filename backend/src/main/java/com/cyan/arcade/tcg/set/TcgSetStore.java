@@ -16,7 +16,7 @@ import org.springframework.stereotype.Repository;
 class TcgSetStore {
 
 	private static final String SELECT_SETS = """
-			SELECT s.id, s.code, s.name, s.description, s.image_url, s.released_on,
+			SELECT s.id, s.code, s.name, s.description, s.series, s.image_url, s.cover_image_url, s.released_on,
 			       g.slug AS game_slug, g.name AS game_name,
 			       (SELECT count(*) FROM tcg_cards c WHERE c.set_id = s.id) AS card_count,
 			       (SELECT count(*) FROM tcg_packs p WHERE p.set_id = s.id AND p.active) AS pack_count
@@ -50,7 +50,8 @@ class TcgSetStore {
 
 	private static TcgSetResponse toSet(ResultSet row, int index) throws SQLException {
 		return new TcgSetResponse(row.getLong("id"), row.getString("code"), row.getString("name"),
-				row.getString("description"), row.getString("image_url"), row.getObject("released_on", LocalDate.class),
+				row.getString("description"), row.getString("series"), row.getString("image_url"),
+				row.getString("cover_image_url"), row.getObject("released_on", LocalDate.class),
 				new GameRef(row.getString("game_slug"), row.getString("game_name")), row.getInt("card_count"),
 				row.getInt("pack_count"));
 	}

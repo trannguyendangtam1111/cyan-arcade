@@ -25,6 +25,17 @@ Signing in creates a **server-side session**. The browser holds only its id, in 
 
 There are no tokens to store and nothing to put in an `Authorization` header: the browser sends the cookie by itself.
 
+### Roles
+
+Every account has one role, returned with the session (`user.role`):
+
+| Role | Authority | May |
+| ---- | --------- | --- |
+| `USER` | `ROLE_USER` | Everything players do. Every account made by `POST /api/auth/register` is a `USER`; the request cannot ask for anything else |
+| `ADMIN` | `ROLE_ADMIN` | Everything a `USER` may, plus the admin-only endpoints (`/api/admin/**`, `/api/ai/**`) and card packs without a daily allowance |
+
+The server checks the role on every request that needs it; what the app shows is only a convenience. An admin-only endpoint answers a player `403 FORBIDDEN` and a guest `401 UNAUTHORIZED`. The role is read at sign-in.
+
 ### CSRF protection
 
 Because the browser attaches the session cookie automatically, every request that changes something (`POST`, `PATCH`, `PUT`, `DELETE`) must prove it comes from the site itself. It does that by copying the value of the `XSRF-TOKEN` cookie into a header:
@@ -88,6 +99,15 @@ Platform codes: `VALIDATION_FAILED`, `BAD_REQUEST`, `UNAUTHORIZED`, `FORBIDDEN`,
 | `PATCH` | `/api/users/me` | signed in |
 | `GET` | `/api/users/me/game-history` | signed in |
 | `GET` | `/api/users/me/achievements` | signed in |
+| `GET` | `/api/users/me/stats` | signed in |
+| `GET` | `/api/users/me/coins` | signed in |
+| `GET` | `/api/users/me/transactions` | signed in |
+| `GET` | `/api/users/me/inventory` | signed in |
+| `PUT`, `DELETE` | `/api/users/me/inventory/{itemId}/equipped` | signed in |
+| `GET` | `/api/daily-login` | signed in |
+| `POST` | `/api/daily-login/claim` | signed in |
+| `GET` | `/api/shop/items` | public |
+| `POST` | `/api/shop/purchases` | signed in |
 | `GET` | `/api/daily-challenges` | public |
 | `GET` | `/api/daily-challenges/me` | signed in |
 | `GET` | `/api/games`, `/api/games/{slug}` | public |
@@ -102,6 +122,11 @@ Platform codes: `VALIDATION_FAILED`, `BAD_REQUEST`, `UNAUTHORIZED`, `FORBIDDEN`,
 | `GET` | `/api/tcg/allowance` | signed in |
 | `GET` | `/api/tcg/collection` | signed in |
 | `GET` | `/api/tcg/openings` | signed in |
+| `GET` | `/api/admin/overview` | admin |
+| `GET` | `/api/admin/stats` | admin |
+| `GET` | `/api/admin/users?query={text}` | admin |
+| `POST` | `/api/admin/users/{id}/coins` | admin |
+| `GET` | `/api/ai/access` | admin |
 | `GET` | `/actuator/health`, `/actuator/info` | public (through nginx, only `/actuator/health`) |
 
 ### Accounts
@@ -124,9 +149,11 @@ Responds `201 Created`, sets `CYAN_SESSION`, and returns the session:
 ```json
 {
   "authenticated": true,
-  "user": { "id": 7, "username": "pixel", "avatar": "ROBOT" }
+  "user": { "id": 7, "username": "pixel", "avatar": "ROBOT", "role": "USER" }
 }
 ```
+
+`role` is `USER` for every account made here (see [Roles](#roles)).
 
 | Error | When |
 | ----- | ---- |
@@ -191,10 +218,13 @@ All of these describe **the caller**. The player is taken from the session, neve
   "level": 2,
   "xpIntoLevel": 85,
   "xpForNextLevel": 200,
+  "coins": 1240,
   "gamesPlayed": 12,
   "totalScore": 4321,
   "achievementsUnlocked": 1,
   "achievementsTotal": 9,
+  "title": { "code": "TITLE_HIGH_ROLLER", "name": "High Roller", "icon": "dice" },
+  "badge": null,
   "memberSince": "2026-09-30T14:02:11.480Z"
 }
 ```
@@ -204,7 +234,9 @@ All of these describe **the caller**. The player is taken from the session, neve
 | `xp` | Total experience points |
 | `level` | Derived from `xp` (see [Experience and levels](#experience-and-levels)) |
 | `xpIntoLevel`, `xpForNextLevel` | Progress within the current level: 85 of the 200 XP that level 2 takes |
+| `coins` | The coin balance (see [Coins](#coins)) |
 | `gamesPlayed`, `totalScore` | Finished games on this account, and the sum of their scores |
+| `title`, `badge` | What the player wears, bought in the [shop](#shop); `null` when nothing |
 
 #### `PATCH /api/users/me`
 
@@ -258,6 +290,7 @@ Every achievement in the arcade, in display order, with whether the caller has i
     "name": "First Coin",
     "description": "Finish your first game.",
     "xp": 50,
+    "coins": 100,
     "unlocked": true,
     "unlockedAt": "2026-09-30T14:05:40.102Z"
   },
@@ -266,45 +299,85 @@ Every achievement in the arcade, in display order, with whether the caller has i
     "name": "Regular",
     "description": "Finish 10 games.",
     "xp": 100,
+    "coins": 150,
     "unlocked": false,
     "unlockedAt": null
   }
 ]
 ```
 
+#### `GET /api/users/me/stats`
+
+The caller's statistics: across the platform, from other modules (the card game), and per game. A handful of indexed aggregates over the caller's own rows, asked for by the profile page only.
+
+```json
+{
+  "gamesPlayed": 12,
+  "totalScore": 4321,
+  "playTimeMs": 3725000,
+  "achievementsUnlocked": 1,
+  "achievementsTotal": 9,
+  "coins": 1240,
+  "coinsEarned": 1740,
+  "activities": [
+    { "key": "tcg.packsOpened", "label": "Packs opened", "value": 14 },
+    { "key": "tcg.cardsCollected", "label": "Cards collected", "value": 341 },
+    { "key": "tcg.uniqueCards", "label": "Different cards", "value": 200 }
+  ],
+  "games": [
+    {
+      "slug": "snake",
+      "name": "Snake",
+      "gamesPlayed": 9,
+      "bestScore": 42,
+      "averageScore": 17,
+      "playTimeMs": 600000,
+      "lastPlayedAt": "2026-09-30T15:38:02.114Z"
+    }
+  ]
+}
+```
+
+| Field | Notes |
+| ----- | ----- |
+| `playTimeMs` | Time spent in finished runs, measured by the server |
+| `coinsEarned` | Every coin ever earned, spending left out |
+| `activities` | Numbers other modules keep about the player, identified by `key` |
+| `games` | One entry per game finished at least once, most played first. `averageScore` is rounded |
+
 ### Experience and levels
 
 Only signed-in players earn XP, and only by finishing a game session.
 
-| For | XP |
-| --- | -- |
-| Finishing a game, whatever the score | 10 |
-| Beating your own best score in that game | +25 |
-| Unlocking an achievement | its `xp` value |
-| Completing a daily challenge | its `xpReward` |
+| For | XP | Coins |
+| --- | -- | ----- |
+| Finishing a game, whatever the score | 10 | 5, for the first 40 games of the day (UTC) |
+| Beating your own best score in that game | +25 | +15 |
+| Unlocking an achievement | its `xp` | its `coins` |
+| Completing a daily challenge | its `xpReward` | its `coinReward` |
 
 Level 1 starts at 0 XP, and each level takes 100 XP more than the one before: level 2 at 100 XP, level 3 at 300, level 4 at 600, level 5 at 1,000.
 
-| Code | Name | Unlocked by | XP |
-| ---- | ---- | ----------- | -- |
-| `FIRST_GAME` | First Coin | Finishing a game | 50 |
-| `PLAY_10_GAMES` | Regular | Finishing 10 games | 100 |
-| `PLAY_50_GAMES` | Arcade Rat | Finishing 50 games | 250 |
-| `SNAKE_25` | Growing Up | A score of 25 in Snake | 100 |
-| `SNAKE_100` | Python | A score of 100 in Snake | 250 |
-| `REACH_512` | Halfway There | A 512 tile in 2048 (`highestTile`) | 100 |
-| `REACH_2048` | Two Zero Four Eight | A 2048 tile in 2048 (`highestTile`) | 250 |
-| `TETRIS_10_LINES` | Line Worker | 10 lines in one game of Tetris (`lines`) | 100 |
-| `TETRIS_40_LINES` | Marathon | 40 lines in one game of Tetris (`lines`) | 250 |
+| Code | Name | Unlocked by | XP | Coins |
+| ---- | ---- | ----------- | -- | ----- |
+| `FIRST_GAME` | First Coin | Finishing a game | 50 | 100 |
+| `PLAY_10_GAMES` | Regular | Finishing 10 games | 100 | 150 |
+| `PLAY_50_GAMES` | Arcade Rat | Finishing 50 games | 250 | 400 |
+| `SNAKE_25` | Growing Up | A score of 25 in Snake | 100 | 150 |
+| `SNAKE_100` | Python | A score of 100 in Snake | 250 | 400 |
+| `REACH_512` | Halfway There | A 512 tile in 2048 (`highestTile`) | 100 | 150 |
+| `REACH_2048` | Two Zero Four Eight | A 2048 tile in 2048 (`highestTile`) | 250 | 500 |
+| `TETRIS_10_LINES` | Line Worker | 10 lines in one game of Tetris (`lines`) | 100 | 150 |
+| `TETRIS_40_LINES` | Marathon | 40 lines in one game of Tetris (`lines`) | 250 | 400 |
 
 Each achievement is awarded once per player.
 
 ### Daily challenges
 
-Every day each game in the catalog gets one challenge, for example "Clear 5 lines in one game of Tetris". A challenge is completed by a single finished run that reaches its target, and pays its XP once.
+Every day each game in the catalog gets one challenge, for example "Clear 5 lines in one game of Tetris", and so does each **activity**: something done outside the games that the server counts, for now opening card packs ("Open 3 card packs today"). A game's challenge is completed by a single finished run that reaches its target; an activity's by doing it `target` times in the day. Either pays its XP and coins once.
 
 - **The day is the server's.** A day runs from midnight to midnight UTC. No request carries a date, and a run counts for the day on which it is finished.
-- **Completing is not an endpoint.** A challenge is completed by finishing a game session (`POST /api/game-sessions/{id}/finish`) while signed in. The response's `rewards.bonuses` lists what the run completed.
+- **Completing is not an endpoint.** A game's challenge is completed by finishing a game session (`POST /api/game-sessions/{id}/finish`) while signed in; the response's `rewards.bonuses` lists what the run completed. A card pack challenge is counted by the server each time a pack is opened (`POST /api/tcg/packs/{id}/open`), and completed by the opening that reaches the target.
 - **Rotation.** A game's challenges take turns, one per day, so tomorrow's is never the same as today's. The server creates each day's set ahead of time, at startup and at midnight UTC.
 - Guests can see the challenges but complete nothing.
 
@@ -322,8 +395,21 @@ Today's challenges. Public.
       "title": "Tidy Up",
       "description": "Clear 5 lines in one game of Tetris.",
       "game": { "slug": "tetris", "name": "Tetris" },
+      "activity": null,
       "target": 5,
       "xpReward": 30,
+      "coinReward": 60,
+      "date": "2026-09-30"
+    },
+    {
+      "id": 4,
+      "title": "Pack Opener",
+      "description": "Open 3 card packs today.",
+      "game": null,
+      "activity": { "code": "TCG_PACK_OPENED", "name": "Card packs" },
+      "target": 3,
+      "xpReward": 30,
+      "coinReward": 60,
       "date": "2026-09-30"
     }
   ]
@@ -334,9 +420,10 @@ Today's challenges. Public.
 | ----- | ----- |
 | `date` | The day these challenges belong to, in UTC |
 | `resetsAt` | When the next set takes over |
-| `challenges[].game` | The game the challenge is played in |
-| `challenges[].target` | The number to reach in one run; `1` for "finish a game". `description` says what is counted |
-| `challenges[].xpReward` | XP for completing it |
+| `challenges[].game` | The game the challenge is played in; `null` for an activity's challenge |
+| `challenges[].activity` | What an activity's challenge counts (`TCG_PACK_OPENED`); `null` for a game's |
+| `challenges[].target` | The number to reach: in one run for a game (`1` for "finish a game"), over the day for an activity. `description` says what is counted |
+| `challenges[].xpReward`, `challenges[].coinReward` | XP and coins for completing it |
 
 A day without challenges returns an empty `challenges` list, not an error.
 
@@ -355,9 +442,12 @@ The same challenges with the caller's own progress. `401 UNAUTHORIZED` without a
       "title": "Tidy Up",
       "description": "Clear 5 lines in one game of Tetris.",
       "game": { "slug": "tetris", "name": "Tetris" },
+      "activity": null,
       "target": 5,
       "xpReward": 30,
+      "coinReward": 60,
       "date": "2026-09-30",
+      "progress": null,
       "completed": true,
       "completedAt": "2026-09-30T15:38:02.114Z"
     }
@@ -365,7 +455,7 @@ The same challenges with the caller's own progress. `401 UNAUTHORIZED` without a
 }
 ```
 
-`completedAt` is `null` until the challenge is completed.
+`completedAt` is `null` until the challenge is completed. `progress` is how many times the caller has done an activity today (for an activity's challenge), and `null` for a game's.
 
 ### Game catalog
 
@@ -469,22 +559,24 @@ Responds `200 OK` with the recorded result:
   "recordedAt": "2026-09-30T13:12:09.983Z",
   "rewards": {
     "xpEarned": 110,
+    "coinsEarned": 170,
     "personalBest": true,
     "achievements": [
-      { "code": "FIRST_GAME", "name": "First Coin", "description": "Finish your first game.", "xp": 50 }
+      { "code": "FIRST_GAME", "name": "First Coin", "description": "Finish your first game.", "xp": 50, "coins": 100 }
     ],
     "bonuses": [
-      { "type": "DAILY_CHALLENGE", "title": "Light Snack", "xp": 25 }
+      { "type": "DAILY_CHALLENGE", "title": "Light Snack", "xp": 25, "coins": 50 }
     ],
     "totalXp": 110,
     "level": 2,
-    "leveledUp": true
+    "leveledUp": true,
+    "coinBalance": 170
   }
 }
 ```
 
 - `durationMs` is measured by the server, from the session's start to this request. The client does not report a duration.
-- `rewards` is `null` for a run that was started by a guest. Otherwise it says what this run earned and where the player stands afterwards. `achievements` lists only those unlocked by this run, and `bonuses` the daily challenges it completed. `xpEarned` is the total of everything.
+- `rewards` is `null` for a run that was started by a guest. Otherwise it says what this run earned and where the player stands afterwards. `achievements` lists only those unlocked by this run, and `bonuses` the daily challenges it completed. `xpEarned` and `coinsEarned` are the totals of everything; every coin is also a transaction in the player's [ledger](#coins). Finishing the same session again is refused, so nothing is paid twice.
 
 | Error | When |
 | ----- | ---- |
@@ -549,13 +641,258 @@ Returns one page of a game's recorded scores, best first. Public.
 | GET    | `/actuator/health` | Service and database health: `{ "status": "UP" }` |
 | GET    | `/actuator/info`   | Application name and version. Not exposed through nginx |
 
+## Coins
+
+Coins are the platform's currency, earned by playing (see [Experience and levels](#experience-and-levels)), the [daily login reward](#daily-login-reward) and admin grants, and spent in the [shop](#shop). Every change to a balance is a transaction in the player's ledger. **No request ever says how many coins to add or take**: the server applies its own rules to what happened. A reward refers to what it rewards (a game session, an achievement, a challenge, a day), and a player can have one transaction of each type for the same thing, so repeating or replaying a request pays nothing more. A balance never goes below zero.
+
+#### `GET /api/users/me/coins`
+
+```json
+{ "balance": 1240, "earned": 1740 }
+```
+
+`earned` is everything ever earned, spending left out.
+
+#### `GET /api/users/me/transactions`
+
+The caller's ledger, newest first. Query: `page` (from 0) and `size` (1 to 50, default 10).
+
+```json
+{
+  "entries": [
+    {
+      "id": 31,
+      "amount": -100,
+      "balanceAfter": 1240,
+      "type": "SHOP_PURCHASE",
+      "referenceType": "PURCHASE",
+      "referenceId": "4",
+      "description": "Bought Extra Pack",
+      "createdAt": "2026-09-30T15:40:00.000Z"
+    }
+  ],
+  "page": 0,
+  "size": 10,
+  "totalEntries": 1,
+  "totalPages": 1
+}
+```
+
+| `type` | What |
+| ------ | ---- |
+| `GAME_COMPLETION` | Finishing a game (`GAME_SESSION`) |
+| `HIGH_SCORE` | Beating your best in a game (`GAME_SESSION`) |
+| `ACHIEVEMENT` | Unlocking an achievement (`ACHIEVEMENT`, its code) |
+| `DAILY_CHALLENGE` | Completing a daily challenge (`DAILY_CHALLENGE`, its id) |
+| `DAILY_LOGIN` | The daily login reward (`DAILY_LOGIN`, the date) |
+| `SHOP_PURCHASE` | Buying in the shop; negative (`PURCHASE`, its id) |
+| `ADMIN_GRANT` | Coins given by an admin (`ADMIN_GRANT`, the request id); the admin is recorded too |
+
+### Daily login reward
+
+Once per calendar day, worth more for every day in a row: 50, 60, 70, 80, 100, 125 and 200 coins by default (`DAILY_LOGIN_REWARDS`), with a free Extra Pack on day 7; after day 7 the run starts again from day 1. Missing a day starts it again too. **The day is the server's, midnight to midnight UTC**, and no request carries a date or an amount.
+
+#### `GET /api/daily-login`
+
+```json
+{
+  "date": "2026-09-30",
+  "claimedToday": false,
+  "streak": 2,
+  "day": 3,
+  "days": [
+    { "day": 1, "coins": 50, "bonusItem": null, "state": "CLAIMED" },
+    { "day": 2, "coins": 60, "bonusItem": null, "state": "CLAIMED" },
+    { "day": 3, "coins": 70, "bonusItem": null, "state": "TODAY" },
+    { "day": 7, "coins": 200, "bonusItem": "Extra Pack", "state": "UPCOMING" }
+  ],
+  "resetsAt": "2026-10-01T00:00:00Z"
+}
+```
+
+(`days` always lists every day; shortened here.) `streak` is the days in a row claimed up to today, or up to yesterday while today is unclaimed; `day` is the day of the run today's claim is (or was) on.
+
+#### `POST /api/daily-login/claim`
+
+Claims today's reward. No body.
+
+```json
+{ "day": 3, "streak": 3, "coins": 70, "bonusItem": null, "balance": 1310, "status": { "claimedToday": true } }
+```
+
+(`status` is the full `GET /api/daily-login` answer.) A second claim on the same day, even at the same moment, answers `409 DAILY_LOGIN_ALREADY_CLAIMED` and pays nothing.
+
+### Shop
+
+Virtual items for coins; there are no real-money payments. A purchase names the item and a request id; the price, the player and their balance come from the server.
+
+| `type` | What owning it means |
+| ------ | -------------------- |
+| `PACK` | Extra card packs, opened once the daily pack allowance is gone. `quantity` packs per purchase |
+| `BADGE` | Worn on the profile, one at a time; owned once |
+| `TITLE` | Shown under the name on the profile, one at a time; owned once |
+| `COSMETIC` | Owned; nothing more yet |
+
+#### `GET /api/shop/items`
+
+Public. For a signed-in caller, also their `balance` and `level` and, per item, `owned`, `unlocked` and `soldOut`; for a guest these are `null`.
+
+```json
+{
+  "balance": 1240,
+  "level": 2,
+  "items": [
+    {
+      "id": 1,
+      "code": "EXTRA_PACK",
+      "name": "Extra Pack",
+      "description": "One more card pack, for when today's are gone. Any booster you like.",
+      "type": "PACK",
+      "price": 100,
+      "quantity": 1,
+      "maxOwned": null,
+      "minLevel": 1,
+      "icon": "package",
+      "owned": 0,
+      "unlocked": true,
+      "soldOut": false
+    }
+  ]
+}
+```
+
+#### `POST /api/shop/purchases`
+
+```json
+{ "itemId": 1, "requestId": "1b4e28ba-2fa1-41d2-883f-0016d3cca427" }
+```
+
+`requestId` is a random UUID the client makes for each purchase it means to make. Sending the same one again (a double click, a retried request) answers with the first purchase and `"repeated": true`, without buying or charging again. Responds `201 Created`:
+
+```json
+{
+  "purchaseId": 4,
+  "item": { "id": 1, "code": "EXTRA_PACK", "name": "Extra Pack", "type": "PACK", "price": 100, "owned": 1 },
+  "price": 100,
+  "quantity": 1,
+  "balance": 1140,
+  "owned": 1,
+  "repeated": false,
+  "purchasedAt": "2026-09-30T15:40:00.000Z"
+}
+```
+
+(`item` is the full shop item; shortened here.) The checks, the payment and handing the item over happen in one transaction, with the player's purchases one at a time, so two purchases at the same moment cannot spend more than the balance.
+
+| Error | When |
+| ----- | ---- |
+| `400 VALIDATION_FAILED` | `itemId` or `requestId` is missing |
+| `403 LEVEL_TOO_LOW` | The item unlocks at a higher level |
+| `404 NOT_FOUND` | No item on sale has that id |
+| `409 INSUFFICIENT_COINS` | The balance is lower than the price |
+| `409 ITEM_LIMIT_REACHED` | The player already owns as many as one may (badges and titles: one) |
+
+#### `GET /api/users/me/inventory`
+
+```json
+{
+  "items": [
+    {
+      "itemId": 7,
+      "code": "TITLE_HIGH_ROLLER",
+      "name": "High Roller",
+      "description": "A title to show under your name.",
+      "type": "TITLE",
+      "icon": "dice",
+      "quantity": 1,
+      "equippable": true,
+      "equipped": true,
+      "acquiredAt": "2026-09-30T15:40:00.000Z"
+    }
+  ],
+  "bonusPacks": 0
+}
+```
+
+`bonusPacks` is the extra card packs the player has, from every pack item together. The first badge or title a player gets is worn straight away.
+
+#### `PUT /api/users/me/inventory/{itemId}/equipped`, `DELETE …`
+
+Wears (`PUT`) or takes off (`DELETE`) a badge or title the caller owns; wearing one takes off the other of its type. Answers with the inventory. `404 NOT_FOUND` for an item the caller does not own, `400 ITEM_NOT_EQUIPPABLE` for a pack.
+
+## Admin
+
+Admins only: a player gets `403 FORBIDDEN`, a guest `401 UNAUTHORIZED`, for every method and path under `/api/admin` and `/api/ai`.
+
+#### `GET /api/admin/overview`
+
+The signed-in admin and what being one allows.
+
+```json
+{
+  "id": 1,
+  "username": "admin",
+  "role": "ADMIN",
+  "privileges": ["AI_MODE", "UNLIMITED_PACKS", "GRANT_COINS"],
+  "playerDailyPackLimit": 10
+}
+```
+
+`playerDailyPackLimit` is the allowance players have, for comparison (`null` when even players have none).
+
+#### `GET /api/admin/stats`
+
+The arcade at a glance. A handful of counts, worked out when asked; "today" starts at midnight UTC.
+
+```json
+{
+  "totalUsers": 42,
+  "activeUsers": 17,
+  "newUsersToday": 3,
+  "gamesPlayed": 1234,
+  "gamesToday": 56,
+  "coinsInCirculation": 98765,
+  "activities": [
+    { "key": "tcg.packsOpened", "label": "Packs opened", "value": 321, "today": 12 },
+    { "key": "tcg.cardsCollected", "label": "Cards collected", "value": 3210, "today": 120 }
+  ],
+  "generatedAt": "2026-09-30T15:40:00.000Z"
+}
+```
+
+`activeUsers` counts accounts that finished a game or whose coins changed in the last 7 days. `gamesPlayed` includes guests' games. `coinsInCirculation` is every balance added up.
+
+#### `GET /api/admin/users?query={text}`
+
+Accounts whose username contains `text` (1 to 20 characters, any case), alphabetically, at most 20: `id`, `username`, `role`, `level`, `coins`, `memberSince`.
+
+#### `POST /api/admin/users/{id}/coins`
+
+Gives a player coins.
+
+```json
+{ "amount": 250, "reason": "Tournament prize", "requestId": "9c1a8f04-55b2-4f0e-8a7e-3e0f8d2b6c11" }
+```
+
+`amount` must be a whole number from 1 to 100,000 and `reason` 1 to 150 characters (`400 VALIDATION_FAILED` otherwise); there is no way to take coins away. The grant is recorded in the player's ledger as `ADMIN_GRANT`, with the reason and the admin who made it. Repeating a request with the same `requestId` grants once (`"repeated": true`). Responds `201 Created`:
+
+```json
+{ "transactionId": 88, "userId": 7, "username": "pixel", "amount": 250, "balance": 1490, "repeated": false }
+```
+
+`404 NOT_FOUND` when there is no account with that id.
+
+#### `GET /api/ai/access`
+
+Whether the signed-in player may use AI mode: `204 No Content` for an admin. The app asks before it loads a game's AI, and in Docker nginx asks it for every request for the AI's code (`/assets/ai/*`), which it serves only on a `204` (otherwise it answers with the same `401` or `403`).
+
 ## Card packs (TCG)
 
-The trading-card game has its own endpoints under `/api/tcg`. Browsing the catalog is public; opening packs, the collection and the history belong to the signed-in player, who is always taken from the session.
+The trading-card games have their own endpoints under `/api/tcg`. Browsing the catalog is public; opening packs, the collection and the history belong to the signed-in player, who is always taken from the session.
 
-Several card games can live side by side. Each one names its own rarities and gives each a **tier** from 1 (ordinary) to 5 (the rarest), which is what clients use to decide how special a card looks. A card's `metadata` is whatever its game knows about it; its fields differ from game to game.
+The arcade carries real card games: the **Pokémon TCG** (data and images from TCGdex) and the **One Piece Card Game** (from OPTCG API). They are imported into the database by a separate job (see [ARCHITECTURE.md](ARCHITECTURE.md#importing-card-games)); **no endpoint here calls an external source**, and there is no endpoint that imports or changes card data. Card images are URLs on the sources' own image hosts.
 
-Only active games and packs are listed. Card games come from imported datasets, not from this API (see [ARCHITECTURE.md](ARCHITECTURE.md#importing-card-games)).
+Each game names its own rarities and gives each a **tier** from 1 (ordinary) to 5 (the rarest), which is what clients use to decide how special a card looks. A card's `metadata` is whatever its game knows about it; its fields differ from game to game. Only active games and packs are listed.
 
 ### Catalog
 
@@ -566,67 +903,109 @@ Every active card game, with its rarities from most common to rarest. `GET /api/
 ```json
 [
   {
-    "id": 1,
-    "slug": "cyan-critters",
-    "name": "Cyan Critters",
-    "description": "The arcade's own card game: small, round and very collectible.",
-    "imageUrl": "/tcg-assets/cyan-critters/game.svg",
+    "id": 2,
+    "slug": "pokemon",
+    "name": "Pokémon TCG",
+    "description": "Booster packs from real Pokémon Trading Card Game sets: Mega Evolution, Scarlet & Violet and the classic Base Set era.",
+    "imageUrl": "https://assets.tcgdex.net/en/base/base1/58/high.webp",
     "cardBackUrl": null,
+    "accentColor": "#ffcb05",
+    "attribution": "Card data and images: TCGdex (tcgdex.net), a community-run open database. Pokémon and its trademarks are © Nintendo, Creatures, GAME FREAK and The Pokémon Company. Cyan Arcade is a fan project, not affiliated with or endorsed by them.",
     "rarities": [
       { "code": "common", "name": "Common", "tier": 1 },
       { "code": "uncommon", "name": "Uncommon", "tier": 2 },
-      { "code": "rare", "name": "Rare", "tier": 3 },
-      { "code": "epic", "name": "Epic", "tier": 4 },
-      { "code": "legendary", "name": "Legendary", "tier": 5 }
+      { "code": "double-rare", "name": "Double Rare", "tier": 3 },
+      { "code": "special-illustration-rare", "name": "Special Illustration Rare", "tier": 5 }
     ],
-    "setCount": 2,
-    "cardCount": 36
+    "setCount": 25,
+    "cardCount": 4621
   }
 ]
 ```
 
-`cardBackUrl` is the back of the game's cards, or `null` for the arcade's own.
+(Pokémon has 13 rarities; four are shown. One Piece has its own list, from Common to Treasure Rare, with Parallel and Manga Rare for alternate arts.)
+
+| Field | Notes |
+| ----- | ----- |
+| `imageUrl` | One of the game's own cards, to show for it; may be `null` |
+| `cardBackUrl` | The back of the game's cards, or `null` for the arcade's own |
+| `accentColor` | The game's color, `#rrggbb`, or `null`. Clients use it for the game's pages |
+| `attribution` | Where the data and images come from and whose they are. Show it with the game |
 
 #### `GET /api/tcg/sets?game={slug}`
 
-The sets of a game, in the order its dataset lists them; without `game`, the sets of every game. `GET /api/tcg/sets/{id}` returns one, or `404 NOT_FOUND`.
+The sets of a game, in the order its import lists them (newest first for both games); without `game`, the sets of every game. `GET /api/tcg/sets/{id}` returns one, or `404 NOT_FOUND`.
 
 ```json
 [
   {
-    "id": 1,
-    "code": "pixel-meadow",
-    "name": "Pixel Meadow",
-    "description": "Sunny fields, mossy rocks and the critters that nap on them.",
-    "imageUrl": "/tcg-assets/cyan-critters/pixel-meadow/set.svg",
-    "releasedOn": "2026-09-01",
-    "game": { "slug": "cyan-critters", "name": "Cyan Critters" },
-    "cardCount": 18,
-    "packCount": 2
+    "id": 21,
+    "code": "sv03-5",
+    "name": "151",
+    "description": "Scarlet & Violet series. 207 cards.",
+    "series": "Scarlet & Violet",
+    "imageUrl": "https://assets.tcgdex.net/en/sv/sv03.5/logo.webp",
+    "coverImageUrl": "https://assets.tcgdex.net/en/sv/sv03.5/198/high.webp",
+    "releasedOn": "2023-09-22",
+    "game": { "slug": "pokemon", "name": "Pokémon TCG" },
+    "cardCount": 207,
+    "packCount": 1
   }
 ]
 ```
+
+| Field | Notes |
+| ----- | ----- |
+| `code` | Identifies the set within its game, in URLs too. Made from the source's id (`sv03.5` → `sv03-5`, `OP-01` → `op01`) |
+| `series` | A group of sets ("Scarlet & Violet", "Booster Pack", "Extra Booster"), or `null` |
+| `imageUrl` | The set's logo, or `null` when the source has none (One Piece sets) |
+| `coverImageUrl` | One of the set's rarest cards, to show for it |
+| `releasedOn` | When the set came out, or `null` when the source does not say (One Piece) |
 
 #### `GET /api/tcg/cards?set={id}`
 
-Every card of a set, in the order of their numbers. `set` is required (`400 BAD_REQUEST` without it); an unknown set is `404 NOT_FOUND`.
+Every card of a set, in the order the set lists them. `set` is required (`400 BAD_REQUEST` without it); an unknown set is `404 NOT_FOUND`.
 
 ```json
 [
   {
-    "id": 17,
-    "number": "017",
-    "name": "Solarhorn",
-    "imageUrl": "/tcg-assets/cyan-critters/pixel-meadow/cards/017.svg",
-    "rarity": { "code": "epic", "name": "Epic", "tier": 4 },
-    "set": { "id": 1, "code": "pixel-meadow", "name": "Pixel Meadow" },
-    "game": { "slug": "cyan-critters", "name": "Cyan Critters" },
-    "metadata": { "type": "Spark", "hp": 140, "flavor": "Carries a little piece of noon between its horns." }
+    "id": 3456,
+    "externalId": "sv03.5-001",
+    "number": "001",
+    "name": "Bulbasaur",
+    "imageUrl": "https://assets.tcgdex.net/en/sv/sv03.5/001/high.webp",
+    "thumbnailUrl": "https://assets.tcgdex.net/en/sv/sv03.5/001/low.webp",
+    "rarity": { "code": "common", "name": "Common", "tier": 1 },
+    "set": { "id": 21, "code": "sv03-5", "name": "151" },
+    "game": { "slug": "pokemon", "name": "Pokémon TCG" },
+    "metadata": { "hp": 70, "stage": "Basic", "types": "Grass", "category": "Pokemon", "illustrator": "Yuu Nishida" }
   }
 ]
 ```
 
-`number` is text: real card games number cards like `TG03` or `SV-P 012`.
+An alternate art is a card of its own that **shares the number** of the card it is a version of. Three of the cards of One Piece's Romance Dawn, abridged:
+
+```json
+[
+  { "id": 7386, "externalId": "OP01-120", "number": "OP01-120", "name": "Shanks",
+    "rarity": { "code": "secret-rare", "name": "Secret Rare", "tier": 4 },
+    "metadata": { "printedRarity": "Secret Rare", "category": "Character", "color": "Red", "cost": 9, "power": 10000 } },
+  { "id": 7387, "externalId": "OP01-120_p1", "number": "OP01-120", "name": "Shanks",
+    "rarity": { "code": "secret-parallel", "name": "Secret Rare Parallel", "tier": 5 },
+    "metadata": { "printedRarity": "Secret Rare", "variant": "Parallel", "...": "" } },
+  { "id": 7388, "externalId": "OP01-120_p2", "number": "OP01-120", "name": "Shanks",
+    "rarity": { "code": "manga", "name": "Manga Rare", "tier": 5 },
+    "metadata": { "printedRarity": "Secret Rare", "variant": "Parallel, Manga, Alternate Art", "...": "" } }
+]
+```
+
+| Field | Notes |
+| ----- | ----- |
+| `externalId` | The card's id in the source it was imported from; unique within its game |
+| `number` | Printed on the card; text, because real sets number cards like `TG03` or `OP01-120`. Not unique: alternate arts share it |
+| `imageUrl` | The full-size image, for a closer look and pack openings |
+| `thumbnailUrl` | A smaller image for grids, or `null` when the source has one size only (One Piece) |
+| `metadata` | The game's own fields: a Pokémon's HP, types, stage and illustrator; a One Piece card's color, cost, power, counter, types, effect, printed rarity and kind of print |
 
 #### `GET /api/tcg/packs?set={id}`
 
@@ -635,44 +1014,56 @@ The packs of a set that can be opened, with their odds in the open. `GET /api/tc
 ```json
 [
   {
-    "id": 1,
-    "code": "sunrise",
-    "name": "Sunrise Pack",
-    "description": "Warm light and crackling manes. Solarhorn waits inside.",
-    "imageUrl": "/tcg-assets/cyan-critters/pixel-meadow/packs/sunrise.svg",
-    "set": { "id": 1, "code": "pixel-meadow", "name": "Pixel Meadow" },
-    "game": { "slug": "cyan-critters", "name": "Cyan Critters" },
-    "cardsPerPack": 5,
-    "poolSize": 16,
+    "id": 23,
+    "code": "booster",
+    "name": "151 Booster Pack",
+    "description": "10 cards: four commons, three uncommons, two reverse-holo slots (the second can hold an illustration rare or better) and a rare-or-better slot.",
+    "imageUrl": null,
+    "setLogoUrl": "https://assets.tcgdex.net/en/sv/sv03.5/logo.webp",
+    "coverImageUrl": "https://assets.tcgdex.net/en/sv/sv03.5/198/high.webp",
+    "accentColor": "#ffcb05",
+    "set": { "id": 21, "code": "sv03-5", "name": "151" },
+    "game": { "slug": "pokemon", "name": "Pokémon TCG" },
+    "cardsPerPack": 10,
+    "poolSize": 207,
     "slots": [
       { "slot": 1, "odds": [ { "rarity": { "code": "common", "name": "Common", "tier": 1 }, "percent": 100.0 } ] },
-      { "slot": 4, "odds": [
-        { "rarity": { "code": "uncommon", "name": "Uncommon", "tier": 2 }, "percent": 90.0 },
-        { "rarity": { "code": "rare", "name": "Rare", "tier": 3 }, "percent": 10.0 }
+      { "slot": 9, "odds": [
+        { "rarity": { "code": "common", "name": "Common", "tier": 1 }, "percent": 45.8 },
+        { "rarity": { "code": "uncommon", "name": "Uncommon", "tier": 2 }, "percent": 27.7 },
+        { "rarity": { "code": "rare", "name": "Rare", "tier": 2 }, "percent": 10.6 },
+        { "rarity": { "code": "illustration-rare", "name": "Illustration Rare", "tier": 4 }, "percent": 13.3 },
+        { "rarity": { "code": "special-illustration-rare", "name": "Special Illustration Rare", "tier": 5 }, "percent": 1.8 },
+        { "rarity": { "code": "hyper-rare", "name": "Hyper Rare", "tier": 5 }, "percent": 0.7 }
       ] },
-      { "slot": 5, "odds": [
-        { "rarity": { "code": "rare", "name": "Rare", "tier": 3 }, "percent": 75.0 },
-        { "rarity": { "code": "epic", "name": "Epic", "tier": 4 }, "percent": 20.0 },
-        { "rarity": { "code": "legendary", "name": "Legendary", "tier": 5 }, "percent": 5.0 }
+      { "slot": 10, "odds": [
+        { "rarity": { "code": "rare", "name": "Rare", "tier": 2 }, "percent": 71.1 },
+        { "rarity": { "code": "double-rare", "name": "Double Rare", "tier": 3 }, "percent": 21.3 },
+        { "rarity": { "code": "ultra-rare", "name": "Ultra Rare", "tier": 4 }, "percent": 7.6 }
       ] }
-    ]
+    ],
+    "oddsNote": "Simulator probabilities. The Pokémon Company does not publish official pull rates; these odds are this arcade's approximation and can differ from real packs."
   }
 ]
 ```
 
-(Slots 2 and 3, the same as slot 1, are left out above.)
+(Slots 2 to 8 are left out above.)
 
 | Field | Notes |
 | ----- | ----- |
-| `cardsPerPack` | One card per slot |
+| `imageUrl` | The pack's own artwork, or `null`. Real card games' sources have none; clients draw the pack from `setLogoUrl`, `coverImageUrl` and `accentColor` |
+| `cardsPerPack` | One card per slot. Each game has its own layout: 10 for a Pokémon booster, 11 for a classic one, 12 for One Piece |
 | `poolSize` | How many different cards can come out of the pack. A pack's pool may be the whole set or part of it |
-| `slots` | In the order the cards come out. Each slot lists the rarities it can be, with the chance of each in percent |
+| `slots` | In the order the cards come out. Each slot lists the rarities it can be, with the chance of each in percent. A rarity the set has no cards of is not listed |
+| `oddsNote` | Where the odds come from. Neither publisher gives official pull rates, so both games' odds are **simulator probabilities**, and say so |
 
 ### Opening packs
 
+The daily allowance applies to players; **an admin has none**. It is decided by the role the player signed in with, inside the opening itself; otherwise an admin's packs are opened exactly like everyone else's.
+
 #### `POST /api/tcg/packs/{id}/open`
 
-Opens a pack for the signed-in player. **There is no request body**: the pack is in the path, the player in the session, and which cards come out is decided by the server alone. Anything a client sends in a body or query is ignored.
+Opens a pack for the signed-in player. **There is no request body**: the pack is in the path, the player in the session, and which cards come out is decided by the server alone, from the cards in the database. Anything a client sends in a body or query is ignored.
 
 The server draws each slot's rarity by the pack's odds and then a card of that rarity from the pack's pool, avoiding repeats within one pack while the pool allows. It records the opening and adds every card to the player's collection, all in one transaction: either all of it happens or none of it does.
 
@@ -681,38 +1072,43 @@ Responds `201 Created`:
 ```json
 {
   "opening": {
-    "id": 15,
+    "id": 31,
     "pack": {
-      "id": 1,
-      "code": "sunrise",
-      "name": "Sunrise Pack",
-      "imageUrl": "/tcg-assets/cyan-critters/pixel-meadow/packs/sunrise.svg",
-      "set": { "id": 1, "code": "pixel-meadow", "name": "Pixel Meadow" },
-      "game": { "slug": "cyan-critters", "name": "Cyan Critters" }
+      "id": 46,
+      "code": "booster",
+      "name": "Romance Dawn Booster Pack",
+      "imageUrl": null,
+      "setLogoUrl": null,
+      "coverImageUrl": "https://optcgapi.com/media/static/Card_Images/OP01-120_p1.jpg",
+      "accentColor": "#c8102e",
+      "set": { "id": 44, "code": "op01", "name": "Romance Dawn" },
+      "game": { "slug": "one-piece", "name": "One Piece Card Game" }
     },
-    "openedAt": "2026-10-01T05:48:00.937Z",
+    "openedAt": "2026-10-01T10:51:46.119739265Z",
     "cards": [
       {
-        "position": 1,
+        "position": 12,
         "card": {
-          "id": 4,
-          "number": "004",
-          "name": "Puffkin",
-          "imageUrl": "/tcg-assets/cyan-critters/pixel-meadow/cards/004.svg",
-          "rarity": { "code": "common", "name": "Common", "tier": 1 },
-          "set": { "id": 1, "code": "pixel-meadow", "name": "Pixel Meadow" },
-          "game": { "slug": "cyan-critters", "name": "Cyan Critters" },
-          "metadata": { "type": "Breeze", "hp": 30, "flavor": "Light enough to ride a dandelion seed." }
+          "id": 7259,
+          "externalId": "OP01-017",
+          "number": "OP01-017",
+          "name": "Nico Robin",
+          "imageUrl": "https://optcgapi.com/media/static/Card_Images/OP01-017.jpg",
+          "thumbnailUrl": null,
+          "rarity": { "code": "rare", "name": "Rare", "tier": 2 },
+          "set": { "id": 44, "code": "op01", "name": "Romance Dawn" },
+          "game": { "slug": "one-piece", "name": "One Piece Card Game" },
+          "metadata": { "printedRarity": "Rare", "category": "Character", "color": "Red", "cost": 3, "power": 4000, "counter": 1000, "...": "" }
         },
         "isNew": true
       }
     ]
   },
-  "allowance": { "dailyLimit": 10, "openedToday": 1, "leftToday": 9, "resetsAt": "2026-10-02T00:00:00Z" }
+  "allowance": { "dailyLimit": 10, "openedToday": 9, "leftToday": 1, "resetsAt": "2026-10-02T00:00:00Z" }
 }
 ```
 
-(One card shown; a Sunrise Pack gives five.) `isNew` is `true` when the player did not own the card before this pull; otherwise the card was a duplicate and its quantity went up by one.
+(One card shown; a One Piece booster gives twelve.) `isNew` is `true` when the player did not own the card before this pull; otherwise the card was a duplicate and its quantity went up by one.
 
 | Error | When |
 | ----- | ---- |
@@ -720,17 +1116,19 @@ Responds `201 Created`:
 | `403 FORBIDDEN` | No valid CSRF token |
 | `404 NOT_FOUND` | No pack has that id |
 | `409 PACK_NOT_AVAILABLE` | The pack has been withdrawn, or cannot be filled from its pool. Nothing is used up |
-| `429 DAILY_PACK_LIMIT_REACHED` | The player has opened all of today's packs |
+| `429 DAILY_PACK_LIMIT_REACHED` | The player has opened all of today's packs and has no extra packs. Never for an admin |
 
 #### `GET /api/tcg/allowance`
 
 How many packs the signed-in player may still open today. The day is the server's, midnight to midnight UTC.
 
 ```json
-{ "dailyLimit": 10, "openedToday": 3, "leftToday": 7, "resetsAt": "2026-10-02T00:00:00Z" }
+{ "dailyLimit": 10, "openedToday": 3, "leftToday": 7, "bonusPacks": 2, "resetsAt": "2026-10-02T00:00:00Z" }
 ```
 
-With the limit switched off (`TCG_DAILY_PACK_LIMIT=0`), `dailyLimit` and `leftToday` are `null`.
+`bonusPacks` are extra packs from the [shop](#shop) (or the daily login reward). They are used only once `leftToday` reaches 0, one per opening, in the opening's own transaction: an opening that fails keeps its pack.
+
+For an admin, and for everyone when the limit is switched off (`TCG_DAILY_PACK_LIMIT=0`), `dailyLimit` and `leftToday` are `null` and `bonusPacks` is 0: there is no limit, and extra packs are not needed (or used). `openedToday` still counts.
 
 #### `GET /api/tcg/openings`
 
@@ -743,7 +1141,7 @@ The signed-in player's opened packs, newest first, each with the cards it gave a
 
 ```json
 {
-  "entries": [ { "id": 15, "pack": { "...": "as above" }, "openedAt": "2026-10-01T05:48:00.937Z", "cards": [ "...as above" ] } ],
+  "entries": [ { "id": 31, "pack": { "...": "as above" }, "openedAt": "2026-10-01T10:51:46.119739265Z", "cards": [ "...as above" ] } ],
   "page": 0,
   "size": 10,
   "totalEntries": 1,
@@ -757,41 +1155,42 @@ An entry has the same shape as `opening` in the answer to opening a pack. A pack
 
 #### `GET /api/tcg/collection`
 
-The signed-in player's cards: how complete the collection is, set by set, and one page of the cards they own, ordered by game, set and card number. Read-only: no endpoint adds, changes or removes a card (`POST` and `PUT` here are `405 METHOD_NOT_ALLOWED`); cards only enter a collection by opening packs.
+The signed-in player's cards: how complete the collection is, set by set, and one page of the cards they own, ordered by game, set and the set's own order. Read-only: no endpoint adds, changes or removes a card (`POST` and `PUT` here are `405 METHOD_NOT_ALLOWED`); cards only enter a collection by opening packs.
 
 | Query parameter | Default | Notes |
 | --------------- | ------- | ----- |
 | `game` | all games | A card game's slug: statistics and cards of that game only |
 | `set` | all sets | A set id: narrows the list of cards, not the statistics |
 | `page` | `0` | Zero-based |
-| `size` | `60` | 1 to 200 |
+| `size` | `60` | 1 to 500 (enough for every card of the largest set at once) |
 
 ```json
 {
-  "summary": { "uniqueCards": 5, "totalCards": 5, "availableCards": 36, "completionPercent": 13.9 },
+  "summary": { "uniqueCards": 49, "totalCards": 52, "availableCards": 4621, "completionPercent": 1.1 },
   "sets": [
     {
-      "id": 1,
-      "code": "pixel-meadow",
-      "name": "Pixel Meadow",
-      "imageUrl": "/tcg-assets/cyan-critters/pixel-meadow/set.svg",
-      "game": { "slug": "cyan-critters", "name": "Cyan Critters" },
-      "ownedCards": 5,
-      "totalCards": 18,
-      "completionPercent": 27.8
+      "id": 3,
+      "code": "me05",
+      "name": "Pitch Black",
+      "imageUrl": "https://assets.tcgdex.net/en/me/me05/logo.webp",
+      "coverImageUrl": "https://assets.tcgdex.net/en/me/me05/114/high.webp",
+      "game": { "slug": "pokemon", "name": "Pokémon TCG" },
+      "ownedCards": 0,
+      "totalCards": 120,
+      "completionPercent": 0.0
     }
   ],
   "cards": [
     {
-      "card": { "id": 1, "number": "001", "name": "Sproutle", "...": "a card, as in /api/tcg/cards" },
+      "card": { "id": 3463, "externalId": "sv03.5-008", "number": "008", "name": "Wartortle", "...": "a card, as in /api/tcg/cards" },
       "quantity": 1,
-      "firstObtainedAt": "2026-10-01T05:48:00.937Z",
-      "lastObtainedAt": "2026-10-01T05:48:00.937Z"
+      "firstObtainedAt": "2026-10-01T10:29:12.898462Z",
+      "lastObtainedAt": "2026-10-01T10:29:12.898462Z"
     }
   ],
   "page": 0,
   "size": 60,
-  "totalEntries": 5,
+  "totalEntries": 49,
   "totalPages": 1
 }
 ```
@@ -808,4 +1207,4 @@ The signed-in player's cards: how complete the collection is, set by set, and on
 | Error | When |
 | ----- | ---- |
 | `401 UNAUTHORIZED` | Not signed in |
-| `400 VALIDATION_FAILED` | `page` is negative, or `size` is outside 1 to 200 |
+| `400 VALIDATION_FAILED` | `page` is negative, or `size` is outside 1 to 500 |

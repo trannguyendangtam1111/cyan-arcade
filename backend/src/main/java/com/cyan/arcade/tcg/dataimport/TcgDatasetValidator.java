@@ -53,17 +53,23 @@ class TcgDatasetValidator {
 			.forEach((code) -> problems.add("rarity '%s' is defined more than once".formatted(code)));
 		duplicates(dataset.sets(), CardSet::code)
 			.forEach((code) -> problems.add("set '%s' is defined more than once".formatted(code)));
+		duplicates(dataset.sets().stream().filter((set) -> set.externalId() != null).toList(), CardSet::externalId)
+			.forEach((id) -> problems.add("more than one set has the external id '%s'".formatted(id)));
+		// A card's external id identifies it in the whole game, wherever it is listed.
+		duplicates(dataset.sets().stream().flatMap((set) -> set.cards().stream().map(set::externalIdOf)).toList(),
+				Function.identity())
+			.forEach((id) -> problems.add("more than one card has the external id '%s'".formatted(id)));
 
 		for (CardSet set : dataset.sets()) {
 			String where = "set '%s'".formatted(set.code());
-			duplicates(set.cards(), Card::number)
-				.forEach((number) -> problems.add("%s has more than one card numbered '%s'".formatted(where, number)));
+			duplicates(set.cards(), Card::key)
+				.forEach((key) -> problems.add("%s has more than one card '%s'".formatted(where, key)));
 			duplicates(set.packs(), Pack::code)
 				.forEach((code) -> problems.add("%s has more than one pack '%s'".formatted(where, code)));
 
 			for (Card card : set.cards()) {
 				if (!rarities.contains(card.rarity())) {
-					problems.add("%s card '%s' has the unknown rarity '%s'".formatted(where, card.number(),
+					problems.add("%s card '%s' has the unknown rarity '%s'".formatted(where, card.key(),
 							card.rarity()));
 				}
 			}
@@ -77,24 +83,24 @@ class TcgDatasetValidator {
 	private static List<String> packProblems(CardSet set, Pack pack, Set<String> rarities) {
 		List<String> problems = new ArrayList<>();
 		String where = "set '%s' pack '%s'".formatted(set.code(), pack.code());
-		Map<String, Card> cardsByNumber = set.cards()
+		Map<String, Card> cardsByKey = set.cards()
 			.stream()
-			.collect(Collectors.toMap(Card::number, Function.identity(), (first, second) -> first));
+			.collect(Collectors.toMap(Card::key, Function.identity(), (first, second) -> first));
 
 		List<String> pool = poolOf(set, pack);
 		if (pool.isEmpty()) {
 			problems.add("%s has no cards in its pool".formatted(where));
 		}
 		duplicates(pool, Function.identity())
-			.forEach((number) -> problems.add("%s lists card '%s' more than once".formatted(where, number)));
+			.forEach((key) -> problems.add("%s lists card '%s' more than once".formatted(where, key)));
 		pool.stream()
-			.filter((number) -> !cardsByNumber.containsKey(number))
+			.filter((key) -> !cardsByKey.containsKey(key))
 			.distinct()
-			.forEach((number) -> problems.add("%s lists card '%s', which is not in the set".formatted(where, number)));
+			.forEach((key) -> problems.add("%s lists card '%s', which is not in the set".formatted(where, key)));
 
 		// A rarity the pack promises must be one it can deliver.
 		Set<String> raritiesInPool = pool.stream()
-			.map(cardsByNumber::get)
+			.map(cardsByKey::get)
 			.filter((card) -> card != null)
 			.map(Card::rarity)
 			.collect(Collectors.toSet());
@@ -113,9 +119,9 @@ class TcgDatasetValidator {
 		return problems;
 	}
 
-	/** The numbers of the cards a pack can contain: the listed ones, or the whole set when none are listed. */
+	/** The keys of the cards a pack can contain: the listed ones, or the whole set when none are listed. */
 	static List<String> poolOf(CardSet set, Pack pack) {
-		return (pack.cards() != null) ? pack.cards() : set.cards().stream().map(Card::number).toList();
+		return (pack.cards() != null) ? pack.cards() : set.cards().stream().map(Card::key).toList();
 	}
 
 	private static <T> List<String> duplicates(List<T> items, Function<T, String> key) {

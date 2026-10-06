@@ -2,9 +2,10 @@ package com.cyan.arcade.tcg.dataimport;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.Arrays;
-import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,43 +14,46 @@ import tools.jackson.databind.json.JsonMapper;
 
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.boot.SpringApplication;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
-import org.springframework.boot.context.properties.bind.DefaultValue;
+import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
-import org.springframework.core.io.ResourceLoader;
-import org.springframework.core.io.support.ResourcePatternResolver;
-import org.springframework.core.io.support.ResourcePatternUtils;
 
 /**
- * The import job. At startup, before the application serves anything, it imports:
+ * The import job: brings card games into the database, and does nothing unless asked to.
  * <ol>
- * <li>the datasets that ship with the application ({@code classpath:tcg/datasets/*.json});
- * <li>any dataset files named in {@code app.tcg.import.files}, for games brought in from outside.
+ * <li>{@code app.tcg.import.sources}: the {@link TcgSource sources} to read, e.g.
+ * {@code pokemon,one-piece}. Each is fetched from the internet and imported.
+ * <li>{@code app.tcg.import.files}: dataset files ({@link TcgDataset} as JSON), for a card game
+ * that has no source of its own.
  * </ol>
  *
- * <p>After that the application works from its own database and never goes back to a dataset's
- * source. A dataset that cannot be imported stops the startup with a message saying what is wrong
- * with it, rather than leaving the arcade half-stocked.
+ * <p>An ordinary start of the application asks for neither, so the arcade starts quickly and never
+ * depends on an external source: it serves whatever was imported last. The {@code import-tcg}
+ * profile runs the job on its own and exits ({@code app.tcg.import.exit-when-done}). Importing is
+ * idempotent, so running it again only adds what is new and updates what changed. A source or file
+ * that cannot be imported stops the job with a message saying what is wrong, and leaves that game
+ * as it was.
  */
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties(TcgDatasetImportRunner.ImportProperties.class)
+@EnableConfigurationProperties({ TcgDatasetImportRunner.ImportProperties.class, TcgSourceProperties.class })
 class TcgDatasetImportRunner implements ApplicationRunner {
 
 	private static final Logger log = LoggerFactory.getLogger(TcgDatasetImportRunner.class);
 
-	private static final String BUNDLED_DATASETS = "classpath*:tcg/datasets/*.json";
-
 	/**
-	 * @param bundled whether to import the datasets that ship with the application
-	 * @param files paths of further dataset files to import
+	 * @param sources ids of the sources to import from
+	 * @param files paths of dataset files to import
+	 * @param exitWhenDone whether the application stops once the import is over, for a one-off run
 	 */
 	@ConfigurationProperties("app.tcg.import")
-	record ImportProperties(@DefaultValue("true") boolean bundled, List<String> files) {
+	record ImportProperties(List<String> sources, List<String> files, boolean exitWhenDone) {
 
 		ImportProperties {
+			sources = (sources != null) ? List.copyOf(sources) : List.of();
 			files = (files != null) ? List.copyOf(files) : List.of();
 		}
 
@@ -59,34 +63,43 @@ class TcgDatasetImportRunner implements ApplicationRunner {
 
 	private final JsonMapper json;
 
-	private final ResourcePatternResolver resources;
+	private final Map<String, TcgSource> sources;
 
 	private final ImportProperties properties;
 
-	TcgDatasetImportRunner(TcgDatasetImporter importer, JsonMapper json, ResourceLoader resourceLoader,
-			ImportProperties properties) {
+	private final ApplicationContext context;
+
+	TcgDatasetImportRunner(TcgDatasetImporter importer, JsonMapper json, List<TcgSource> sources,
+			ImportProperties properties, ApplicationContext context) {
 		this.importer = importer;
 		this.json = json;
-		this.resources = ResourcePatternUtils.getResourcePatternResolver(resourceLoader);
+		this.sources = sources.stream().collect(Collectors.toMap(TcgSource::id, Function.identity()));
 		this.properties = properties;
+		this.context = context;
 	}
 
 	@Override
 	public void run(ApplicationArguments args) throws IOException {
-		if (this.properties.bundled()) {
-			Resource[] bundled = this.resources.getResources(BUNDLED_DATASETS);
-			// A fixed order, so several games always end up in the same order of import.
-			Arrays.sort(bundled, Comparator.comparing(Resource::getFilename));
-			for (Resource dataset : bundled) {
-				importFrom(dataset);
-			}
+		List<String> unknown = this.properties.sources().stream().filter((id) -> !this.sources.containsKey(id)).toList();
+		if (!unknown.isEmpty()) {
+			throw new TcgSourceException("Unknown card game sources %s; the known ones are %s".formatted(unknown,
+					this.sources.keySet().stream().sorted().toList()));
+		}
+		for (String id : this.properties.sources()) {
+			TcgSource source = this.sources.get(id);
+			log.info("Importing card game source '{}' from {}", id, source.description());
+			report(this.importer.importDataset(source.fetch(), source.description()), source.description());
 		}
 		for (String file : this.properties.files()) {
-			importFrom(new FileSystemResource(file));
+			importFile(new FileSystemResource(file));
+		}
+		if (this.properties.exitWhenDone()) {
+			log.info("Card game import finished");
+			System.exit(SpringApplication.exit(this.context));
 		}
 	}
 
-	private void importFrom(Resource resource) throws IOException {
+	private void importFile(Resource resource) throws IOException {
 		String source = resource.getDescription();
 		TcgDataset dataset;
 		try (InputStream in = resource.getInputStream()) {
@@ -95,9 +108,12 @@ class TcgDatasetImportRunner implements ApplicationRunner {
 		catch (JacksonException ex) {
 			throw new InvalidDatasetException(source, List.of("it is not valid JSON: " + ex.getOriginalMessage()));
 		}
-		ImportReport report = this.importer.importDataset(dataset, source);
-		log.info("Imported card game '{}' from {}: {} sets, {} cards, {} packs", report.gameSlug(), source,
-				report.sets(), report.cards(), report.packs());
+		report(this.importer.importDataset(dataset, source), source);
+	}
+
+	private static void report(ImportReport report, String source) {
+		log.info("Imported card game '{}' from {}: {} sets, {} cards ({} new), {} packs", report.gameSlug(), source,
+				report.sets(), report.cards(), report.newCards(), report.packs());
 	}
 
 }

@@ -26,9 +26,13 @@ public record CollectionResponse(Summary summary, List<SetProgress> sets, List<O
 	public record Summary(int uniqueCards, long totalCards, int availableCards, double completionPercent) {
 	}
 
-	/** @param completionPercent {@code ownedCards} out of {@code totalCards}, 0 to 100 */
-	public record SetProgress(Long id, String code, String name, String imageUrl, GameRef game, int ownedCards,
-			int totalCards, double completionPercent) {
+	/**
+	 * @param imageUrl the set's logo, or {@code null}
+	 * @param coverImageUrl one of the set's rarest cards, or {@code null}
+	 * @param completionPercent {@code ownedCards} out of {@code totalCards}, 0 to 100
+	 */
+	public record SetProgress(Long id, String code, String name, String imageUrl, String coverImageUrl, GameRef game,
+			int ownedCards, int totalCards, double completionPercent) {
 	}
 
 	/** @param quantity how many copies the player owns */

@@ -44,7 +44,7 @@ class TcgDatasetImportTests {
 	void importsAGameWithItsSetsCardsPacksPoolsAndOdds() {
 		ImportReport report = this.importer.importDataset(game("import-basic", "Basic"), "test");
 
-		assertThat(report).isEqualTo(new ImportReport("import-basic", 2, 1, 3, 1));
+		assertThat(report).isEqualTo(new ImportReport("import-basic", 2, 1, 3, 3, 1));
 		assertThat(count("tcg_sets s JOIN tcg_games g ON g.id = s.game_id WHERE g.slug = 'import-basic'")).isEqualTo(1);
 		assertThat(this.jdbc.queryForList("""
 				SELECT c.card_number || ':' || r.code || ':' || (c.metadata ->> 'power')
@@ -70,6 +70,7 @@ class TcgDatasetImportTests {
 		ImportReport second = this.importer.importDataset(game("import-twice", "Twice"), "test");
 
 		assertThat(second.cards()).isEqualTo(3);
+		assertThat(second.newCards()).isZero();
 		assertThat(cardRows("import-twice")).isEqualTo(cardsBefore);
 		assertThat(packId("import-twice")).isEqualTo(packBefore);
 		assertThat(count("tcg_games WHERE slug = 'import-twice'")).isEqualTo(1);
@@ -131,7 +132,8 @@ class TcgDatasetImportTests {
 			.isThrownBy(() -> this.importer.importDataset(broken, "broken.json"))
 			.withMessageContaining("broken.json")
 			.satisfies((ex) -> assertThat(ex.getProblems()).containsExactlyInAnyOrder(
-					"set 'base' has more than one card numbered '1'",
+					"set 'base' has more than one card '1'",
+					"more than one card has the external id 'base-1'",
 					"set 'base' card '2' has the unknown rarity 'mythic'",
 					"set 'base' pack 'pack' lists card '9', which is not in the set",
 					"set 'base' pack 'pack' has odds for 'rare' but no card of that rarity in its pool",
@@ -156,20 +158,76 @@ class TcgDatasetImportTests {
 	}
 
 	@Test
-	void theDatasetThatShipsWithTheApplicationIsReadFromJsonAndValid() throws Exception {
-		TcgDataset bundled;
-		try (InputStream in = new ClassPathResource("tcg/datasets/cyan-critters.json").getInputStream()) {
-			bundled = this.json.readValue(in, TcgDataset.class);
-		}
+	void alternateArtsThatShareAPrintedNumberAreSeparateCardsKnownByTheirExternalIds() {
+		TcgDataset withVariants = new TcgDataset(new Game("import-variants", "Variants", "", null, null), RARITIES,
+				List.of(new CardSet("op01", "569101", "Romance Dawn", "", "Booster Pack", null, "/cover.png", null,
+						List.of(variant("OP01-120", "OP01-120", "rare"), variant("OP01-120_p1", "OP01-120", "rare"),
+								variant("OP01-121", "OP01-121", "common")),
+						List.of(new Pack("booster", "Booster", "", null, "Simulator probabilities.", ONE_COMMON,
+								List.of("OP01-120_p1", "OP01-121"))))));
 
-		assertThat(bundled.game().slug()).isEqualTo("cyan-critters");
-		assertThat(bundled.sets()).extracting(CardSet::code).containsExactly("pixel-meadow", "neon-depths");
-		assertThat(bundled.sets().get(0).cards()).hasSize(18);
-		assertThat(bundled.sets().get(0).cards().get(0).metadata()).containsEntry("type", "Leaf").containsEntry("hp", 40);
-		assertThat(bundled.sets().get(0).packs().get(0).slots()).extracting(Slot::count).containsExactly(3, 1, 1);
-		// Importing it again, as every start of the application does, is harmless.
-		assertThat(this.importer.importDataset(bundled, "test")).isEqualTo(new ImportReport("cyan-critters", 5, 2, 36, 4));
-		assertThat(count("tcg_cards c JOIN tcg_games g ON g.id = c.game_id WHERE g.slug = 'cyan-critters'")).isEqualTo(36);
+		ImportReport report = this.importer.importDataset(withVariants, "test");
+
+		assertThat(report.cards()).isEqualTo(3);
+		assertThat(report.newCards()).isEqualTo(3);
+		assertThat(this.jdbc.queryForList("""
+				SELECT c.external_id || '@' || c.card_number || ':' || c.display_order
+				FROM tcg_cards c JOIN tcg_games g ON g.id = c.game_id
+				WHERE g.slug = 'import-variants' ORDER BY c.display_order
+				""", String.class)).containsExactly("OP01-120@OP01-120:0", "OP01-120_p1@OP01-120:1", "OP01-121@OP01-121:2");
+		// A pack lists the cards it can give by their keys, so it can hold one art and not the other.
+		assertThat(this.jdbc.queryForList("""
+				SELECT c.external_id FROM tcg_pack_cards pc JOIN tcg_cards c ON c.id = pc.card_id
+				WHERE pc.pack_id = ? ORDER BY c.external_id
+				""", String.class, packId("import-variants"))).containsExactly("OP01-120_p1", "OP01-121");
+		assertThat(this.jdbc.queryForObject("""
+				SELECT s.external_id || '|' || s.series || '|' || s.cover_image_url || '|' || p.odds_note
+				FROM tcg_sets s JOIN tcg_packs p ON p.set_id = s.id JOIN tcg_games g ON g.id = s.game_id
+				WHERE g.slug = 'import-variants'
+				""", String.class)).isEqualTo("569101|Booster Pack|/cover.png|Simulator probabilities.");
+
+		assertThat(this.importer.importDataset(withVariants, "test").newCards()).isZero();
+		assertThat(count("tcg_cards c JOIN tcg_games g ON g.id = c.game_id WHERE g.slug = 'import-variants'")).isEqualTo(3);
+	}
+
+	@Test
+	void aCardTheSourceMovesToAnotherSetIsUpdatedRatherThanDuplicated() {
+		CardSet first = new CardSet("first", null, "First", "", null, null, null, null,
+				List.of(variant("card-a", "1", "common"), variant("card-b", "2", "common")), List.of());
+		CardSet second = new CardSet("second", null, "Second", "", null, null, null, null,
+				List.of(variant("card-c", "1", "common")), List.of());
+		this.importer.importDataset(new TcgDataset(new Game("import-move", "Move", "", null, null), RARITIES,
+				List.of(first, second)), "test");
+		Long cardB = this.jdbc.queryForObject("SELECT id FROM tcg_cards WHERE external_id = 'card-b'", Long.class);
+
+		CardSet firstWithoutB = new CardSet("first", null, "First", "", null, null, null, null,
+				List.of(variant("card-a", "1", "common")), List.of());
+		CardSet secondWithB = new CardSet("second", null, "Second", "", null, null, null, null,
+				List.of(variant("card-c", "1", "common"), variant("card-b", "7", "rare")), List.of());
+		ImportReport report = this.importer.importDataset(new TcgDataset(new Game("import-move", "Move", "", null, null),
+				RARITIES, List.of(firstWithoutB, secondWithB)), "test");
+
+		assertThat(report.newCards()).isZero();
+		assertThat(this.jdbc.queryForMap("""
+				SELECT c.id, s.code, c.card_number, r.code AS rarity
+				FROM tcg_cards c JOIN tcg_sets s ON s.id = c.set_id JOIN tcg_rarities r ON r.id = c.rarity_id
+				WHERE c.external_id = 'card-b'
+				""")).containsEntry("id", cardB).containsEntry("code", "second").containsEntry("card_number", "7")
+			.containsEntry("rarity", "rare");
+		assertThat(count("tcg_cards c JOIN tcg_games g ON g.id = c.game_id WHERE g.slug = 'import-move'")).isEqualTo(3);
+	}
+
+	@Test
+	void anExternalIdIdentifiesOneCardInTheWholeGame() {
+		TcgDataset clash = new TcgDataset(new Game("import-clash", "Clash", "", null, null), RARITIES,
+				List.of(new CardSet("one", null, "One", "", null, null, null, null, List.of(variant("same", "1", "common")),
+						List.of()),
+						new CardSet("two", null, "Two", "", null, null, null, null, List.of(variant("same", "1", "common")),
+								List.of())));
+
+		assertThatExceptionOfType(InvalidDatasetException.class)
+			.isThrownBy(() -> this.importer.importDataset(clash, "test"))
+			.satisfies((ex) -> assertThat(ex.getProblems()).containsExactly("more than one card has the external id 'same'"));
 	}
 
 	@Test
@@ -185,8 +243,8 @@ class TcgDatasetImportTests {
 
 		// A card in a set of one game with a rarity of another is refused by the schema, whoever asks.
 		assertThatThrownBy(() -> this.jdbc.update("""
-				INSERT INTO tcg_cards (game_id, set_id, rarity_id, card_number, name, image_url)
-				VALUES ((SELECT game_id FROM tcg_sets WHERE id = ?), ?, ?, 'X', 'Stray', '/x.svg')
+				INSERT INTO tcg_cards (game_id, set_id, rarity_id, external_id, card_number, name, image_url)
+				VALUES ((SELECT game_id FROM tcg_sets WHERE id = ?), ?, ?, 'stray', 'X', 'Stray', '/x.svg')
 				""", setOfOne, setOfOne, rarityOfTwo.get("id"))).isInstanceOf(DataIntegrityViolationException.class);
 	}
 
@@ -203,6 +261,11 @@ class TcgDatasetImportTests {
 
 	private static Card card(String number, String name, String rarity, int power) {
 		return new Card(number, name, rarity, "/card-" + number + ".svg", Map.of("power", power));
+	}
+
+	private static Card variant(String externalId, String number, String rarity) {
+		return new Card(externalId, number, "Card " + externalId, rarity, "/" + externalId + ".png",
+				"/" + externalId + "-small.png", Map.of());
 	}
 
 	private List<Map<String, Object>> cardRows(String gameSlug) {

@@ -37,7 +37,7 @@ class PackOpeningController {
 	@PostMapping("/packs/{id}/open")
 	@ResponseStatus(HttpStatus.CREATED)
 	OpenPackResponse open(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable Long id) {
-		return this.openings.open(user.id(), id);
+		return this.openings.open(user, id);
 	}
 
 	@GetMapping("/openings")
@@ -49,7 +49,7 @@ class PackOpeningController {
 
 	@GetMapping("/allowance")
 	AllowanceResponse allowance(@AuthenticationPrincipal AuthenticatedUser user) {
-		return this.openings.allowanceOf(user.id());
+		return this.openings.allowanceOf(user);
 	}
 
 }

@@ -5,38 +5,62 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 
+import com.cyan.arcade.common.platform.PlayerActivity;
+
 import org.springframework.stereotype.Component;
 
 /**
- * Every challenge the arcade can hand out, and which one a game gets on a given day.
+ * Every challenge the arcade can hand out, and which one a game or an activity gets on a given day.
  *
  * <p>To add a challenge, add a line here. A game with no lines of its own still gets the
- * challenges that fit any game, so a new game has daily challenges from its first day.
+ * challenges that fit any game, so a new game has daily challenges from its first day. An activity
+ * (something players do outside the games, reported as a {@link PlayerActivity}) gets a challenge
+ * every day once it has lines in {@link #ACTIVITIES}.
  */
 @Component
 class ChallengeTemplates {
 
+	/**
+	 * Something players do on the platform that challenges can count.
+	 *
+	 * @param code the {@link PlayerActivity#type()} it counts
+	 * @param name what to call it on screen
+	 */
+	record Activity(String code, String name, List<ChallengeTemplate> templates) {
+	}
+
 	private static final List<ChallengeTemplate> ANY_GAME = List
-		.of(ChallengeTemplate.play("Warm-up Round", "Finish a game of %s.", 20));
+		.of(ChallengeTemplate.play("Warm-up Round", "Finish a game of %s.", 20, 40));
 
 	private static final Map<String, List<ChallengeTemplate>> BY_GAME = Map.of(
 			"snake",
-			List.of(ChallengeTemplate.score("Light Snack", "Eat 5 apples in one game of Snake.", 5, 25),
-					ChallengeTemplate.score("Snack Time", "Eat 10 apples in one game of Snake.", 10, 35),
-					ChallengeTemplate.score("Big Appetite", "Eat 20 apples in one game of Snake.", 20, 50)),
+			List.of(ChallengeTemplate.score("Light Snack", "Eat 5 apples in one game of Snake.", 5, 25, 50),
+					ChallengeTemplate.score("Snack Time", "Eat 10 apples in one game of Snake.", 10, 35, 70),
+					ChallengeTemplate.score("Big Appetite", "Eat 20 apples in one game of Snake.", 20, 50, 100)),
 			"2048",
-			List.of(ChallengeTemplate.detail("Getting Warm", "Make a 128 tile in 2048.", "highestTile", 128, 30),
-					ChallengeTemplate.detail("Quarter Way", "Make a 256 tile in 2048.", "highestTile", 256, 40),
-					ChallengeTemplate.detail("Five Twelve", "Make a 512 tile in 2048.", "highestTile", 512, 60),
-					ChallengeTemplate.score("Number Cruncher", "Score 2,000 points in one game of 2048.", 2000, 40)),
+			List.of(ChallengeTemplate.detail("Getting Warm", "Make a 128 tile in 2048.", "highestTile", 128, 30, 60),
+					ChallengeTemplate.detail("Quarter Way", "Make a 256 tile in 2048.", "highestTile", 256, 40, 80),
+					ChallengeTemplate.detail("Five Twelve", "Make a 512 tile in 2048.", "highestTile", 512, 60, 120),
+					ChallengeTemplate.score("Number Cruncher", "Score 2,000 points in one game of 2048.", 2000, 40,
+							80)),
 			"tetris",
-			List.of(ChallengeTemplate.detail("Tidy Up", "Clear 5 lines in one game of Tetris.", "lines", 5, 30),
-					ChallengeTemplate.detail("Clean Sweep", "Clear 10 lines in one game of Tetris.", "lines", 10, 50),
-					ChallengeTemplate.score("Four Digits", "Score 1,000 points in one game of Tetris.", 1000, 40)));
+			List.of(ChallengeTemplate.detail("Tidy Up", "Clear 5 lines in one game of Tetris.", "lines", 5, 30, 60),
+					ChallengeTemplate.detail("Clean Sweep", "Clear 10 lines in one game of Tetris.", "lines", 10, 50,
+							100),
+					ChallengeTemplate.score("Four Digits", "Score 1,000 points in one game of Tetris.", 1000, 40, 80)));
+
+	private static final List<Activity> ACTIVITIES = List.of(new Activity(PlayerActivity.TCG_PACK_OPENED, "Card packs",
+			List.of(ChallengeTemplate.count("Pack Opener", "Open 3 card packs today.", 3, 30, 60),
+					ChallengeTemplate.count("Card Hunter", "Open 5 card packs today.", 5, 40, 80))));
 
 	/** Every challenge a game can be given: its own first, then the ones that fit any game. */
 	List<ChallengeTemplate> forGame(String gameSlug) {
 		return Stream.concat(BY_GAME.getOrDefault(gameSlug, List.of()).stream(), ANY_GAME.stream()).toList();
+	}
+
+	/** The activities that get a challenge every day. */
+	List<Activity> activities() {
+		return ACTIVITIES;
 	}
 
 	/**
@@ -46,7 +70,15 @@ class ChallengeTemplates {
 	 * not all reach their easiest challenge on the same day
 	 */
 	ChallengeTemplate pick(String gameSlug, int position, LocalDate date) {
-		List<ChallengeTemplate> options = forGame(gameSlug);
+		return pick(forGame(gameSlug), position, date);
+	}
+
+	/** The same for an activity. */
+	ChallengeTemplate pick(Activity activity, LocalDate date) {
+		return pick(activity.templates(), 0, date);
+	}
+
+	private static ChallengeTemplate pick(List<ChallengeTemplate> options, int position, LocalDate date) {
 		return options.get(Math.floorMod(date.toEpochDay() + position, options.size()));
 	}
 

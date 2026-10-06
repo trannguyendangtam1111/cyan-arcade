@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
+import com.cyan.arcade.challenge.DailyChallengesResponse.Activity;
 import com.cyan.arcade.challenge.DailyChallengesResponse.Game;
 import com.cyan.arcade.game.GameInfo;
 import com.cyan.arcade.game.GameService;
@@ -37,44 +38,65 @@ public class DailyChallengeService {
 	}
 
 	public DailyChallengesResponse today() {
-		LocalDate today = LocalDate.now(this.clock);
+		LocalDate today = currentDate();
 		List<DailyChallenge> challenges = this.store.findByDate(today);
 		Map<Long, GameInfo> gamesById = gamesOf(challenges);
 
 		return new DailyChallengesResponse(today, endOf(today),
 				challenges.stream()
-					.filter((challenge) -> gamesById.containsKey(challenge.gameId()))
+					.filter((challenge) -> isShown(challenge, gamesById))
 					.map((challenge) -> new DailyChallengesResponse.Challenge(challenge.id(), challenge.title(),
-							challenge.description(), toGame(gamesById.get(challenge.gameId())), challenge.target(),
-							challenge.xpReward(), challenge.date()))
+							challenge.description(), gameOf(challenge, gamesById), activityOf(challenge),
+							challenge.target(), challenge.xpReward(), challenge.coinReward(), challenge.date()))
 					.toList());
 	}
 
 	/** Today's challenges, each with whether and when this player completed it. */
 	public MyDailyChallengesResponse todayFor(Long userId) {
-		LocalDate today = LocalDate.now(this.clock);
+		LocalDate today = currentDate();
 		List<DailyChallenge> challenges = this.store.findByDate(today);
 		Map<Long, GameInfo> gamesById = gamesOf(challenges);
 		Map<Long, Instant> completedAt = this.store.completionsOf(userId, today);
+		Map<Long, Integer> progress = this.store.progressOf(userId, today);
 
 		List<MyDailyChallengesResponse.Challenge> mine = challenges.stream()
-			.filter((challenge) -> gamesById.containsKey(challenge.gameId()))
+			.filter((challenge) -> isShown(challenge, gamesById))
 			.map((challenge) -> new MyDailyChallengesResponse.Challenge(challenge.id(), challenge.title(),
-					challenge.description(), toGame(gamesById.get(challenge.gameId())), challenge.target(),
-					challenge.xpReward(), challenge.date(), completedAt.containsKey(challenge.id()),
-					completedAt.get(challenge.id())))
+					challenge.description(), gameOf(challenge, gamesById), activityOf(challenge), challenge.target(),
+					challenge.xpReward(), challenge.coinReward(), challenge.date(),
+					challenge.isAboutAGame() ? null : progress.getOrDefault(challenge.id(), 0),
+					completedAt.containsKey(challenge.id()), completedAt.get(challenge.id())))
 			.toList();
 		int completed = (int) mine.stream().filter(MyDailyChallengesResponse.Challenge::completed).count();
 		return new MyDailyChallengesResponse(today, endOf(today), completed, mine);
 	}
 
-	private Map<Long, GameInfo> gamesOf(List<DailyChallenge> challenges) {
-		return this.games.gamesById(challenges.stream().map(DailyChallenge::gameId).collect(Collectors.toSet()));
+	private LocalDate currentDate() {
+		return LocalDate.ofInstant(this.clock.instant(), ZoneOffset.UTC);
 	}
 
-	private static Game toGame(GameInfo game) {
-		Objects.requireNonNull(game);
+	/** A game's challenge is shown while its game is in the catalog; an activity's always. */
+	private static boolean isShown(DailyChallenge challenge, Map<Long, GameInfo> gamesById) {
+		return !challenge.isAboutAGame() || gamesById.containsKey(challenge.gameId());
+	}
+
+	private Map<Long, GameInfo> gamesOf(List<DailyChallenge> challenges) {
+		return this.games.gamesById(challenges.stream()
+			.filter(DailyChallenge::isAboutAGame)
+			.map(DailyChallenge::gameId)
+			.collect(Collectors.toSet()));
+	}
+
+	private static Game gameOf(DailyChallenge challenge, Map<Long, GameInfo> gamesById) {
+		if (!challenge.isAboutAGame()) {
+			return null;
+		}
+		GameInfo game = Objects.requireNonNull(gamesById.get(challenge.gameId()));
 		return new Game(game.slug(), game.name());
+	}
+
+	private static Activity activityOf(DailyChallenge challenge) {
+		return challenge.isAboutAGame() ? null : new Activity(challenge.activity(), challenge.activityName());
 	}
 
 	/** The first moment of the next day, which is when the next set of challenges takes over. */

@@ -12,6 +12,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -22,6 +23,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 public final class Players {
 
 	public static final String PASSWORD = "correct-horse-battery";
+
+	/** The admin account the application seeds at startup, with its development defaults. */
+	public static final String ADMIN_USERNAME = "admin";
+
+	public static final String ADMIN_PASSWORD = "11112002";
 
 	private Players() {
 	}
@@ -44,6 +50,37 @@ public final class Players {
 
 	public static MockHttpSession register(MockMvc mockMvc) throws Exception {
 		return register(mockMvc, uniqueName());
+	}
+
+	/** Signs in as the seeded admin and returns the session. */
+	public static MockHttpSession signInAsAdmin(MockMvc mockMvc) throws Exception {
+		MockHttpSession session = new MockHttpSession();
+		mockMvc
+			.perform(post("/api/auth/login").session(session)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"username\":\"%s\",\"password\":\"%s\"}".formatted(ADMIN_USERNAME, ADMIN_PASSWORD)))
+			.andExpect(status().isOk());
+		return session;
+	}
+
+	/** The account id of a signed-in session, as the session endpoint reports it. */
+	public static Long userId(MockMvc mockMvc, MockHttpSession session) throws Exception {
+		String body = mockMvc.perform(get("/api/auth/session").session(session))
+			.andExpect(status().isOk())
+			.andReturn()
+			.getResponse()
+			.getContentAsString();
+		return JsonPath.<Number>read(body, "$.user.id").longValue();
+	}
+
+	/** Gives a player coins the way the arcade allows it: an admin's grant, through the admin API. */
+	public static void grantCoins(MockMvc mockMvc, Long userId, int amount) throws Exception {
+		mockMvc
+			.perform(post("/api/admin/users/{id}/coins", userId).session(signInAsAdmin(mockMvc))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"amount\":%d,\"reason\":\"For a test\",\"requestId\":\"%s\"}".formatted(amount,
+						UUID.randomUUID())))
+			.andExpect(status().isCreated());
 	}
 
 	/** Starts a run. Pass {@code null} to play as a guest. */

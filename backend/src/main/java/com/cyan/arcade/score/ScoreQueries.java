@@ -1,5 +1,7 @@
 package com.cyan.arcade.score;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -46,6 +48,20 @@ public class ScoreQueries {
 
 	public PlayerStats statsOf(Long userId) {
 		return new PlayerStats(this.scores.countByUserId(userId), this.scores.sumScoresOfUser(userId));
+	}
+
+	/** A player's numbers in every game they have finished at least once. */
+	public List<GameStats> statsByGameOf(Long userId) {
+		return this.scores.findStatsByGame(userId);
+	}
+
+	/** Games finished by everyone, guests included. */
+	public long countAll() {
+		return this.scores.count();
+	}
+
+	public long countSince(Instant since) {
+		return this.scores.countByCreatedAtGreaterThanEqual(since);
 	}
 
 	/** One page of a player's finished games, newest first. */

@@ -11,10 +11,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import com.cyan.arcade.challenge.ChallengeTemplates.Activity;
+
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
-/** The challenges of each day and who completed them. Backed by {@code daily_challenges} and its completions. */
+/**
+ * The challenges of each day, who completed them, and how far players have got with the counted
+ * ones. Backed by {@code daily_challenges}, its completions and its progress.
+ */
 @Repository
 class DailyChallengeStore {
 
@@ -28,34 +33,65 @@ class DailyChallengeStore {
 	 * Gives a game its challenge for a day.
 	 * @return {@code false} when the game already has one that day, which is then left as it is
 	 */
-	boolean insertIfAbsent(LocalDate date, Long gameId, String title, String description, ChallengeGoal goal,
-			String detail, int target, int xpReward, Instant now) {
-		int inserted = this.jdbc.sql("""
+	boolean insertIfAbsent(LocalDate date, Long gameId, ChallengeTemplate template, String description, Instant now) {
+		return this.jdbc.sql("""
 				INSERT INTO daily_challenges
-				    (challenge_date, game_id, title, description, goal, detail, target, xp_reward, created_at)
-				VALUES (:date, :gameId, :title, :description, :goal, :detail, :target, :xpReward, :createdAt)
+				    (challenge_date, game_id, title, description, goal, detail, target, xp_reward, coin_reward,
+				     created_at)
+				VALUES (:date, :gameId, :title, :description, :goal, :detail, :target, :xpReward, :coinReward,
+				        :createdAt)
 				ON CONFLICT (challenge_date, game_id) DO NOTHING
 				""")
 			.param("date", date)
 			.param("gameId", gameId)
-			.param("title", title)
+			.param("title", template.title())
 			.param("description", description)
-			.param("goal", goal.name())
-			.param("detail", detail, Types.VARCHAR)
-			.param("target", target)
-			.param("xpReward", xpReward)
-			.param("createdAt", OffsetDateTime.ofInstant(now, ZoneOffset.UTC))
-			.update();
-		return inserted == 1;
+			.param("goal", template.goal().name())
+			.param("detail", template.detail(), Types.VARCHAR)
+			.param("target", template.target())
+			.param("xpReward", template.xpReward())
+			.param("coinReward", template.coinReward())
+			.param("createdAt", at(now))
+			.update() == 1;
 	}
 
-	/** A day's challenges, in the order they were created, which is the order of the game catalog. */
+	/**
+	 * Gives an activity its challenge for a day.
+	 * @return {@code false} when the activity already has one that day, which is then left as it is
+	 */
+	boolean insertIfAbsent(LocalDate date, Activity activity, ChallengeTemplate template, Instant now) {
+		return this.jdbc.sql("""
+				INSERT INTO daily_challenges
+				    (challenge_date, activity, activity_name, title, description, goal, target, xp_reward,
+				     coin_reward, created_at)
+				VALUES (:date, :activity, :activityName, :title, :description, :goal, :target, :xpReward,
+				        :coinReward, :createdAt)
+				ON CONFLICT (challenge_date, activity) WHERE activity IS NOT NULL DO NOTHING
+				""")
+			.param("date", date)
+			.param("activity", activity.code())
+			.param("activityName", activity.name())
+			.param("title", template.title())
+			.param("description", template.description())
+			.param("goal", template.goal().name())
+			.param("target", template.target())
+			.param("xpReward", template.xpReward())
+			.param("coinReward", template.coinReward())
+			.param("createdAt", at(now))
+			.update() == 1;
+	}
+
+	/**
+	 * A day's challenges: the games' in the order they were created (the order of the game catalog),
+	 * then the activities'.
+	 */
 	List<DailyChallenge> findByDate(LocalDate date) {
 		return this.jdbc.sql("""
-				SELECT id, challenge_date, game_id, title, description, goal, detail, target, xp_reward
+				SELECT id, challenge_date, game_id, activity, activity_name, title, description, goal, detail,
+				       target, xp_reward, coin_reward
 				FROM daily_challenges
 				WHERE challenge_date = :date
-				ORDER BY id
+				ORDER BY activity NULLS FIRST, id
 				""").param("date", date).query(DailyChallengeStore::toChallenge).list();
 	}
 
@@ -72,9 +108,29 @@ class DailyChallengeStore {
 				""")
 			.param("userId", userId)
 			.param("challengeId", challengeId)
-			.param("completedAt", OffsetDateTime.ofInstant(now, ZoneOffset.UTC))
+			.param("completedAt", at(now))
 			.update();
 		return inserted == 1;
+	}
+
+	/**
+	 * Counts one more towards a counted challenge, atomically, so two activities at the same moment
+	 * both count.
+	 * @return the player's progress afterwards
+	 */
+	int addProgress(Long userId, Long challengeId, Instant now) {
+		return this.jdbc.sql("""
+				INSERT INTO daily_challenge_progress (user_id, daily_challenge_id, progress, updated_at)
+				VALUES (:userId, :challengeId, 1, :now)
+				ON CONFLICT (user_id, daily_challenge_id)
+				DO UPDATE SET progress = daily_challenge_progress.progress + 1, updated_at = :now
+				RETURNING progress
+				""")
+			.param("userId", userId)
+			.param("challengeId", challengeId)
+			.param("now", at(now))
+			.query(Integer.class)
+			.single();
 	}
 
 	/** When a player completed each of a day's challenges, by challenge id. Uncompleted ones are absent. */
@@ -94,11 +150,31 @@ class DailyChallengeStore {
 			.collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 	}
 
+	/** A player's progress with each of a day's counted challenges, by challenge id. Untouched ones are absent. */
+	Map<Long, Integer> progressOf(Long userId, LocalDate date) {
+		return this.jdbc.sql("""
+				SELECT progress.daily_challenge_id, progress.progress
+				FROM daily_challenge_progress progress
+				JOIN daily_challenges challenge ON challenge.id = progress.daily_challenge_id
+				WHERE progress.user_id = :userId AND challenge.challenge_date = :date
+				""")
+			.param("userId", userId)
+			.param("date", date)
+			.query((row, index) -> Map.entry(row.getLong("daily_challenge_id"), row.getInt("progress")))
+			.list()
+			.stream()
+			.collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+	}
+
 	private static DailyChallenge toChallenge(ResultSet row, int index) throws SQLException {
 		return new DailyChallenge(row.getLong("id"), row.getObject("challenge_date", LocalDate.class),
-				row.getLong("game_id"), row.getString("title"), row.getString("description"),
-				ChallengeGoal.valueOf(row.getString("goal")), row.getString("detail"), row.getInt("target"),
-				row.getInt("xp_reward"));
+				row.getObject("game_id", Long.class), row.getString("activity"), row.getString("activity_name"),
+				row.getString("title"), row.getString("description"), ChallengeGoal.valueOf(row.getString("goal")),
+				row.getString("detail"), row.getInt("target"), row.getInt("xp_reward"), row.getInt("coin_reward"));
+	}
+
+	private static OffsetDateTime at(Instant instant) {
+		return OffsetDateTime.ofInstant(instant, ZoneOffset.UTC);
 	}
 
 }

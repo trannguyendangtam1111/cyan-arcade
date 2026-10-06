@@ -1,0 +1,81 @@
+{
+  "game": {
+    "slug": "pokemon",
+    "name": "Pokémon TCG",
+    "description": "Booster packs from real Pokémon Trading Card Game sets: Mega Evolution, Scarlet & Violet and the classic Base Set era.",
+    "accentColor": "#ffcb05",
+    "attribution": "Card data and images: TCGdex (tcgdex.net), a community-run open database. Pokémon and its trademarks are © Nintendo, Creatures, GAME FREAK and The Pokémon Company. Cyan Arcade is a fan project, not affiliated with or endorsed by them.",
+    "coverCard": "base1-58"
+  },
+  "rarities": [
+    { "code": "common", "name": "Common", "tier": 1, "source": ["Common"] },
+    { "code": "uncommon", "name": "Uncommon", "tier": 2, "source": ["Uncommon"] },
+    { "code": "rare", "name": "Rare", "tier": 2, "source": ["Rare"] },
+    { "code": "double-rare", "name": "Double Rare", "tier": 3, "source": ["Double rare"] },
+    { "code": "ace-spec-rare", "name": "ACE SPEC Rare", "tier": 3, "source": ["ACE SPEC Rare"] },
+    { "code": "shiny-rare", "name": "Shiny Rare", "tier": 3, "source": ["Shiny rare"] },
+    { "code": "illustration-rare", "name": "Illustration Rare", "tier": 4, "source": ["Illustration rare"] },
+    { "code": "ultra-rare", "name": "Ultra Rare", "tier": 4, "source": ["Ultra Rare"] },
+    { "code": "shiny-ultra-rare", "name": "Shiny Ultra Rare", "tier": 4, "source": ["Shiny Ultra Rare"] },
+    { "code": "special-illustration-rare", "name": "Special Illustration Rare", "tier": 5, "source": ["Special illustration rare"] },
+    { "code": "hyper-rare", "name": "Hyper Rare", "tier": 5, "source": ["Hyper rare"] },
+    { "code": "black-white-rare", "name": "Black White Rare", "tier": 5, "source": ["Black White Rare"] },
+    { "code": "mega-hyper-rare", "name": "Mega Hyper Rare", "tier": 5, "source": ["Mega Hyper Rare"] }
+  ],
+  "packProfiles": {
+    "modern": {
+      "code": "booster",
+      "name": "{set} Booster Pack",
+      "description": "10 cards: four commons, three uncommons, two reverse-holo slots (the second can hold an illustration rare or better) and a rare-or-better slot.",
+      "oddsNote": "Simulator probabilities. The Pokémon Company does not publish official pull rates; these odds are this arcade's approximation and can differ from real packs.",
+      "slots": [
+        { "count": 4, "odds": { "common": 1 } },
+        { "count": 3, "odds": { "uncommon": 1 } },
+        { "count": 1, "odds": { "common": 55, "uncommon": 35, "rare": 10 } },
+        { "count": 1, "odds": {
+            "common": 430, "uncommon": 260, "rare": 100, "shiny-rare": 200, "ace-spec-rare": 50,
+            "illustration-rare": 125, "shiny-ultra-rare": 20, "special-illustration-rare": 17,
+            "hyper-rare": 7, "black-white-rare": 3, "mega-hyper-rare": 2 } },
+        { "count": 1, "odds": { "rare": 700, "double-rare": 210, "ultra-rare": 75 } }
+      ]
+    },
+    "classic": {
+      "code": "booster",
+      "name": "{set} Booster Pack",
+      "description": "11 cards: seven commons (basic energy included), three uncommons and a rare.",
+      "oddsNote": "Simulator probabilities, after the classic pack layout of one rare, three uncommons and seven commons. The data source does not tell holo rares from other rares.",
+      "slots": [
+        { "count": 7, "odds": { "common": 1 } },
+        { "count": 3, "odds": { "uncommon": 1 } },
+        { "count": 1, "odds": { "rare": 1 } }
+      ]
+    }
+  },
+  "sets": [
+    { "id": "me05", "profile": "modern" },
+    { "id": "me04", "profile": "modern" },
+    { "id": "me03", "profile": "modern" },
+    { "id": "me02.5", "profile": "modern" },
+    { "id": "me02", "profile": "modern" },
+    { "id": "me01", "profile": "modern" },
+    { "id": "sv10.5b", "profile": "modern" },
+    { "id": "sv10.5w", "profile": "modern" },
+    { "id": "sv10", "profile": "modern" },
+    { "id": "sv09", "profile": "modern" },
+    { "id": "sv08.5", "profile": "modern" },
+    { "id": "sv08", "profile": "modern" },
+    { "id": "sv07", "profile": "modern" },
+    { "id": "sv06.5", "profile": "modern" },
+    { "id": "sv06", "profile": "modern" },
+    { "id": "sv05", "profile": "modern" },
+    { "id": "sv04.5", "profile": "modern" },
+    { "id": "sv04", "profile": "modern" },
+    { "id": "sv03.5", "profile": "modern" },
+    { "id": "sv03", "profile": "modern" },
+    { "id": "sv02", "profile": "modern" },
+    { "id": "sv01", "profile": "modern" },
+    { "id": "base3", "profile": "classic" },
+    { "id": "base2", "profile": "classic" },
+    { "id": "base1", "profile": "classic" }
+  ]
+}

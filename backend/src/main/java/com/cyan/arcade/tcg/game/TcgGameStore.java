@@ -20,12 +20,12 @@ class TcgGameStore {
 
 	/** A game without its rarities, which are read separately for all games at once. */
 	record GameRow(Long id, String slug, String name, String description, String imageUrl, String cardBackUrl,
-			int setCount, int cardCount) {
+			String accentColor, String attribution, int setCount, int cardCount) {
 	}
 
 	List<GameRow> findActive() {
 		return this.jdbc.sql("""
-				SELECT g.id, g.slug, g.name, g.description, g.image_url, g.card_back_url,
+				SELECT g.id, g.slug, g.name, g.description, g.image_url, g.card_back_url, g.accent_color, g.attribution,
 				       (SELECT count(*) FROM tcg_sets s WHERE s.game_id = g.id) AS set_count,
 				       (SELECT count(*) FROM tcg_cards c WHERE c.game_id = g.id) AS card_count
 				FROM tcg_games g
@@ -34,7 +34,8 @@ class TcgGameStore {
 				""")
 			.query((row, index) -> new GameRow(row.getLong("id"), row.getString("slug"), row.getString("name"),
 					row.getString("description"), row.getString("image_url"), row.getString("card_back_url"),
-					row.getInt("set_count"), row.getInt("card_count")))
+					row.getString("accent_color"), row.getString("attribution"), row.getInt("set_count"),
+					row.getInt("card_count")))
 			.list();
 	}
 

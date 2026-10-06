@@ -1,7 +1,17 @@
 package com.cyan.arcade.tcg;
 
+import java.util.List;
+import java.util.Map;
+
 import com.cyan.arcade.IntegrationTest;
 import com.cyan.arcade.Players;
+import com.cyan.arcade.tcg.dataimport.TcgDataset;
+import com.cyan.arcade.tcg.dataimport.TcgDataset.Card;
+import com.cyan.arcade.tcg.dataimport.TcgDataset.CardSet;
+import com.cyan.arcade.tcg.dataimport.TcgDataset.Game;
+import com.cyan.arcade.tcg.dataimport.TcgDataset.Pack;
+import com.cyan.arcade.tcg.dataimport.TcgDataset.Rarity;
+import com.cyan.arcade.tcg.dataimport.TcgDataset.Slot;
 import com.cyan.arcade.tcg.dataimport.TcgDatasetImporter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -103,19 +113,20 @@ class CollectionApiTests {
 
 	@Test
 	void withoutAFilterTheCollectionSpansEveryCardGame() throws Exception {
+		this.importer.importDataset(secondGame(), "test");
 		MockHttpSession session = Players.register(this.mockMvc);
 		open(session, "single");
 
 		this.mockMvc.perform(get("/api/tcg/collection").session(session))
-			// The tiny game's seven cards and the 36 of the game that ships with the application.
-			.andExpect(jsonPath("$.summary.availableCards", greaterThanOrEqualTo(43)))
+			// The tiny game's seven cards and the second game's three.
+			.andExpect(jsonPath("$.summary.availableCards", greaterThanOrEqualTo(10)))
 			.andExpect(jsonPath("$.summary.uniqueCards").value(1))
-			.andExpect(jsonPath("$.sets[*].code", hasItem("pixel-meadow")))
+			.andExpect(jsonPath("$.sets[*].code", hasItem("second-set")))
 			.andExpect(jsonPath("$.sets[*].code", hasItem("base")));
 		// A game the player has nothing of is still there to be completed.
-		this.mockMvc.perform(get("/api/tcg/collection").session(session).param("game", "cyan-critters"))
+		this.mockMvc.perform(get("/api/tcg/collection").session(session).param("game", "collection-second-game"))
 			.andExpect(jsonPath("$.summary.uniqueCards").value(0))
-			.andExpect(jsonPath("$.summary.availableCards").value(36))
+			.andExpect(jsonPath("$.summary.availableCards").value(3))
 			.andExpect(jsonPath("$.cards").isEmpty());
 	}
 
@@ -130,8 +141,19 @@ class CollectionApiTests {
 			.andExpect(jsonPath("$.totalPages").value(2));
 		tinyCollection(session, "size", "1", "page", "1").andExpect(jsonPath("$.cards[*].card.number", contains("P1")));
 		tinyCollection(session, "size", "0").andExpect(status().isBadRequest());
-		tinyCollection(session, "size", "201").andExpect(status().isBadRequest());
+		tinyCollection(session, "size", "500").andExpect(status().isOk());
+		tinyCollection(session, "size", "501").andExpect(status().isBadRequest());
 		tinyCollection(session, "page", "-1").andExpect(status().isBadRequest());
+	}
+
+	/** A second card game, of three cards nobody here opens packs of. */
+	private static TcgDataset secondGame() {
+		List<Card> cards = List.of(new Card("1", "One", "common", "/second/1.png", Map.of()),
+				new Card("2", "Two", "common", "/second/2.png", Map.of()),
+				new Card("3", "Three", "common", "/second/3.png", Map.of()));
+		return new TcgDataset(new Game("collection-second-game", "Second Game", "", null, null),
+				List.of(new Rarity("common", "Common", 1)), List.of(new CardSet("second-set", "Second Set", "", null,
+						null, cards, List.of(new Pack("pack", "Pack", "", null, List.of(new Slot(1, Map.of("common", 1))), null)))));
 	}
 
 	private void open(MockHttpSession session, String packCode) throws Exception {

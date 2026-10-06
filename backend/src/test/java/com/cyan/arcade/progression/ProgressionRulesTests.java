@@ -2,6 +2,7 @@ package com.cyan.arcade.progression;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import com.cyan.arcade.progression.Levels.LevelProgress;
 import org.junit.jupiter.api.Test;
@@ -50,7 +51,8 @@ class ProgressionRulesTests {
 			assertThat(achievement.code()).matches("[A-Z0-9_]{1,50}");
 			assertThat(achievement.name()).isNotBlank();
 			assertThat(achievement.description()).isNotBlank();
-			assertThat(achievement.xp()).isPositive();
+			assertThat(achievement.reward().xp()).isPositive();
+			assertThat(achievement.reward().coins()).isPositive();
 		});
 	}
 
@@ -91,7 +93,7 @@ class ProgressionRulesTests {
 
 	private static CompletedRun run(String game, int score, Map<String, Integer> details, boolean personalBest,
 			long gamesPlayed) {
-		return new CompletedRun(1L, game, score, details, personalBest, gamesPlayed);
+		return new CompletedRun(UUID.randomUUID(), 1L, game, score, details, personalBest, gamesPlayed);
 	}
 
 }

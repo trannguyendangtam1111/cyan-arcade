@@ -75,8 +75,9 @@ public class CollectionService {
 
 		return new CollectionResponse(new Summary(unique, copies, available, percent(unique, available)),
 				progress.stream()
-					.map((set) -> new SetProgress(set.id(), set.code(), set.name(), set.imageUrl(), set.game(),
-							set.ownedCards(), set.totalCards(), percent(set.ownedCards(), set.totalCards())))
+					.map((set) -> new SetProgress(set.id(), set.code(), set.name(), set.imageUrl(),
+							set.coverImageUrl(), set.game(), set.ownedCards(), set.totalCards(),
+							percent(set.ownedCards(), set.totalCards())))
 					.toList(),
 				owned.stream()
 					.map((row) -> new OwnedCard(cardsById.get(row.cardId()), row.quantity(), row.firstObtainedAt(),

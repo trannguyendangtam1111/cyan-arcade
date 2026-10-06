@@ -18,7 +18,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/tcg/collection")
 class CollectionController {
 
-	static final int MAX_PAGE_SIZE = 200;
+	/** Enough for every card of the largest real set (a few hundred), which the set page asks for at once. */
+	static final int MAX_PAGE_SIZE = 500;
 
 	private final CollectionService collections;
 

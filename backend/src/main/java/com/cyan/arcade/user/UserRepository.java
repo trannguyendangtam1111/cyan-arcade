@@ -1,9 +1,11 @@
 package com.cyan.arcade.user;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.Repository;
@@ -25,6 +27,14 @@ interface UserRepository extends Repository<User, Long> {
 
 	@Query("select count(u) > 0 from User u where lower(u.username) = lower(:username)")
 	boolean existsByUsernameIgnoreCase(String username);
+
+	long count();
+
+	long countByCreatedAtGreaterThanEqual(Instant since);
+
+	/** Players whose name contains a text, for admins looking someone up. {@code pattern} is a LIKE pattern. */
+	@Query("select u from User u where lower(u.username) like lower(:pattern) escape '\\' order by lower(u.username)")
+	List<User> findByUsernameLike(String pattern, Limit limit);
 
 	/** Adds XP in the database itself, so concurrent awards cannot overwrite each other. */
 	@Modifying(flushAutomatically = true, clearAutomatically = true)

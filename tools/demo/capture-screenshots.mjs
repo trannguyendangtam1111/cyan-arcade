@@ -13,7 +13,8 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const BASE_URL = (process.argv[2] ?? 'http://localhost:3000').replace(/\/$/, '')
-const OUT_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'docs', 'screenshots')
+// SCREENSHOT_DIR writes them elsewhere, to look at before replacing the ones in docs/.
+const OUT_DIR = process.env.SCREENSHOT_DIR ?? join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'docs', 'screenshots')
 const DEMO_PASSWORD = 'arcade-demo-2026' // see seed-demo-data.mjs
 const PORT = 9333
 
@@ -98,7 +99,15 @@ async function main() {
       if (exceptionDetails) throw new Error(exceptionDetails.exception?.description ?? exceptionDetails.text)
       return result.value
     }
+    /** Card images come from the card games' own hosts; give them a moment, but not forever. */
+    const imagesLoaded = () =>
+      run(`Promise.race([
+        Promise.all([...document.images].filter((img) => !img.complete).map((img) => new Promise((done) => { img.onload = img.onerror = done }))),
+        new Promise((done) => setTimeout(done, 15000)),
+      ])`)
     const shoot = async (name) => {
+      await imagesLoaded()
+      await sleep(300)
       const { data } = await page.send('Page.captureScreenshot', { format: 'png' })
       writeFileSync(join(OUT_DIR, `${name}.png`), Buffer.from(data, 'base64'))
       console.log(`  docs/screenshots/${name}.png`)
@@ -146,25 +155,31 @@ async function main() {
     await go('/profile', 2000)
     await shoot('profile')
 
-    await go('/tcg/collection', 2000)
+    await go('/tcg', 3000)
+    await shoot('tcg')
+
+    await go('/tcg/one-piece', 4000)
+    await shoot('tcg-one-piece')
+
+    await go('/tcg/collection', 4000)
     await shoot('collection')
 
     // A pack opened halfway: some cards turned over, some still face down.
     await signIn('NeonNova')
     const packId = await run(`(async () => {
-      const sets = await (await fetch('/api/tcg/sets?game=cyan-critters')).json()
-      const packs = await (await fetch('/api/tcg/packs?set=' + sets[0].id)).json()
-      return packs.find((pack) => pack.code === 'sunrise').id
+      const sets = await (await fetch('/api/tcg/sets?game=pokemon')).json()
+      const packs = await (await fetch('/api/tcg/packs?set=' + sets.find((set) => set.code === 'sv08-5').id)).json()
+      return packs[0].id
     })()`)
-    await go(`/tcg/packs/${packId}`)
+    await go(`/tcg/packs/${packId}`, 3000)
     await shoot('pack')
     await run(`[...document.querySelectorAll('button')].find((b) => b.textContent.includes('Open pack')).click()`)
     await sleep(2500)
-    for (const position of [1, 2, 5]) {
+    for (const position of [1, 9, 10]) {
       await click(`button[aria-label="Reveal card ${position}"]`)
       await sleep(250)
     }
-    await sleep(1800)
+    await sleep(3500)
     await scrollTo('nav[aria-label="Breadcrumb"]')
     await sleep(500)
     await shoot('pack-opening')
@@ -175,9 +190,9 @@ async function main() {
     await run('window.scrollTo(0, 0)')
     await sleep(300)
     await shoot('mobile-home')
-    await go('/tcg/cyan-critters/pixel-meadow', 2000)
+    await go('/tcg/pokemon/sv03-5', 3000)
     await scrollTo('#set-cards-heading', 80)
-    await sleep(500)
+    await sleep(3000)
     await shoot('mobile-set')
 
     page.close()

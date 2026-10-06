@@ -25,8 +25,8 @@ public class TcgGameService {
 		Map<Long, List<Rarity>> rarities = this.games.raritiesOf(rows.stream().map(GameRow::id).toList());
 		return rows.stream()
 			.map((game) -> new TcgGameResponse(game.id(), game.slug(), game.name(), game.description(),
-					game.imageUrl(), game.cardBackUrl(), rarities.getOrDefault(game.id(), List.of()),
-					game.setCount(), game.cardCount()))
+					game.imageUrl(), game.cardBackUrl(), game.accentColor(), game.attribution(),
+					rarities.getOrDefault(game.id(), List.of()), game.setCount(), game.cardCount()))
 			.toList();
 	}
 

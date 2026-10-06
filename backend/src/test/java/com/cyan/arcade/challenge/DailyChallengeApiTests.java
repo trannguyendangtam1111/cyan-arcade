@@ -6,9 +6,11 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import com.cyan.arcade.IntegrationTest;
 import com.cyan.arcade.Players;
+import com.cyan.arcade.common.platform.PlayerActivity;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -21,6 +23,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.nullValue;
@@ -60,6 +63,7 @@ class DailyChallengeApiTests {
 	@AfterEach
 	void clearChallenges() {
 		this.jdbc.update("DELETE FROM daily_challenge_completions");
+		this.jdbc.update("DELETE FROM daily_challenge_progress");
 		this.jdbc.update("DELETE FROM daily_challenges");
 		this.today = LocalDate.now(this.clock);
 	}
@@ -83,6 +87,7 @@ class DailyChallengeApiTests {
 			.andExpect(jsonPath("$.challenges[0].game.name").value("Tetris"))
 			.andExpect(jsonPath("$.challenges[0].target").value(5))
 			.andExpect(jsonPath("$.challenges[0].xpReward").value(30))
+			.andExpect(jsonPath("$.challenges[0].coinReward").value(60))
 			.andExpect(jsonPath("$.challenges[0].date").value(this.today.toString()))
 			// Nobody's progress is part of the public list, and neither is how a challenge is checked.
 			.andExpect(jsonPath("$.challenges[0].completed").doesNotExist())
@@ -144,8 +149,14 @@ class DailyChallengeApiTests {
 			.andExpect(jsonPath("$.rewards.bonuses[0].type").value("DAILY_CHALLENGE"))
 			.andExpect(jsonPath("$.rewards.bonuses[0].title").value("Tidy Up"))
 			.andExpect(jsonPath("$.rewards.bonuses[0].xp").value(30))
+			.andExpect(jsonPath("$.rewards.bonuses[0].coins").value(60))
+			// What is rewarded stays on the server.
+			.andExpect(jsonPath("$.rewards.bonuses[0].reference").doesNotExist())
 			// 10 for finishing + 25 for a best + 50 for "First Coin" + 30 for the challenge.
 			.andExpect(jsonPath("$.rewards.xpEarned").value(115))
+			// 5 for finishing + 15 for a best + 100 for "First Coin" + 60 for the challenge.
+			.andExpect(jsonPath("$.rewards.coinsEarned").value(180))
+			.andExpect(jsonPath("$.rewards.coinBalance").value(180))
 			.andExpect(jsonPath("$.rewards.totalXp").value(115))
 			.andExpect(jsonPath("$.rewards.level").value(2))
 			.andExpect(jsonPath("$.rewards.leveledUp").value(true));
@@ -263,22 +274,30 @@ class DailyChallengeApiTests {
 	// --- Generating ------------------------------------------------------------------------------
 
 	@Test
-	void generatingADayGivesEveryGameOneChallengeAndIsSafeToRepeat() {
+	void generatingADayGivesEveryGameAndEveryActivityOneChallengeAndIsSafeToRepeat() {
 		LocalDate day = LocalDate.of(2031, 3, 14);
 		int activeGames = this.jdbc.queryForObject("SELECT count(*) FROM games WHERE active", Integer.class);
+		int activities = new ChallengeTemplates().activities().size();
 
-		assertThat(this.generator.generateFor(day)).isEqualTo(activeGames);
+		assertThat(this.generator.generateFor(day)).isEqualTo(activeGames + activities);
 		List<DailyChallenge> generated = this.store.findByDate(day);
 		assertThat(this.generator.generateFor(day)).isZero();
 
 		assertThat(this.store.findByDate(day)).isEqualTo(generated);
-		assertThat(generated).hasSize(activeGames);
-		assertThat(generated).extracting(DailyChallenge::gameId).doesNotHaveDuplicates();
+		assertThat(generated).hasSize(activeGames + activities);
+		assertThat(generated).filteredOn(DailyChallenge::isAboutAGame)
+			.hasSize(activeGames)
+			.extracting(DailyChallenge::gameId)
+			.doesNotHaveDuplicates();
+		assertThat(generated).filteredOn((challenge) -> !challenge.isAboutAGame())
+			.extracting(DailyChallenge::activity, DailyChallenge::goal)
+			.containsExactly(tuple(PlayerActivity.TCG_PACK_OPENED, ChallengeGoal.COUNT));
 		assertThat(generated).allSatisfy((challenge) -> {
 			assertThat(challenge.date()).isEqualTo(day);
 			assertThat(challenge.title()).isNotBlank();
 			assertThat(challenge.description()).isNotBlank().doesNotContain("%s");
 			assertThat(challenge.xpReward()).isPositive();
+			assertThat(challenge.coinReward()).isPositive();
 		});
 	}
 
@@ -294,7 +313,8 @@ class DailyChallengeApiTests {
 		assertThat(second).hasSameSizeAs(first);
 		for (DailyChallenge challenge : first) {
 			DailyChallenge next = second.stream()
-				.filter((candidate) -> candidate.gameId().equals(challenge.gameId()))
+				.filter((candidate) -> Objects.equals(candidate.gameId(), challenge.gameId())
+						&& Objects.equals(candidate.activity(), challenge.activity()))
 				.findFirst()
 				.orElseThrow();
 			assertThat(next.title()).isNotEqualTo(challenge.title());
@@ -306,7 +326,11 @@ class DailyChallengeApiTests {
 		this.generator.generateFor(this.today);
 
 		this.mockMvc.perform(get("/api/daily-challenges"))
-			.andExpect(jsonPath("$.challenges[*].game.slug", contains("snake", "2048", "tetris")));
+			.andExpect(jsonPath("$.challenges", hasSize(4)))
+			.andExpect(jsonPath("$.challenges[0:3].game.slug", contains("snake", "2048", "tetris")))
+			.andExpect(jsonPath("$.challenges[3].game").value(nullValue()))
+			.andExpect(jsonPath("$.challenges[3].activity.code").value("TCG_PACK_OPENED"))
+			.andExpect(jsonPath("$.challenges[3].activity.name").value("Card packs"));
 	}
 
 	@Test
@@ -328,8 +352,9 @@ class DailyChallengeApiTests {
 	private void given(LocalDate date, String gameSlug, String title, ChallengeGoal goal, String detail, int target,
 			int xpReward) {
 		Long gameId = this.jdbc.queryForObject("SELECT id FROM games WHERE slug = ?", Long.class, gameSlug);
-		assertThat(this.store.insertIfAbsent(date, gameId, title, title + " in " + gameSlug, goal, detail, target,
-				xpReward, this.clock.instant()))
+		// Coins are twice the XP, as in the arcade's own templates.
+		ChallengeTemplate template = new ChallengeTemplate(title, "", goal, detail, target, xpReward, xpReward * 2);
+		assertThat(this.store.insertIfAbsent(date, gameId, template, title + " in " + gameSlug, this.clock.instant()))
 			.isTrue();
 	}
 

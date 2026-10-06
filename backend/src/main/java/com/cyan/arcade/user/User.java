@@ -2,6 +2,8 @@ package com.cyan.arcade.user;
 
 import java.time.Instant;
 
+import com.cyan.arcade.common.security.Role;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -30,6 +32,11 @@ class User {
 	@Column(nullable = false)
 	private Avatar avatar;
 
+	// Fixed at creation: there is no way to promote or demote an account through the application.
+	@Enumerated(EnumType.STRING)
+	@Column(nullable = false, updatable = false)
+	private Role role;
+
 	// Only ever changed by an atomic "xp = xp + n" update, so two runs finishing at once both count.
 	@Column(nullable = false, updatable = false)
 	private int xp;
@@ -40,10 +47,11 @@ class User {
 	protected User() {
 	}
 
-	User(String username, String passwordHash, Instant createdAt) {
+	User(String username, String passwordHash, Role role, Instant createdAt) {
 		this.username = username;
 		this.passwordHash = passwordHash;
 		this.avatar = Avatar.ROBOT;
+		this.role = role;
 		this.createdAt = createdAt;
 	}
 
@@ -61,6 +69,10 @@ class User {
 
 	Avatar getAvatar() {
 		return this.avatar;
+	}
+
+	Role getRole() {
+		return this.role;
 	}
 
 	void setAvatar(Avatar avatar) {

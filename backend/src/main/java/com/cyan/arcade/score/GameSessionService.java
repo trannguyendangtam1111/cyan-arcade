@@ -93,7 +93,7 @@ public class GameSessionService {
 		long durationMs = Duration.between(session.getStartedAt(), now).toMillis();
 
 		// Guests get their score recorded and nothing else; only accounts earn rewards.
-		Rewards rewards = (session.getUserId() != null) ? reward(session.getUserId(), game, score, details) : null;
+		Rewards rewards = (session.getUserId() != null) ? reward(session, game, score, details) : null;
 		int xpAwarded = (rewards != null) ? rewards.xpEarned() : 0;
 		boolean personalBest = rewards != null && rewards.personalBest();
 		Score recorded = this.scores.save(new Score(session, score, durationMs, xpAwarded, personalBest, now));
@@ -113,12 +113,14 @@ public class GameSessionService {
 	}
 
 	/** Describes the run to the progression rules, which decide what it earns. */
-	private Rewards reward(Long userId, GameInfo game, int score, Map<String, Integer> details) {
+	private Rewards reward(GameSession session, GameInfo game, int score, Map<String, Integer> details) {
+		Long userId = session.getUserId();
 		// Both looked up before this run's score is saved: the best so far, and the games so far.
 		int previousBest = this.scores.findBestScoreOfUser(game.id(), userId).orElse(0);
 		long gamesPlayed = this.scores.countByUserId(userId) + 1;
 		return this.progression
-			.reward(new CompletedRun(userId, game.slug(), score, details, score > previousBest, gamesPlayed));
+			.reward(new CompletedRun(session.getId(), userId, game.slug(), score, details, score > previousBest,
+					gamesPlayed));
 	}
 
 }

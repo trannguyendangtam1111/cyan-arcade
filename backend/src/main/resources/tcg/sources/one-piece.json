@@ -1,0 +1,86 @@
+{
+  "game": {
+    "slug": "one-piece",
+    "name": "One Piece Card Game",
+    "description": "Booster packs from real ONE PIECE Card Game sets, from Romance Dawn (OP-01) onwards, alternate arts included.",
+    "accentColor": "#c8102e",
+    "attribution": "Card data and images: OPTCG API (optcgapi.com), a free fan-run API for the English card game. ONE PIECE © Eiichiro Oda/Shueisha, Toei Animation; the ONE PIECE Card Game © Bandai. Cyan Arcade is a fan project, not affiliated with or endorsed by them.",
+    "coverCard": "OP01-120"
+  },
+  "rarities": [
+    { "code": "common", "name": "Common", "tier": 1, "source": ["C"] },
+    { "code": "uncommon", "name": "Uncommon", "tier": 2, "source": ["UC"] },
+    { "code": "rare", "name": "Rare", "tier": 2, "source": ["R"] },
+    { "code": "promo", "name": "Promo", "tier": 2, "source": ["PR"] },
+    { "code": "leader", "name": "Leader", "tier": 3, "source": ["L"] },
+    { "code": "super-rare", "name": "Super Rare", "tier": 3, "source": ["SR"] },
+    { "code": "secret-rare", "name": "Secret Rare", "tier": 4, "source": ["SEC"] },
+    { "code": "parallel", "name": "Parallel", "tier": 4, "source": [] },
+    { "code": "special", "name": "Special (SP)", "tier": 5, "source": [] },
+    { "code": "secret-parallel", "name": "Secret Rare Parallel", "tier": 5, "source": [] },
+    { "code": "manga", "name": "Manga Rare", "tier": 5, "source": [] },
+    { "code": "treasure-rare", "name": "Treasure Rare", "tier": 5, "source": ["TR"] }
+  ],
+  "variantRarities": {
+    "Manga": "manga",
+    "Super Alternate Art": "manga",
+    "Red Super Alternate Art": "manga",
+    "Super Leader Alternate Art": "manga",
+    "SP": "special",
+    "TR": "treasure-rare",
+    "SEC": "secret-parallel",
+    "*": "parallel"
+  },
+  "packProfiles": {
+    "booster": {
+      "code": "booster",
+      "name": "{set} Booster Pack",
+      "description": "12 cards: seven commons, three uncommons, a rare-or-leader slot and a hit slot that can hold a super rare, a secret rare or an alternate art.",
+      "oddsNote": "Simulator probabilities. Bandai does not publish official pull rates; these odds are this arcade's approximation and can differ from real packs.",
+      "slots": [
+        { "count": 7, "odds": { "common": 1 } },
+        { "count": 3, "odds": { "uncommon": 1 } },
+        { "count": 1, "odds": { "rare": 70, "leader": 30 } },
+        { "count": 1, "odds": {
+            "rare": 560, "super-rare": 230, "parallel": 130, "secret-rare": 45,
+            "special": 20, "secret-parallel": 5, "manga": 3, "treasure-rare": 2 } }
+      ]
+    },
+    "extra-booster": {
+      "code": "booster",
+      "name": "{set} Booster Pack",
+      "description": "12 cards: ten commons and uncommons, a rare-or-leader slot and a hit slot that can hold a super rare, a secret rare or an alternate art.",
+      "oddsNote": "Simulator probabilities. Bandai does not publish official pull rates; these odds are this arcade's approximation and can differ from real packs.",
+      "slots": [
+        { "count": 7, "odds": { "common": 1 } },
+        { "count": 3, "odds": { "uncommon": 70, "common": 30 } },
+        { "count": 1, "odds": { "rare": 70, "leader": 30 } },
+        { "count": 1, "odds": {
+            "rare": 560, "super-rare": 230, "parallel": 130, "secret-rare": 45,
+            "special": 20, "secret-parallel": 5, "manga": 3, "treasure-rare": 2 } }
+      ]
+    }
+  },
+  "sets": [
+    { "id": "OP-17", "profile": "booster" },
+    { "id": "OP-16", "profile": "booster" },
+    { "id": "OP15-EB04", "profile": "booster" },
+    { "id": "OP14-EB04", "profile": "booster" },
+    { "id": "OP-13", "profile": "booster" },
+    { "id": "OP-12", "profile": "booster" },
+    { "id": "OP-11", "profile": "booster" },
+    { "id": "OP-10", "profile": "booster" },
+    { "id": "OP-09", "profile": "booster" },
+    { "id": "OP-08", "profile": "booster" },
+    { "id": "OP-07", "profile": "booster" },
+    { "id": "OP-06", "profile": "booster" },
+    { "id": "OP-05", "profile": "booster" },
+    { "id": "OP-04", "profile": "booster" },
+    { "id": "OP-03", "profile": "booster" },
+    { "id": "OP-02", "profile": "booster" },
+    { "id": "OP-01", "profile": "booster" },
+    { "id": "EB-03", "profile": "extra-booster" },
+    { "id": "EB-02", "profile": "extra-booster" },
+    { "id": "EB-01", "profile": "extra-booster" }
+  ]
+}

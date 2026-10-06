@@ -68,8 +68,9 @@ public class TcgPackService {
 			.stream()
 			.map((slot) -> new SlotOdds(slot.getKey(), chances(slot.getValue())))
 			.toList();
-		return new PackResponse(pack.id(), pack.code(), pack.name(), pack.description(), pack.imageUrl(), pack.set(),
-				pack.game(), slots.size(), pack.poolSize(), slots);
+		return new PackResponse(pack.id(), pack.code(), pack.name(), pack.description(), pack.imageUrl(),
+				pack.setLogoUrl(), pack.coverImageUrl(), pack.accentColor(), pack.set(), pack.game(), slots.size(),
+				pack.poolSize(), slots, pack.oddsNote());
 	}
 
 	/** Turns a slot's weights into percentages, to one decimal place. */

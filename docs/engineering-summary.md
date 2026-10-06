@@ -35,7 +35,7 @@ A record of the production-readiness pass over the whole project: what was looke
 - The login page now explains a throttled login, and two unused constants were removed.
 
 **Tests and tooling**
-- New tests (the suites now hold 207 backend and 464 frontend tests) cover login throttling (unit and HTTP), the session cleanup job, the dataset import job reading files, unlimited packs, input hooks, the query client's retry policy, the route error page, contrast, and source-level architecture rules for the frontend.
+- New tests (at the end of this pass the suites held 207 backend and 464 frontend tests) cover login throttling (unit and HTTP), the session cleanup job, the dataset import job reading files, unlimited packs, input hooks, the query client's retry policy, the route error page, contrast, and source-level architecture rules for the frontend.
 - Coverage reports on both sides: JaCoCo in `mvnw verify`, and `npm run coverage`.
 
 **Docker**

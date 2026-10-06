@@ -6,6 +6,9 @@ import java.util.random.RandomGenerator;
 
 import com.cyan.arcade.IntegrationTest;
 import com.cyan.arcade.Players;
+import com.cyan.arcade.common.platform.BonusPacks;
+import com.cyan.arcade.common.security.AuthenticatedUser;
+import com.cyan.arcade.common.security.Role;
 import com.cyan.arcade.tcg.TinyCardGame;
 import com.cyan.arcade.tcg.card.TcgCardService;
 import com.cyan.arcade.tcg.collection.CollectionService;
@@ -16,6 +19,7 @@ import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.Test;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.web.servlet.MockMvc;
@@ -62,6 +66,9 @@ class UnlimitedPacksTests {
 	private Clock clock;
 
 	@Autowired
+	private ApplicationEventPublisher events;
+
+	@Autowired
 	private TransactionTemplate transaction;
 
 	@Test
@@ -70,11 +77,11 @@ class UnlimitedPacksTests {
 		Long single = TinyCardGame.packId(this.jdbc, "single");
 		Long userId = registeredUserId();
 		PackOpeningService unlimited = new PackOpeningService(this.packs, this.cards, this.collections, this.store,
-				this.random, new OpeningProperties(0), this.clock);
+				this.random, new OpeningProperties(0), BonusPacks.NONE, this.events, this.clock);
 
 		OpenPackResponse last = null;
 		for (int pack = 0; pack < 8; pack++) {
-			last = this.transaction.execute((status) -> unlimited.open(userId, single));
+			last = this.transaction.execute((status) -> unlimited.open(new AuthenticatedUser(userId, "player", Role.USER), single));
 		}
 
 		assertThat(last.allowance().dailyLimit()).isNull();
