@@ -1,7 +1,7 @@
 import { vi } from 'vitest'
 import type { SessionUser } from '@/api/auth'
 import type { DailyChallenge } from '@/api/dailyChallenges'
-import type { CoinTransaction, DailyLoginStatus, InventoryEntry, ShopItem } from '@/api/economy'
+import type { CoinTransaction, DailyLoginStatus, InventoryEntry, ItemType, ShopItem } from '@/api/economy'
 import type { GameResponse } from '@/api/games'
 import type { Rewards } from '@/api/gameSessions'
 import type {
@@ -11,7 +11,23 @@ import type {
   PlayerRanks,
   Standing,
 } from '@/api/leaderboards'
-import type { AchievementStatus, GameHistoryEntry, ProfileResponse, PublicProfile, StatsResponse } from '@/api/profile'
+import type {
+  AchievementStatus,
+  Cosmetic,
+  GameHistoryEntry,
+  ProfileResponse,
+  PublicProfile,
+  StatsResponse,
+} from '@/api/profile'
+
+/** What `GET /api/tcg/allowance` answers (the card game's own type; the platform does not import it). */
+interface Allowance {
+  dailyLimit: number | null
+  openedToday: number
+  leftToday: number | null
+  bonusPacks: number
+  resetsAt: string
+}
 
 export const catalogFixture: GameResponse[] = [
   {
@@ -128,9 +144,13 @@ export const shopItemsFixture: ShopItem[] = [
     maxOwned: null,
     minLevel: 1,
     icon: 'package',
+    equippable: false,
+    consumable: true,
     owned: null,
     unlocked: null,
     soldOut: null,
+    equipped: null,
+    affordable: null,
   },
   {
     id: 3,
@@ -143,9 +163,13 @@ export const shopItemsFixture: ShopItem[] = [
     maxOwned: null,
     minLevel: 3,
     icon: 'box',
+    equippable: false,
+    consumable: true,
     owned: null,
     unlocked: null,
     soldOut: null,
+    equipped: null,
+    affordable: null,
   },
   {
     id: 4,
@@ -158,9 +182,13 @@ export const shopItemsFixture: ShopItem[] = [
     maxOwned: 1,
     minLevel: 1,
     icon: 'coin',
+    equippable: true,
+    consumable: false,
     owned: null,
     unlocked: null,
     soldOut: null,
+    equipped: null,
+    affordable: null,
   },
   {
     id: 7,
@@ -173,9 +201,32 @@ export const shopItemsFixture: ShopItem[] = [
     maxOwned: 1,
     minLevel: 1,
     icon: 'dice',
+    equippable: true,
+    consumable: false,
     owned: null,
     unlocked: null,
     soldOut: null,
+    equipped: null,
+    affordable: null,
+  },
+  {
+    id: 11,
+    code: 'FRAME_OCEAN',
+    name: 'Ocean Frame',
+    description: 'Cool cyan waves around your avatar.',
+    type: 'COSMETIC',
+    price: 600,
+    quantity: 1,
+    maxOwned: 1,
+    minLevel: 2,
+    icon: 'frame-ocean',
+    equippable: true,
+    consumable: false,
+    owned: null,
+    unlocked: null,
+    soldOut: null,
+    equipped: null,
+    affordable: null,
   },
 ]
 
@@ -252,6 +303,8 @@ interface MockApiOptions {
   shopItems?: ShopItem[]
   /** The signed-in player's level, as the shop sees it. */
   level?: number
+  /** What the card game allows the signed-in player today. 4 of 10 opened by default; none for an admin. */
+  packAllowance?: Partial<Allowance>
   /** Overrides for the signed-in player's statistics. */
   stats?: Partial<StatsResponse>
   /** Other players' public profiles, by username (the signed-in player's own is built from the session). */
@@ -333,6 +386,7 @@ export function mockApi({
   dailyLogin = {},
   shopItems = shopItemsFixture,
   level = 2,
+  packAllowance = {},
   stats = {},
   publicProfiles = {},
   profileUpdateStatus = 200,
@@ -351,6 +405,24 @@ export function mockApi({
   let bio: string | null = null
   const passwords = new Map(Object.entries(accounts).map(([name, password]) => [name.toLowerCase(), password]))
 
+  /** What the player wears of a type, as the profile shows it. */
+  const wornOf = (type: ItemType): Cosmetic | null => {
+    const item = shopItems.find((candidate) => candidate.type === type && worn.has(candidate.id))
+    return item ? { code: item.code, name: item.name, icon: item.icon } : null
+  }
+  /** An item as the signed-in player sees it in the shop. */
+  const playerItem = (item: ShopItem): ShopItem => {
+    const count = owned.get(item.id) ?? 0
+    return {
+      ...item,
+      owned: count,
+      unlocked: level >= item.minLevel,
+      soldOut: item.maxOwned !== null && count + item.quantity > item.maxOwned,
+      equipped: worn.has(item.id),
+      affordable: balance >= item.price,
+    }
+  }
+
   const profileOf = (player: SessionUser): ProfileResponse => ({
     id: player.id,
     username: player.username,
@@ -367,8 +439,9 @@ export function mockApi({
     achievementsUnlocked: achievements.filter((achievement) => achievement.unlocked).length,
     achievementsTotal: achievements.length,
     memberSince: '2026-09-01T08:00:00Z',
-    title: null,
-    badge: null,
+    title: wornOf('TITLE'),
+    badge: wornOf('BADGE'),
+    cosmetic: wornOf('COSMETIC'),
     ...profile,
     // The avatar can change during a test, so it always comes from the current session.
     avatar: player.avatar,
@@ -482,16 +555,9 @@ export function mockApi({
       return json({
         balance: currentUser ? balance : null,
         level: currentUser ? level : null,
-        items: shopItems.map((item) => {
-          if (!currentUser) return item
-          const count = owned.get(item.id) ?? 0
-          return {
-            ...item,
-            owned: count,
-            unlocked: level >= item.minLevel,
-            soldOut: item.maxOwned !== null && count + item.quantity > item.maxOwned,
-          }
-        }),
+        items: shopItems
+          .filter((item) => !url.searchParams.get('type') || item.type === url.searchParams.get('type'))
+          .map((item) => (currentUser ? playerItem(item) : item)),
       })
     }
     if (method === 'POST' && path === '/api/shop/purchases') {
@@ -501,14 +567,20 @@ export function mockApi({
       if (earlier) return json({ ...earlier, repeated: true }, 201)
       const item = shopItems.find((candidate) => candidate.id === body.itemId)
       if (!item) return notFound('Shop item was not found')
+      if (level < item.minLevel) return problem(403, 'LEVEL_TOO_LOW', `${item.name} unlocks at level ${item.minLevel}`)
+      if (playerItem(item).soldOut) return problem(409, 'ITEM_LIMIT_REACHED', `You already own ${item.name}`)
       if (balance < item.price) {
         return problem(409, 'INSUFFICIENT_COINS', `That costs ${item.price} coins and you have ${balance}`)
       }
       balance -= item.price
       owned.set(item.id, (owned.get(item.id) ?? 0) + item.quantity)
+      // Like the server: the first badge, title or frame of a kind is put on straight away.
+      if (item.equippable && !shopItems.some((other) => other.type === item.type && worn.has(other.id))) {
+        worn.add(item.id)
+      }
       const purchase = {
         purchaseId: purchases.size + 1,
-        item,
+        item: playerItem(item),
         price: item.price,
         quantity: item.quantity,
         balance,
@@ -571,8 +643,9 @@ export function mockApi({
         role: own?.role ?? 'USER',
         level: 2,
         memberSince: '2026-09-01T08:00:00Z',
-        title: null,
-        badge: null,
+        title: own ? wornOf('TITLE') : null,
+        badge: own ? wornOf('BADGE') : null,
+        cosmetic: own ? wornOf('COSMETIC') : null,
         stats: { gamesPlayed: 12, totalScore: 4321, playTimeMs: 3_725_000, activities: [], games: [] },
         achievements: [],
         achievementsTotal: 9,
@@ -580,6 +653,25 @@ export function mockApi({
         you: own !== null,
       }
       return json({ ...base, ...other })
+    }
+
+    // --- What the card game allows today ---------------------------------------------------
+    if (path === '/api/tcg/allowance') {
+      if (!currentUser) return unauthorized()
+      // Admins have no daily limit, so the card game never counts bought packs for them.
+      const unlimited = currentUser.role === 'ADMIN'
+      const bought = shopItems
+        .filter((item) => item.type === 'PACK')
+        .reduce((sum, item) => sum + (owned.get(item.id) ?? 0), 0)
+      const allowance: Allowance = {
+        dailyLimit: unlimited ? null : 10,
+        openedToday: 4,
+        leftToday: unlimited ? null : 6,
+        bonusPacks: unlimited ? 0 : bought,
+        resetsAt: new Date(Date.now() + 5 * 60 * 60_000).toISOString(),
+        ...packAllowance,
+      }
+      return json(allowance)
     }
 
     // --- The signed-in player's own data ---------------------------------------------------
@@ -668,8 +760,9 @@ export function mockApi({
               type: item.type,
               icon: item.icon,
               quantity: owned.get(item.id) ?? 0,
-              equippable: item.type === 'BADGE' || item.type === 'TITLE',
+              equippable: item.equippable,
               equipped: worn.has(item.id),
+              consumable: item.consumable,
               acquiredAt: '2026-09-30T10:00:00Z',
             }),
           ),
@@ -680,8 +773,13 @@ export function mockApi({
       if (path === '/api/users/me/inventory') return json(inventoryOf())
       const wearing = /^\/api\/users\/me\/inventory\/(\d+)\/equipped$/.exec(path)?.[1]
       if (wearing) {
-        if (method === 'PUT') worn.add(Number(wearing))
-        else worn.delete(Number(wearing))
+        const item = shopItems.find((candidate) => candidate.id === Number(wearing))
+        if (method === 'PUT') {
+          if (!item || !(owned.get(item.id) ?? 0)) return notFound('Owned item was not found')
+          // One of each kind at a time.
+          for (const other of shopItems) if (other.type === item.type) worn.delete(other.id)
+          worn.add(item.id)
+        } else worn.delete(Number(wearing))
         return json(inventoryOf())
       }
       if (path === '/api/users/me/game-history') {

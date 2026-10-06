@@ -1,63 +1,118 @@
-import { Award, Check, Lock, LogIn, Package, ShoppingBag, Tag } from 'lucide-react'
+import { Check, CircleAlert, LogIn, ShoppingBag } from 'lucide-react'
 import { useState } from 'react'
-import { Link } from 'react-router'
+import { Link, useSearchParams } from 'react-router'
 import { useSession } from '@/api/auth'
 import { ApiError } from '@/api/client'
 import {
+  INSUFFICIENT_COINS,
+  ITEM_LIMIT_REACHED,
+  LEVEL_TOO_LOW,
   newRequestId,
   useEquip,
-  useInventory,
   usePurchase,
   useShop,
-  type InventoryEntry,
-  type ItemType,
   type PurchaseResponse,
   type ShopItem,
 } from '@/api/economy'
-import { ItemIcon } from '@/components/ItemIcon'
-import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { buttonStyles } from '@/components/ui/buttonStyles'
 import { cardStyles } from '@/components/ui/cardStyles'
 import { CoinAmount } from '@/components/ui/CoinAmount'
 import { ErrorState } from '@/components/ui/ErrorState'
+import { FilterChip } from '@/components/ui/FilterChip'
 import { LoadingState } from '@/components/ui/LoadingState'
 import { Modal } from '@/components/ui/Modal'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { accentStyle } from '@/lib/accent'
 import { cn } from '@/lib/cn'
+import { PackAllowancePanel } from '@/tcg/components/PackAllowancePanel'
+import { categoryFromSlug, shopCategories, type ShopCategory } from './shop/categories'
+import { Inventory } from './shop/Inventory'
+import { ItemCard } from './shop/ItemCard'
 
-const sections: { type: ItemType; title: string; description: string }[] = [
-  {
-    type: 'PACK',
-    title: 'Card packs',
-    description: "Extra packs for when today's run out. Open them from any booster in Cards.",
-  },
-  { type: 'BADGE', title: 'Badges', description: 'Wear one on your profile.' },
-  { type: 'TITLE', title: 'Titles', description: 'Shown under your name on your profile.' },
-  { type: 'COSMETIC', title: 'Cosmetics', description: 'Little extras for your collection.' },
-]
+/** What the last thing the player did came to: shown above the shelves until the next one. */
+interface Feedback {
+  tone: 'success' | 'error'
+  text: string
+  link?: { to: string; label: string }
+}
+
+/** Says what a refused purchase or change means, with the server's own words. */
+function problemText(error: unknown, fallback: string): string {
+  if (!(error instanceof ApiError)) return fallback
+  switch (error.code) {
+    case INSUFFICIENT_COINS:
+      return `Not enough coins. ${error.message}.`
+    case LEVEL_TOO_LOW:
+      return `Still locked: ${error.message}.`
+    case ITEM_LIMIT_REACHED:
+      return `Already yours: ${error.message}.`
+    default:
+      return error.message
+  }
+}
 
 /**
- * The shop: virtual items for coins. The page names the item and nothing else; the price, the
- * player's balance and whether they may buy it are all decided by the server.
+ * The shop: virtual items for coins, by category. The page names the item and nothing else; the
+ * price, the player's balance, what they own and whether they may buy or wear it are all decided by
+ * the server.
  */
 export function ShopPage() {
   useDocumentTitle('Shop')
   const { user } = useSession()
   const shop = useShop()
+  const equip = useEquip()
+  const [params, setParams] = useSearchParams()
+  const selected = categoryFromSlug(params.get('category'))
   const [buying, setBuying] = useState<{ item: ShopItem; requestId: string } | null>(null)
-  const [bought, setBought] = useState<PurchaseResponse | null>(null)
+  const [feedback, setFeedback] = useState<Feedback | null>(null)
 
   const balance = shop.data?.balance ?? null
+  const avatar = user?.avatar ?? 'ROBOT'
+  const select = (category: ShopCategory | null) => setParams(category ? { category: category.slug } : {})
+
+  const toggleWear = (item: { itemId: number; name: string; equipped: boolean }) => {
+    setFeedback(null)
+    equip.mutate(
+      { itemId: item.itemId, equipped: !item.equipped },
+      {
+        onSuccess: () =>
+          setFeedback(
+            item.equipped
+              ? { tone: 'success', text: `Unequipped ${item.name}.` }
+              : {
+                  tone: 'success',
+                  text: `Equipped! ${item.name} is on your profile.`,
+                  link: { to: '/profile', label: 'See your profile' },
+                },
+          ),
+        onError: (error) => setFeedback({ tone: 'error', text: problemText(error, "Couldn't change that. Try again.") }),
+      },
+    )
+  }
+
+  const bought = (purchase: PurchaseResponse) => {
+    setBuying(null)
+    const { item } = purchase
+    setFeedback({
+      tone: 'success',
+      text: `Purchased! ${item.name} is yours${item.equipped ? ' and already on your profile' : ''}.`,
+      link: item.consumable ? { to: '/tcg', label: 'Open packs' } : { to: '/profile', label: 'See your profile' },
+    })
+  }
+
+  const categories = shopCategories
+    .map((category) => ({ category, items: shop.data?.items.filter((item) => item.type === category.type) ?? [] }))
+    .filter(({ items }) => items.length > 0)
+  const shown = selected ? categories.filter(({ category }) => category.type === selected.type) : categories
 
   return (
     <div style={accentStyle('#a855f7')}>
       <PageHeader
         icon={ShoppingBag}
         title="Shop"
-        description="Spend the coins you earn playing on card packs, badges and titles."
+        description="Spend the coins you earn playing on card packs, badges, titles and profile frames."
         actions={
           balance !== null && (
             <p className="flex items-center gap-2 rounded-full bg-amber-50 px-4 py-2 text-lg text-amber-900 ring-2 ring-amber-300">
@@ -81,22 +136,27 @@ export function ShopPage() {
       )}
 
       <div aria-live="polite">
-        {bought && (
+        {feedback?.tone === 'success' && (
           <p
             role="status"
             className="mb-6 flex flex-wrap items-center gap-2 rounded-card bg-emerald-50 px-5 py-4 font-display font-semibold text-emerald-800 ring-2 ring-emerald-200 motion-safe:animate-pop-in"
           >
             <Check aria-hidden className="size-5" strokeWidth={3} />
-            {bought.item.name} is yours!
-            {bought.item.type === 'PACK' ? (
-              <Link to="/tcg" className="underline">
-                Open packs
-              </Link>
-            ) : (
-              <Link to="/profile" className="underline">
-                See your profile
+            {feedback.text}
+            {feedback.link && (
+              <Link to={feedback.link.to} className="underline">
+                {feedback.link.label}
               </Link>
             )}
+          </p>
+        )}
+        {feedback?.tone === 'error' && (
+          <p
+            role="alert"
+            className="mb-6 flex flex-wrap items-center gap-2 rounded-card bg-rose-50 px-5 py-4 font-display font-semibold text-rose-800 ring-2 ring-rose-200"
+          >
+            <CircleAlert aria-hidden className="size-5" />
+            {feedback.text}
           </p>
         )}
       </div>
@@ -105,36 +165,78 @@ export function ShopPage() {
       {shop.isError && <ErrorState title="Couldn't load the shop" onRetry={() => void shop.refetch()} />}
       {shop.data && (
         <div className="flex flex-col gap-section">
-          {sections.map((section) => {
-            const items = shop.data.items.filter((item) => item.type === section.type)
-            if (items.length === 0) return null
-            const headingId = `shop-${section.type.toLowerCase()}`
-            return (
-              <section key={section.type} aria-labelledby={headingId}>
-                <h2 id={headingId} className="text-2xl font-bold sm:text-3xl">
-                  {section.title}
-                </h2>
-                <p className="mt-1 mb-5 text-ink-soft">{section.description}</p>
-                <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {items.map((item) => (
-                    <li key={item.id} className="flex *:w-full">
-                      <ItemCard
-                        item={item}
-                        balance={balance}
-                        signedIn={Boolean(user)}
-                        onBuy={() => {
-                          setBought(null)
-                          // One id per purchase the player means to make, so a double click buys once.
-                          setBuying({ item, requestId: newRequestId() })
-                        }}
-                      />
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )
-          })}
-          {user && <Inventory />}
+          {user && (selected === null || selected.type === 'PACK') && <PackAllowancePanel />}
+
+          <div>
+            {categories.length > 1 && (
+              <div role="group" aria-label="Filter by category" className="mb-6 flex flex-wrap gap-2">
+                <FilterChip
+                  label="All"
+                  count={shop.data.items.length}
+                  pressed={selected === null}
+                  onClick={() => select(null)}
+                />
+                {categories.map(({ category, items }) => (
+                  <FilterChip
+                    key={category.type}
+                    label={category.label}
+                    count={items.length}
+                    pressed={selected?.type === category.type}
+                    onClick={() => select(category)}
+                    icon={<category.icon aria-hidden className="size-4" />}
+                  />
+                ))}
+              </div>
+            )}
+
+            <div className="flex flex-col gap-section">
+              {shown.length === 0 && (
+                <p className={cardStyles('md', 'text-ink-soft')}>
+                  Nothing in this category right now.{' '}
+                  <button type="button" className="font-bold text-brand-700" onClick={() => select(null)}>
+                    Show everything
+                  </button>
+                </p>
+              )}
+              {shown.map(({ category, items }) => {
+                const headingId = `shop-${category.slug}`
+                return (
+                  <section key={category.type} aria-labelledby={headingId}>
+                    <h2 id={headingId} className="flex items-center gap-2.5 text-2xl font-bold sm:text-3xl">
+                      <span className={cn('grid size-9 place-items-center rounded-xl shadow-soft', category.tile)}>
+                        <category.icon aria-hidden className="size-5" />
+                      </span>
+                      {category.title}
+                    </h2>
+                    <p className="mt-1 mb-5 text-ink-soft">{category.description}</p>
+                    <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                      {items.map((item) => (
+                        <li key={item.id} className="flex *:w-full">
+                          <ItemCard
+                            item={item}
+                            balance={balance}
+                            signedIn={Boolean(user)}
+                            avatar={avatar}
+                            busy={equip.isPending}
+                            onBuy={() => {
+                              setFeedback(null)
+                              // One id per purchase the player means to make, so a double click buys once.
+                              setBuying({ item, requestId: newRequestId() })
+                            }}
+                            onToggleWear={() =>
+                              toggleWear({ itemId: item.id, name: item.name, equipped: item.equipped === true })
+                            }
+                          />
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                )
+              })}
+            </div>
+          </div>
+
+          {user && <Inventory avatar={avatar} busy={equip.isPending} onToggleWear={toggleWear} />}
         </div>
       )}
 
@@ -144,95 +246,10 @@ export function ShopPage() {
           requestId={buying.requestId}
           balance={balance}
           onClose={() => setBuying(null)}
-          onBought={(purchase) => {
-            setBuying(null)
-            setBought(purchase)
-          }}
+          onBought={bought}
         />
       )}
     </div>
-  )
-}
-
-interface ItemCardProps {
-  item: ShopItem
-  /** The player's coins, or `null` for a guest. */
-  balance: number | null
-  signedIn: boolean
-  onBuy: () => void
-}
-
-function ItemCard({ item, balance, signedIn, onBuy }: ItemCardProps) {
-  const locked = item.unlocked === false
-  const soldOut = item.soldOut === true
-  const affordable = balance !== null && balance >= item.price
-
-  let reason: string | null = null
-  if (locked) reason = `Unlocks at level ${item.minLevel}`
-  else if (soldOut) reason = 'You own this'
-  else if (signedIn && !affordable) reason = 'Not enough coins yet'
-
-  return (
-    <article
-      aria-label={item.name}
-      className={cardStyles('none', cn('flex flex-col gap-4 overflow-hidden p-5', locked && 'opacity-80'))}
-    >
-      <div className="flex items-start gap-4">
-        <span
-          className={cn(
-            'grid size-16 shrink-0 place-items-center rounded-2xl text-white shadow-soft',
-            item.type === 'PACK' ? 'bg-linear-to-br from-purple-500 to-pink-500' : 'bg-linear-to-br from-amber-400 to-orange-500',
-          )}
-        >
-          <ItemIcon icon={item.icon} className="size-8" />
-        </span>
-        <div className="min-w-0">
-          <h3 className="text-lg font-semibold">{item.name}</h3>
-          <p className="text-sm text-ink-soft">{item.description}</p>
-        </div>
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        {item.type === 'PACK' && (
-          <Badge tone="neutral">
-            <Tag aria-hidden className="size-3.5" />
-            {item.quantity} {item.quantity === 1 ? 'pack' : 'packs'}
-          </Badge>
-        )}
-        {item.minLevel > 1 && (
-          <Badge tone={locked ? 'warning' : 'neutral'}>
-            {locked ? <Lock aria-hidden className="size-3.5" /> : <Award aria-hidden className="size-3.5" />}
-            Level {item.minLevel}
-          </Badge>
-        )}
-        {item.owned !== null && item.owned > 0 && (
-          <Badge tone="success">
-            <Check aria-hidden className="size-3.5" />
-            {item.type === 'PACK' ? `${item.owned} left` : 'Owned'}
-          </Badge>
-        )}
-      </div>
-
-      <div className="mt-auto flex flex-wrap items-center justify-between gap-3">
-        <CoinAmount amount={item.price} className="text-xl text-amber-900" />
-        {signedIn ? (
-          <Button
-            size="sm"
-            onClick={onBuy}
-            disabled={reason !== null}
-            aria-label={`Buy ${item.name} for ${item.price} coins`}
-            className="bg-purple-500 text-white shadow-[0_4px_0_0_var(--color-purple-800)] hover:bg-purple-400 hover:shadow-[0_6px_0_0_var(--color-purple-800)]"
-          >
-            Buy
-          </Button>
-        ) : (
-          <Link to="/login?redirect=%2Fshop" className={buttonStyles('secondary', 'sm')}>
-            Log in to buy
-          </Link>
-        )}
-      </div>
-      {reason && <p className="-mt-2 text-sm font-bold text-ink-soft">{reason}</p>}
-    </article>
   )
 }
 
@@ -247,12 +264,9 @@ interface ConfirmPurchaseProps {
 /** "Buy this for so many coins?" Nothing is spent until the player says yes. */
 function ConfirmPurchase({ item, requestId, balance, onClose, onBought }: ConfirmPurchaseProps) {
   const purchase = usePurchase()
-  const error =
-    purchase.error instanceof ApiError
-      ? purchase.error.message
-      : purchase.error
-        ? "The purchase didn't go through. Nothing was charged; try again."
-        : null
+  const error = purchase.error
+    ? problemText(purchase.error, "The purchase didn't go through. Nothing was charged; try again.")
+    : null
 
   return (
     <Modal
@@ -279,6 +293,10 @@ function ConfirmPurchase({ item, requestId, balance, onClose, onBought }: Confir
           It costs <CoinAmount amount={item.price} className="text-ink" />. You'll have{' '}
           <CoinAmount amount={balance - item.price} className="text-ink" /> left.
         </p>
+        {item.consumable && <p className="text-sm text-ink-soft">Bought packs are opened once today's free packs are used up.</p>}
+        {item.equippable && (
+          <p className="text-sm text-ink-soft">You can equip and unequip it on your profile whenever you like.</p>
+        )}
         {error && (
           <p role="alert" className="font-bold text-rose-700">
             {error}
@@ -286,70 +304,5 @@ function ConfirmPurchase({ item, requestId, balance, onClose, onBought }: Confir
         )}
       </div>
     </Modal>
-  )
-}
-
-/** What the player owns: extra packs to open, badges and titles to wear. */
-function Inventory() {
-  const { data } = useInventory(true)
-  const equip = useEquip()
-  if (!data) return null
-
-  const wearable = data.items.filter((entry) => entry.equippable)
-  return (
-    <section aria-labelledby="inventory-heading" className={cardStyles('md', 'flex flex-col gap-4')}>
-      <h2 id="inventory-heading" className="text-2xl font-bold">
-        Your items
-      </h2>
-      <p className="flex flex-wrap items-center gap-2 text-ink-soft">
-        <Package aria-hidden className="size-5 text-purple-600" />
-        <strong className="text-ink">
-          {data.bonusPacks} extra {data.bonusPacks === 1 ? 'pack' : 'packs'}
-        </strong>
-        for when today's run out.
-        {data.bonusPacks > 0 && (
-          <Link to="/tcg" className="font-bold text-purple-700 hover:text-purple-900">
-            Open packs
-          </Link>
-        )}
-      </p>
-      {wearable.length === 0 ? (
-        <p className="text-ink-soft">No badges or titles yet. Pick one above!</p>
-      ) : (
-        <ul className="grid gap-3 sm:grid-cols-2">
-          {wearable.map((entry) => (
-            <WearableRow
-              key={entry.itemId}
-              entry={entry}
-              busy={equip.isPending}
-              onToggle={() => equip.mutate({ itemId: entry.itemId, equipped: !entry.equipped })}
-            />
-          ))}
-        </ul>
-      )}
-    </section>
-  )
-}
-
-function WearableRow({ entry, busy, onToggle }: { entry: InventoryEntry; busy: boolean; onToggle: () => void }) {
-  return (
-    <li className="flex items-center gap-3 rounded-control bg-surface-muted p-3">
-      <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-amber-400 text-amber-950">
-        <ItemIcon icon={entry.icon} className="size-5" />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block font-display font-semibold">{entry.name}</span>
-        <span className="text-sm text-ink-soft">{entry.type === 'TITLE' ? 'Title' : 'Badge'}</span>
-      </span>
-      <Button
-        size="sm"
-        variant={entry.equipped ? 'secondary' : 'primary'}
-        disabled={busy}
-        onClick={onToggle}
-        aria-label={entry.equipped ? `Take off ${entry.name}` : `Wear ${entry.name}`}
-      >
-        {entry.equipped ? 'Wearing' : 'Wear'}
-      </Button>
-    </li>
   )
 }

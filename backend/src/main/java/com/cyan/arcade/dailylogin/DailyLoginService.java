@@ -82,13 +82,18 @@ public class DailyLoginService {
 			throw new ConflictException(ALREADY_CLAIMED, "Today's reward has already been claimed. Come back tomorrow!");
 		}
 
-		this.coins.credit(userId, CoinTransactionType.DAILY_LOGIN, reward, CoinReference.of(REFERENCE_TYPE, today),
-				"Daily login, day %d".formatted(day));
 		String bonusItem = null;
 		if (this.properties.hasBonusOn(day)) {
 			this.shop.give(userId, this.properties.bonusItem(), this.properties.bonusItemUnits());
 			bonusItem = this.shop.nameOf(this.properties.bonusItem());
 		}
+		// The item is not coins, so the ledger only mentions it: the coin history then says what the
+		// whole day's reward was.
+		String description = (bonusItem != null)
+				? "Daily login, day %d + %d × %s".formatted(day, this.properties.bonusItemUnits(), bonusItem)
+				: "Daily login, day %d".formatted(day);
+		this.coins.credit(userId, CoinTransactionType.DAILY_LOGIN, reward, CoinReference.of(REFERENCE_TYPE, today),
+				description);
 		return new Claimed(day, streak, reward, bonusItem, this.coins.balanceOf(userId), statusAt(userId, now));
 	}
 

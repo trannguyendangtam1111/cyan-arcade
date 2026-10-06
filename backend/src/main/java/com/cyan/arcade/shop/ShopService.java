@@ -7,6 +7,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import com.cyan.arcade.common.error.ApiException;
 import com.cyan.arcade.common.error.ConflictException;
@@ -70,18 +72,17 @@ public class ShopService {
 	/**
 	 * What is on sale.
 	 * @param userId the signed-in player, whose balance and possessions are included, or {@code null}
+	 * @param type only items of this type, or {@code null} for all
 	 */
 	@Transactional(readOnly = true)
-	public ShopResponse catalog(Long userId) {
-		List<ShopItem> items = this.store.findActiveItems();
-		if (userId == null) {
-			return new ShopResponse(null, null,
-					items.stream().map((item) -> toItem(item, null, null)).toList());
-		}
-		int level = levelOf(userId);
-		Map<Long, Integer> owned = this.store.quantitiesOf(userId);
-		return new ShopResponse(this.coins.balanceOf(userId), level,
-				items.stream().map((item) -> toItem(item, owned.getOrDefault(item.id(), 0), level)).toList());
+	public ShopResponse catalog(Long userId, ItemType type) {
+		List<ShopItem> items = this.store.findActiveItems()
+			.stream()
+			.filter((item) -> type == null || item.type() == type)
+			.toList();
+		Viewer viewer = (userId != null) ? viewerOf(userId) : null;
+		return new ShopResponse((viewer != null) ? viewer.balance() : null, (viewer != null) ? viewer.level() : null,
+				items.stream().map((item) -> toItem(item, viewer)).toList());
 	}
 
 	/**
@@ -122,8 +123,8 @@ public class ShopService {
 			.balanceAfter();
 		this.handlers.get(item.type()).give(userId, item, item.quantity(), now);
 
-		return new PurchaseResponse(purchaseId, toItem(item, owned + item.quantity(), level), item.price(),
-				item.quantity(), balance, owned + item.quantity(), false, now);
+		return new PurchaseResponse(purchaseId, toItem(item, viewerOf(userId)), item.price(), item.quantity(), balance,
+				owned + item.quantity(), false, now);
 	}
 
 	/** Everything a player owns. */
@@ -139,7 +140,10 @@ public class ShopService {
 		return this.store.inventoryOf(userId).stream().filter(Owned::equipped).map(this::toEntry).toList();
 	}
 
-	/** Puts on an item the player owns, taking off the one of the same type they wore. */
+	/**
+	 * Puts on an item the player owns, taking off the one of the same type they wore. Only the
+	 * player's own inventory is looked at: an item they do not own cannot be worn.
+	 */
 	@Transactional
 	public InventoryResponse equip(Long userId, Long itemId) {
 		ShopItem item = this.store.findItem(itemId).orElseThrow(() -> new NotFoundException("Shop item", itemId));
@@ -178,28 +182,64 @@ public class ShopService {
 
 	private PurchaseResponse repeated(Long userId, Purchase purchase) {
 		ShopItem item = this.store.findItem(purchase.itemId()).orElseThrow();
-		int owned = this.store.quantitiesOf(userId).getOrDefault(item.id(), 0);
-		return new PurchaseResponse(purchase.id(), toItem(item, owned, levelOf(userId)), purchase.price(),
-				purchase.quantity(), this.coins.balanceOf(userId), owned, true, purchase.createdAt());
+		Viewer viewer = viewerOf(userId);
+		return new PurchaseResponse(purchase.id(), toItem(item, viewer), purchase.price(), purchase.quantity(),
+				viewer.balance(), viewer.quantityOf(item), true, purchase.createdAt());
 	}
 
 	private int levelOf(Long userId) {
 		return Levels.levelFor(this.users.get(userId).xp());
 	}
 
-	private ShopResponse.Item toItem(ShopItem item, Integer owned, Integer level) {
-		Boolean unlocked = (level != null) ? level >= item.minLevel() : null;
-		Boolean soldOut = (owned != null) ? item.maxOwned() != null && owned + item.quantity() > item.maxOwned()
-				: null;
+	/** What the shop needs to know about the player looking at it. */
+	private Viewer viewerOf(Long userId) {
+		Map<Long, Owned> owned = this.store.inventoryOf(userId)
+			.stream()
+			.collect(Collectors.toMap((entry) -> entry.item().id(), Function.identity()));
+		return new Viewer(levelOf(userId), this.coins.balanceOf(userId), owned);
+	}
+
+	/**
+	 * A signed-in player as the shop sees them.
+	 * @param owned what they own, by item id
+	 */
+	private record Viewer(int level, long balance, Map<Long, Owned> owned) {
+
+		int quantityOf(ShopItem item) {
+			Owned entry = this.owned.get(item.id());
+			return (entry != null) ? entry.quantity() : 0;
+		}
+
+		boolean wears(ShopItem item) {
+			Owned entry = this.owned.get(item.id());
+			return entry != null && entry.equipped();
+		}
+
+	}
+
+	/** An item as someone sees it: with what they own and may do for a player, without for a guest. */
+	private ShopResponse.Item toItem(ShopItem item, Viewer viewer) {
+		ItemHandler handler = this.handlers.get(item.type());
+		boolean equippable = handler.isEquippable(item.type());
+		boolean consumable = handler.isConsumable(item.type());
+		if (viewer == null) {
+			return new ShopResponse.Item(item.id(), item.code(), item.name(), item.description(), item.type(),
+					item.price(), item.quantity(), item.maxOwned(), item.minLevel(), item.icon(), equippable,
+					consumable, null, null, null, null, null);
+		}
+		int owned = viewer.quantityOf(item);
+		boolean soldOut = item.maxOwned() != null && owned + item.quantity() > item.maxOwned();
 		return new ShopResponse.Item(item.id(), item.code(), item.name(), item.description(), item.type(),
-				item.price(), item.quantity(), item.maxOwned(), item.minLevel(), item.icon(), owned, unlocked, soldOut);
+				item.price(), item.quantity(), item.maxOwned(), item.minLevel(), item.icon(), equippable, consumable,
+				owned, viewer.level() >= item.minLevel(), soldOut, viewer.wears(item), viewer.balance() >= item.price());
 	}
 
 	private InventoryResponse.Entry toEntry(Owned owned) {
 		ShopItem item = owned.item();
+		ItemHandler handler = this.handlers.get(item.type());
 		return new InventoryResponse.Entry(item.id(), item.code(), item.name(), item.description(), item.type(),
-				item.icon(), owned.quantity(), this.handlers.get(item.type()).isEquippable(item.type()),
-				owned.equipped(), owned.acquiredAt());
+				item.icon(), owned.quantity(), handler.isEquippable(item.type()), owned.equipped(),
+				handler.isConsumable(item.type()), owned.acquiredAt());
 	}
 
 }

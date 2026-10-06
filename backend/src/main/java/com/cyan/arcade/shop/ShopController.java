@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -27,10 +28,14 @@ class ShopController {
 		this.shop = shop;
 	}
 
-	/** Public: guests can see what there is to buy. */
+	/**
+	 * Public: guests can see what there is to buy.
+	 * @param type only one category, e.g. {@code BADGE}; anything but an {@link ItemType} is a 400
+	 */
 	@GetMapping("/api/shop/items")
-	ShopResponse items(@AuthenticationPrincipal AuthenticatedUser user) {
-		return this.shop.catalog((user != null) ? user.id() : null);
+	ShopResponse items(@AuthenticationPrincipal AuthenticatedUser user,
+			@RequestParam(required = false) ItemType type) {
+		return this.shop.catalog((user != null) ? user.id() : null, type);
 	}
 
 	@PostMapping("/api/shop/purchases")
@@ -45,7 +50,7 @@ class ShopController {
 		return this.shop.inventoryOf(user.id());
 	}
 
-	/** Wears a badge or title the player owns. */
+	/** Wears a badge, title or frame the player owns. */
 	@PutMapping("/api/users/me/inventory/{itemId}/equipped")
 	InventoryResponse equip(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable Long itemId) {
 		return this.shop.equip(user.id(), itemId);

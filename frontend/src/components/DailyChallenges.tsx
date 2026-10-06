@@ -159,6 +159,7 @@ function ChallengeCard({ challenge, accentColor, index }: ChallengeCardProps) {
       <div className="flex items-center justify-between gap-2">
         <Badge tone="accent">{where.label}</Badge>
         <span className="flex flex-wrap justify-end gap-1.5">
+          <span className="sr-only">Reward:</span>
           <span className="inline-flex items-center gap-1 rounded-full bg-brand-100 px-2.5 py-0.5 text-sm font-bold text-brand-800">
             <Zap aria-hidden className="size-3.5" fill="currentColor" />+{challenge.xpReward} XP
           </span>
@@ -195,9 +196,13 @@ function ChallengeCard({ challenge, accentColor, index }: ChallengeCardProps) {
 
       <p className="mt-auto pt-1 font-display text-sm font-semibold">
         {done ? (
-          <span className="inline-flex items-center gap-1.5 text-emerald-700">
+          <span className="inline-flex flex-wrap items-center gap-1.5 text-emerald-700">
             <CircleCheck aria-hidden className="size-4.5" />
             Completed
+            <span className="font-sans font-bold text-emerald-800">
+              · reward earned: +{challenge.xpReward} XP
+              {challenge.coinReward > 0 && `, +${challenge.coinReward} coins`}
+            </span>
           </span>
         ) : (
           <span className="inline-flex items-center gap-1 text-brand-700">

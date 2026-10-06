@@ -2,6 +2,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { userKeys, useSession } from './auth'
 import { apiFetch } from './client'
 import { dailyChallengeKeys } from './dailyChallenges'
+import { publicProfileKeys } from './profile'
 
 /**
  * The platform economy: coins, the daily login reward and the shop.
@@ -87,14 +88,22 @@ export interface ShopItem {
   quantity: number
   maxOwned: number | null
   minLevel: number
-  /** A name the app turns into a picture. */
+  /** A name the app turns into a picture (for a frame, which frame). */
   icon: string
+  /** Worn on the profile once owned: badges, titles and frames. */
+  equippable: boolean
+  /** Used up (card packs), so owning some does not stop buying more. */
+  consumable: boolean
   /** How many the player owns; `null` for guests. */
   owned: number | null
   /** Whether the player's level is high enough; `null` for guests. */
   unlocked: boolean | null
   /** Whether the player owns as many as one may; `null` for guests. */
   soldOut: boolean | null
+  /** Whether the player wears it; `null` for guests. */
+  equipped: boolean | null
+  /** Whether the player has the coins for it; `null` for guests. */
+  affordable: boolean | null
 }
 
 /** `GET /api/shop/items`. Balance and level are `null` for guests. */
@@ -126,6 +135,8 @@ export interface InventoryEntry {
   quantity: number
   equippable: boolean
   equipped: boolean
+  /** Used up, like card packs. */
+  consumable: boolean
   acquiredAt: string
 }
 
@@ -138,6 +149,8 @@ export interface InventoryResponse {
 
 export const DAILY_LOGIN_ALREADY_CLAIMED = 'DAILY_LOGIN_ALREADY_CLAIMED'
 export const INSUFFICIENT_COINS = 'INSUFFICIENT_COINS'
+export const LEVEL_TOO_LOW = 'LEVEL_TOO_LOW'
+export const ITEM_LIMIT_REACHED = 'ITEM_LIMIT_REACHED'
 
 export const TRANSACTIONS_PAGE_SIZE = 8
 
@@ -211,6 +224,9 @@ export function usePurchase() {
   return useMutation({
     mutationFn: ({ itemId, requestId }: { itemId: number; requestId: string }) =>
       apiFetch<PurchaseResponse>('/api/shop/purchases', { method: 'POST', body: { itemId, requestId } }),
+    // The server's new balance shows at once (in the header too); the rest is read again.
+    onSuccess: ({ balance }) =>
+      queryClient.setQueryData<CoinsResponse>(economyKeys.coins, (coins) => coins && { ...coins, balance }),
     onSettled: () => invalidateWallet(queryClient),
   })
 }
@@ -223,7 +239,7 @@ export function useInventory(enabled: boolean) {
   })
 }
 
-/** Wears (or takes off) a badge or title the player owns. */
+/** Wears (or takes off) a badge, title or frame the player owns. The server checks they own it. */
 export function useEquip() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -233,8 +249,10 @@ export function useEquip() {
       }),
     onSuccess: (inventory) => {
       queryClient.setQueryData(economyKeys.inventory, inventory)
-      // The profile shows what the player wears.
-      void queryClient.invalidateQueries({ queryKey: [...userKeys.all, 'profile'] })
+      // The shop, the profile and the public profile show what the player wears.
+      for (const key of [[...userKeys.all, 'profile'], economyKeys.shop(true), publicProfileKeys.all]) {
+        void queryClient.invalidateQueries({ queryKey: key })
+      }
     },
   })
 }
@@ -250,6 +268,8 @@ function invalidateWallet(queryClient: ReturnType<typeof useQueryClient>) {
     [...userKeys.all, 'stats'],
     // Bought packs change what the card game allows today.
     [...userKeys.all, 'tcg', 'allowance'],
+    // A first badge, title or frame is worn straight away, for everyone to see.
+    publicProfileKeys.all,
     dailyChallengeKeys.mine,
   ]) {
     void queryClient.invalidateQueries({ queryKey: key })

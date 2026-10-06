@@ -14,13 +14,14 @@ import com.cyan.arcade.user.Avatar;
  *
  * @param title the title the player wears, or {@code null}
  * @param badge the badge the player wears, or {@code null}
+ * @param cosmetic the frame the player wears around their avatar, or {@code null}
  * @param achievements the achievements the player has unlocked, newest first
  * @param achievementsTotal how many achievements there are
  * @param you whether the caller is this player (who may edit it)
  */
 public record PublicProfileResponse(String username, String displayName, Avatar avatar, String bio, Role role,
-		int level, Instant memberSince, Cosmetic title, Cosmetic badge, Stats stats, List<Achievement> achievements,
-		int achievementsTotal, PlayerRanks ranks, boolean you) {
+		int level, Instant memberSince, Cosmetic title, Cosmetic badge, Cosmetic cosmetic, Stats stats,
+		List<Achievement> achievements, int achievementsTotal, PlayerRanks ranks, boolean you) {
 
 	/**
 	 * The player's numbers: the same as on their own profile, without coins.

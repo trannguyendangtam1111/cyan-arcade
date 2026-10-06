@@ -16,6 +16,14 @@ interface ItemHandler {
 	boolean isEquippable(ItemType type);
 
 	/**
+	 * Whether an item of this type is used up, so that owning some does not stop a player buying
+	 * more (card packs, say), unlike a collectible owned once.
+	 */
+	default boolean isConsumable(ItemType type) {
+		return false;
+	}
+
+	/**
 	 * Gives a player what they bought, in the purchase's transaction.
 	 * @param units how many of the item they get, e.g. 3 packs
 	 */

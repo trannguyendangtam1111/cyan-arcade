@@ -104,7 +104,7 @@ describe('AI mode', () => {
 })
 
 describe('the card game module', () => {
-  it('is used by the rest of the app only through its routes and its hub banner', () => {
+  it('is used by the rest of the app only through its routes, its hub banner and the shop\'s pack panel', () => {
     const outside = sourceFiles(SRC).filter((path) => !name(path).startsWith('tcg/'))
     const uses = outside.flatMap((path) =>
       imports(path)
@@ -116,6 +116,7 @@ describe('the card game module', () => {
       'app/routes.tsx -> @/tcg/routes',
       'pages/GamesPage.tsx -> @/tcg/components/TcgHubBanner',
       'pages/HomePage.tsx -> @/tcg/components/TcgHubBanner',
+      'pages/ShopPage.tsx -> @/tcg/components/PackAllowancePanel',
     ])
   })
 

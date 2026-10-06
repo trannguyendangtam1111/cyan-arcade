@@ -24,13 +24,17 @@ describe('the daily reward', () => {
     expect(days[0]).toHaveTextContent('Day 1')
     expect(days[0]).toHaveTextContent('50 coins')
     expect(days[6]).toHaveTextContent('200 coins')
-    expect(days[6]).toHaveTextContent('+ pack')
+    expect(days[6]).toHaveTextContent('+ free pack')
+    // Today's reward and the big one at the end of the run, in words.
+    expect(reward.getByText("Today's reward").closest('div')).toHaveTextContent(/Day 1.*\+50 coins/)
+    expect(reward.getByText('Day 7 bonus').closest('div')).toHaveTextContent(/\+200 coins.*\+ free Extra Pack/)
     expect(await screen.findByRole('link', { name: '1,240 coins' })).toHaveAttribute('href', '/shop')
 
     await userEvent.click(reward.getByRole('button', { name: /claim day 1/i }))
 
     expect(await reward.findByRole('status')).toHaveTextContent('+50 coins! You now have 1290.')
     expect(reward.getByText('Claimed today')).toBeInTheDocument()
+    expect(reward.getByText('Next reward').closest('div')).toHaveTextContent(/Day 2.*\+60 coins.*tomorrow/)
     expect(reward.queryByRole('button', { name: /claim/i })).not.toBeInTheDocument()
     expect(within(reward.getByRole('list', { name: 'Daily rewards' })).getAllByRole('listitem')[0]).toHaveTextContent(
       'Claimed',

@@ -37,6 +37,11 @@ class PackItems implements ItemHandler, BonusPacks {
 	}
 
 	@Override
+	public boolean isConsumable(ItemType type) {
+		return true;
+	}
+
+	@Override
 	public void give(Long userId, ShopItem item, int units, Instant now) {
 		this.store.add(userId, item.id(), units, now);
 	}

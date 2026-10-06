@@ -67,7 +67,12 @@ export function DailyLogin({ variant = 'full' }: DailyLoginProps) {
         </p>
       )}
 
-      {status && variant === 'full' && <DayTrack status={status} />}
+      {status && variant === 'full' && (
+        <>
+          <DayTrack status={status} />
+          <RewardPreview status={status} />
+        </>
+      )}
 
       {status && (
         <div className="mt-auto flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -120,6 +125,40 @@ export function DailyLogin({ variant = 'full' }: DailyLoginProps) {
   )
 }
 
+/**
+ * Today's reward (or, once claimed, tomorrow's) and the big one at the end of the run, in words.
+ * All from the server's status: it knows which day of the run today is.
+ */
+function RewardPreview({ status }: { status: DailyLoginStatus }) {
+  const today = status.days.find((day) => day.day === status.day)
+  const next = status.claimedToday ? status.days.find((day) => day.day === (status.day % status.days.length) + 1) : today
+  const bonusDay = status.days.find((day) => day.bonusItem)
+  if (!next) return null
+
+  return (
+    <dl className="grid gap-2 text-sm sm:grid-cols-2">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-control bg-surface px-3 py-2 ring-2 ring-line">
+        <dt className="font-bold text-ink-soft">{status.claimedToday ? 'Next reward' : "Today's reward"}</dt>
+        <dd className="flex flex-wrap items-center gap-1.5 font-display font-semibold">
+          Day {next.day}
+          <CoinAmount amount={next.coins} signed />
+          {next.bonusItem && <span className="text-purple-700">+ free {next.bonusItem}</span>}
+          {status.claimedToday && <span className="font-sans font-bold text-ink-soft">tomorrow</span>}
+        </dd>
+      </div>
+      {bonusDay && bonusDay.day !== next.day && (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-control bg-purple-50 px-3 py-2 ring-2 ring-purple-200">
+          <dt className="font-bold text-purple-800">Day {bonusDay.day} bonus</dt>
+          <dd className="flex flex-wrap items-center gap-1.5 font-display font-semibold">
+            <CoinAmount amount={bonusDay.coins} signed />
+            <span className="text-purple-700">+ free {bonusDay.bonusItem}</span>
+          </dd>
+        </div>
+      )}
+    </dl>
+  )
+}
+
 /** Every day of the run: claimed, today's, and what is still to come. */
 function DayTrack({ status }: { status: DailyLoginStatus }) {
   return (
@@ -143,7 +182,7 @@ function DayTrack({ status }: { status: DailyLoginStatus }) {
             <CoinAmount amount={day.coins} className="text-sm" />
             {day.bonusItem && (
               <span className="inline-flex items-center gap-0.5 text-xs font-bold text-purple-700">
-                <Package aria-hidden className="size-3.5" />+ pack
+                <Package aria-hidden className="size-3.5" />+ free pack
               </span>
             )}
             {claimed && (

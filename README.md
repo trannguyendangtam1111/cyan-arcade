@@ -26,7 +26,7 @@ It is a portfolio project. The goal is a polished, extensible platform where **a
 
 ## Status
 
-Everything listed below works end to end, in Docker, with 391 backend and 531 frontend tests passing. Nothing is a mock-up. See the [roadmap](#roadmap) for what is next and what is deliberately left out.
+Everything listed below works end to end, in Docker, with 405 backend and 545 frontend tests passing. Nothing is a mock-up. See the [roadmap](#roadmap) for what is next and what is deliberately left out.
 
 ## Features
 
@@ -43,7 +43,7 @@ Everything listed below works end to end, in Docker, with 391 backend and 531 fr
 - **Coins**: a platform-wide currency earned by playing, beating your best, achievements, daily challenges and the daily login reward, and spent in the shop. Every change is a row in an auditable ledger; the server decides every amount. See [Economy](#economy-coins-rewards-and-the-shop).
 - **Daily login reward**: once a day (UTC), more for every day in a row, a free card pack on day 7.
 - **Daily challenges**: a new challenge per game every day, plus one for card packs ("open 3 packs"), created by a scheduled job and worth XP and coins.
-- **Shop**: extra card packs, badges and titles for coins; some unlock at higher levels.
+- **Shop**: extra card packs, badges, titles and profile frames for coins, by category; some unlock at higher levels. Every item shows whether it is locked, too dear, owned or equipped; the shop explains the day's free packs and the bought ones. Badges, titles and frames are equipped from the shop and shown on the public profile; a coin history explains every reward.
 - **Player identity**: a stable username (the account) and a display name, bio and avatar the player edits; a **public profile** for every player (`/players/{username}`) with their worn title and badge, statistics, ranks and achievements, linked from the leaderboards.
 - **Profile**: level and XP progress, coins, statistics across the platform (games, play time, cards, packs, coins earned) and per game, game history, coin history, achievements, the badge and title you wear, and an avatar.
 - **Game hub**: the home page puts your coins, level and daily reward first, then today's challenges, recently played games, featured games, card packs, the top scores of each game, your latest achievements and categories.
@@ -168,7 +168,7 @@ Vite proxies `/api` and `/actuator` to the backend, so the browser talks to one 
 
 ### Database
 
-- The schema is created and upgraded by **Flyway** when the backend starts (`backend/src/main/resources/db/migration`, `V1` to `V15`). There is no manual step.
+- The schema is created and upgraded by **Flyway** when the backend starts (`backend/src/main/resources/db/migration`, `V1` to `V16`). There is no manual step.
 - The **admin account** is created at the first start (see [Roles](#roles-players-and-admins)).
 - The game catalog comes from migrations; the card catalog comes from the card game import (see [Card games](#card-games)).
 - To start over with an empty database: `docker compose down -v`, then `docker compose up -d`.
@@ -263,7 +263,7 @@ Coins are the platform's currency. Players earn them by playing and spend them i
 - **All or nothing.** A reward is paid in the same transaction as what earned it (the score, the claim, the challenge); if anything fails, all of it is rolled back.
 - **The day is the server's, in UTC**, for the daily login reward as for challenges and the pack allowance. The client's date is never asked for.
 
-**The shop** sells extra card packs (opened once the daily allowance is gone, from any booster), badges and titles (worn on the profile, one of each). Some items need a level (the level system's unlocks). A purchase names the item and a random request id: the server checks the level, what you already own and your balance, takes the price and hands the item over in one transaction, and the same request id never buys twice. What an item does is decided by a handler for its type (`PACK`, `BADGE`, `TITLE`, `COSMETIC`), so a new kind of item is a new handler, not a change to the shop.
+**The shop** sells extra card packs (consumable: opened once the daily allowance is gone, from any booster, and bought as often as you like) and badges, titles and profile frames (owned once and equipped on the profile, one of each, visible on the public profile). Some items need a level (the level system's unlocks). A purchase names the item and a random request id: the server checks the level, what you already own and your balance, takes the price and hands the item over in one transaction, and the same request id never buys twice. What an item does is decided by a handler for its type (`PACK`, `BADGE`, `TITLE`, `COSMETIC`), so a new kind of item is a new handler, not a change to the shop.
 
 **Admins** keep their unlimited card packs and never use bought ones. They can give a player coins from the admin page: between 1 and 100,000, with a reason, recorded in the player's ledger as an `ADMIN_GRANT` with who gave them.
 
@@ -305,8 +305,8 @@ npm run build
 
 | | Tests | Line coverage | Branch coverage | Report |
 | --- | --- | --- | --- | --- |
-| Backend | 391 | 97.6 % | 87.6 % | `backend/target/site/jacoco/index.html` |
-| Frontend | 531 | 97.1 % | 90.5 % | `frontend/coverage/index.html` |
+| Backend | 405 | 97.6 % | 88.2 % | `backend/target/site/jacoco/index.html` |
+| Frontend | 545 | 97.0 % | 90.6 % | `frontend/coverage/index.html` |
 
 - **Backend** integration tests run against a real PostgreSQL in Testcontainers, never an in-memory substitute, and go through HTTP with MockMvc. They cover registration, authentication and login throttling, score submission (including simultaneous finishes), leaderboards, achievements and XP, daily challenges, the coin ledger (simultaneous spending, rewards paid once, rollbacks), the daily login reward over several days and under simultaneous claims, the shop (replayed and simultaneous purchases), admin grants, and card packs: the odds over 100,000 simulated packs, duplicates, the daily limit under concurrent requests, and a failure halfway through an opening that must leave nothing behind. The card game sources are tested on recorded answers of the real APIs (no network): mapping, retries, idempotent re-imports, alternate arts and reprints.
 - **Frontend** tests cover the game engines and AIs, the input hooks, every page through the real route table against an in-memory fake of the API, and architecture rules (engines import nothing from React or the browser, games do not reach into each other, the card game is used only through its routes).
@@ -328,7 +328,7 @@ npm run build
 │       │   ├── admin/        # admin dashboard, coin grants, AI access
 │       │   └── tcg/          # the card game module: game, set, card, pack, opening, collection, dataimport
 │       └── resources/
-│           ├── db/migration/     # Flyway migrations V1 to V15
+│           ├── db/migration/     # Flyway migrations V1 to V16
 │           └── tcg/sources/      # which sets to import, rarities and pack layouts, per card game
 ├── frontend/                 # React + Vite SPA, served by nginx in Docker
 │   ├── nginx/                # nginx configuration and security headers
@@ -357,6 +357,7 @@ npm run build
 11. ✅ **Platform economy**: coins and their ledger, rewards for playing, achievements and challenges, the daily login reward, card pack challenges, the shop with extra packs, badges and titles, statistics, the admin dashboard and coin grants
 12. ✅ **Competitive leaderboards**: daily, weekly and all-time boards per game, one entry per player, deterministic ranks, your rank everywhere, a podium, ranks on the profile
 13. ✅ **Player identity**: display names, bios, public profiles, display names on leaderboards
-14. **Next**: deployment to a host with HTTPS, login sessions that survive a restart (Spring Session), password reset, more games (Minesweeper, Memory) and multiplayer (Chess, Connect Four)
+14. ✅ **Shop and rewards**: shop categories, item states (locked, owned, equipped, affordable), profile frames, pack rules in the shop, a grouped inventory, the reward history and clearer daily rewards
+15. **Next**: deployment to a host with HTTPS, login sessions that survive a restart (Spring Session), password reset, more games (Minesweeper, Memory) and multiplayer (Chess, Connect Four)
 
 Known limits, on purpose for now: no email or password reset; scores made as a guest are not moved to an account created later; scores and the numbers games report about a run are validated for range but not replayed, so they are not cheat-proof; login throttling is kept in memory per backend instance; card images depend on the sources' image hosts being up; the admin account is fixed by configuration (there is no page to manage roles); coins can be farmed only as fast as scores can, since scores are not replayed (finishing a game pays coins for the first 40 games a day only).

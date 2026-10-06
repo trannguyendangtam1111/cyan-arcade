@@ -4,7 +4,7 @@ import { Link, useParams } from 'react-router'
 import { ApiError } from '@/api/client'
 import { usePublicProfile, type PublicProfile } from '@/api/profile'
 import { ItemIcon } from '@/components/ItemIcon'
-import { Avatar } from '@/components/ui/Avatar'
+import { FramedAvatar } from '@/components/FramedAvatar'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { buttonStyles } from '@/components/ui/buttonStyles'
@@ -73,7 +73,8 @@ function ProfileCard({ profile }: { profile: PublicProfile }) {
     >
       <span aria-hidden className="absolute inset-x-0 top-0 h-2 bg-linear-to-r from-brand-400 via-purple-400 to-amber-400" />
       <div className="relative shrink-0 motion-safe:animate-pop-in">
-        <Avatar avatar={profile.avatar} size="lg" />
+        <FramedAvatar avatar={profile.avatar} frame={profile.cosmetic} size="lg" />
+        {profile.cosmetic && <span className="sr-only">Frame: {profile.cosmetic.name}</span>}
         {profile.badge && (
           <span
             title={`Badge: ${profile.badge.name}`}

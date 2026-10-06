@@ -4,7 +4,7 @@ import { Link } from 'react-router'
 import { useLogout } from '@/api/auth'
 import { useProfile, useStats, type ProfileResponse, type StatsResponse } from '@/api/profile'
 import { ItemIcon } from '@/components/ItemIcon'
-import { Avatar } from '@/components/ui/Avatar'
+import { FramedAvatar } from '@/components/FramedAvatar'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { buttonStyles } from '@/components/ui/buttonStyles'
@@ -57,7 +57,8 @@ function ProfileHeader({ profile }: { profile: ProfileResponse }) {
   return (
     <Card padding="lg" className="flex flex-col items-center text-center">
       <div className="relative mb-4">
-        <Avatar avatar={profile.avatar} size="lg" />
+        <FramedAvatar avatar={profile.avatar} frame={profile.cosmetic} size="lg" />
+        {profile.cosmetic && <span className="sr-only">Frame: {profile.cosmetic.name}</span>}
         <button
           type="button"
           onClick={() => setChoosingAvatar(true)}

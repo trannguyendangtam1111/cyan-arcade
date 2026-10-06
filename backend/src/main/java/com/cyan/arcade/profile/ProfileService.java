@@ -102,7 +102,7 @@ public class ProfileService {
 
 		return new PublicProfileResponse(account.username(), account.displayName(), account.avatar(), account.bio(),
 				account.role(), Levels.levelFor(account.xp()), account.createdAt(), wornOf(worn, ItemType.TITLE),
-				wornOf(worn, ItemType.BADGE),
+				wornOf(worn, ItemType.BADGE), wornOf(worn, ItemType.COSMETIC),
 				new PublicProfileResponse.Stats(stats.gamesPlayed(), stats.totalScore(), stats.playTimeMs(),
 						stats.activities(), stats.games()),
 				unlocked, achievements.size(), this.leaderboards.ranksOf(account.id()),
@@ -174,7 +174,7 @@ public class ProfileService {
 				account.avatar(), account.role(), account.xp(), level.level(),
 				level.xpIntoLevel(), level.xpForNextLevel(), this.coins.balanceOf(account.id()), stats.gamesPlayed(),
 				stats.totalScore(), unlocked, achievements.size(), wornOf(worn, ItemType.TITLE),
-				wornOf(worn, ItemType.BADGE), account.createdAt());
+				wornOf(worn, ItemType.BADGE), wornOf(worn, ItemType.COSMETIC), account.createdAt());
 	}
 
 	private static Cosmetic wornOf(List<InventoryResponse.Entry> worn, ItemType type) {

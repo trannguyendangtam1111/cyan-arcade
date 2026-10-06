@@ -162,6 +162,12 @@ class DailyLoginTests {
 				SELECT inv.quantity FROM user_inventory inv JOIN shop_items i ON i.id = inv.item_id
 				WHERE inv.user_id = ? AND i.code = 'EXTRA_PACK'
 				""", Integer.class, userId)).isEqualTo(1);
+		// The coin history says what the whole day gave, the pack included.
+		assertThat(this.jdbc.queryForObject("""
+				SELECT description FROM coin_transactions
+				WHERE user_id = ? AND type = 'DAILY_LOGIN' AND reference_id = ?
+				""", String.class, userId, SOME_DAY.plusDays(6).toString()))
+			.isEqualTo("Daily login, day 7 + 1 × Extra Pack");
 
 		Claimed eighth = claimOn(userId, SOME_DAY.plusDays(7));
 		assertThat(eighth.day()).isEqualTo(1);

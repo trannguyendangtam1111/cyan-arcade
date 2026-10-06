@@ -15,7 +15,7 @@ public enum ItemType {
 	/** Shown under the player's name; one can be worn at a time. */
 	TITLE,
 
-	/** Owned, nothing more yet: the place for future cosmetics. */
+	/** A frame around the avatar on the profile; one can be worn at a time. */
 	COSMETIC
 
 }

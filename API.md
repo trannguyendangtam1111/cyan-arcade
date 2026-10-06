@@ -244,7 +244,7 @@ All of these describe **the caller**. The player is taken from the session, neve
 | `xpIntoLevel`, `xpForNextLevel` | Progress within the current level: 85 of the 200 XP that level 2 takes |
 | `coins` | The coin balance (see [Coins](#coins)) |
 | `gamesPlayed`, `totalScore` | Finished games on this account, and the sum of their scores |
-| `title`, `badge` | What the player wears, bought in the [shop](#shop); `null` when nothing |
+| `title`, `badge`, `cosmetic` | What the player wears, bought in the [shop](#shop): a title, a badge and a profile frame (`cosmetic.icon` names the frame); `null` when nothing |
 
 #### `PATCH /api/users/me`
 
@@ -287,7 +287,7 @@ A player's public profile. Public; the username is matched regardless of case. `
 }
 ```
 
-`stats` is the [statistics](#get-apiusersmestats) without coins, `ranks` the same as [`/me/ranks`](#get-apiusersmeranks), `achievements` the unlocked ones, newest first. What the player wears (`title`, `badge`) is public; nothing else they own is. It never contains an account id, coins, coin history, inventory or anything about sign-in. `you` is `true` when the caller is this player.
+`stats` is the [statistics](#get-apiusersmestats) without coins, `ranks` the same as [`/me/ranks`](#get-apiusersmeranks), `achievements` the unlocked ones, newest first. What the player wears (`title`, `badge`, `cosmetic`) is public; nothing else they own is. It never contains an account id, coins, coin history, inventory or anything about sign-in. `you` is `true` when the caller is this player.
 
 #### `GET /api/users/me/game-history`
 
@@ -757,6 +757,8 @@ The caller's ledger, newest first. Query: `page` (from 0) and `size` (1 to 50, d
 | `SHOP_PURCHASE` | Buying in the shop; negative (`PURCHASE`, its id) |
 | `ADMIN_GRANT` | Coins given by an admin (`ADMIN_GRANT`, the request id); the admin is recorded too |
 
+This is the player's reward history: every reward that pays coins is one entry, with what it was for in `description` ("Achievement: First Coin", "Bought Extra Pack"). An item won with coins is named there too: day 7 of the daily login reads "Daily login, day 7 + 1 × Extra Pack". `balanceAfter` is the balance right after the entry. Who granted coins and the account id are never in it, and there is no way to read another player's history.
+
 ### Daily login reward
 
 Once per calendar day, worth more for every day in a row: 50, 60, 70, 80, 100, 125 and 200 coins by default (`DAILY_LOGIN_REWARDS`), with a free Extra Pack on day 7; after day 7 the run starts again from day 1. Missing a day starts it again too. **The day is the server's, midnight to midnight UTC**, and no request carries a date or an amount.
@@ -800,11 +802,13 @@ Virtual items for coins; there are no real-money payments. A purchase names the 
 | `PACK` | Extra card packs, opened once the daily pack allowance is gone. `quantity` packs per purchase |
 | `BADGE` | Worn on the profile, one at a time; owned once |
 | `TITLE` | Shown under the name on the profile, one at a time; owned once |
-| `COSMETIC` | Owned; nothing more yet |
+| `COSMETIC` | A profile frame around the avatar, worn one at a time like a badge; owned once. `icon` names the frame (`frame-ocean`, `frame-gold`, ...) |
+
+Packs are **consumable**: owning some never stops a player buying more. Badges, titles and frames are **equippable** and owned once. Each item says which it is (`consumable`, `equippable`), so a new type of item needs no change to the app's logic, only a handler on the server.
 
 #### `GET /api/shop/items`
 
-Public. For a signed-in caller, also their `balance` and `level` and, per item, `owned`, `unlocked` and `soldOut`; for a guest these are `null`.
+Public. Query: `type` (optional, one of the types above) for one category only; anything else is `400`. For a signed-in caller, also their `balance` and `level` and, per item, `owned`, `unlocked` (level high enough), `soldOut` (owns as many as one may), `equipped` (wears it) and `affordable` (has the coins); for a guest these are `null`. Items taken off sale are not listed and cannot be bought.
 
 ```json
 {
@@ -822,9 +826,13 @@ Public. For a signed-in caller, also their `balance` and `level` and, per item, 
       "maxOwned": null,
       "minLevel": 1,
       "icon": "package",
+      "equippable": false,
+      "consumable": true,
       "owned": 0,
       "unlocked": true,
-      "soldOut": false
+      "soldOut": false,
+      "equipped": false,
+      "affordable": true
     }
   ]
 }
@@ -851,7 +859,7 @@ Public. For a signed-in caller, also their `balance` and `level` and, per item, 
 }
 ```
 
-(`item` is the full shop item; shortened here.) The checks, the payment and handing the item over happen in one transaction, with the player's purchases one at a time, so two purchases at the same moment cannot spend more than the balance.
+(`item` is the full shop item as the player now sees it, `equipped` included; shortened here.) The checks, the payment and handing the item over happen in one transaction (if handing it over fails, nothing is charged or recorded), with the player's purchases one at a time, so two purchases at the same moment cannot spend more than the balance.
 
 | Error | When |
 | ----- | ---- |
@@ -859,7 +867,7 @@ Public. For a signed-in caller, also their `balance` and `level` and, per item, 
 | `403 LEVEL_TOO_LOW` | The item unlocks at a higher level |
 | `404 NOT_FOUND` | No item on sale has that id |
 | `409 INSUFFICIENT_COINS` | The balance is lower than the price |
-| `409 ITEM_LIMIT_REACHED` | The player already owns as many as one may (badges and titles: one) |
+| `409 ITEM_LIMIT_REACHED` | The player already owns as many as one may (badges, titles and frames: one) |
 
 #### `GET /api/users/me/inventory`
 
@@ -876,6 +884,7 @@ Public. For a signed-in caller, also their `balance` and `level` and, per item, 
       "quantity": 1,
       "equippable": true,
       "equipped": true,
+      "consumable": false,
       "acquiredAt": "2026-09-30T15:40:00.000Z"
     }
   ],
@@ -883,11 +892,11 @@ Public. For a signed-in caller, also their `balance` and `level` and, per item, 
 }
 ```
 
-`bonusPacks` is the extra card packs the player has, from every pack item together. The first badge or title a player gets is worn straight away.
+`bonusPacks` is the extra card packs the player has, from every pack item together. The first badge, title or frame a player gets is worn straight away.
 
 #### `PUT /api/users/me/inventory/{itemId}/equipped`, `DELETE …`
 
-Wears (`PUT`) or takes off (`DELETE`) a badge or title the caller owns; wearing one takes off the other of its type. Answers with the inventory. `404 NOT_FOUND` for an item the caller does not own, `400 ITEM_NOT_EQUIPPABLE` for a pack.
+Wears (`PUT`) or takes off (`DELETE`) a badge, title or frame the caller owns; wearing one takes off the other of its type. Answers with the inventory. `404 NOT_FOUND` for an item the caller does not own, `400 ITEM_NOT_EQUIPPABLE` for a pack.
 
 ## Admin
 

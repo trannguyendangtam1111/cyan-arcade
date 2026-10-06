@@ -40,10 +40,12 @@ describe('the shop', () => {
     await userEvent.click(dialog.getByRole('button', { name: 'Buy it' }))
 
     const bought = await screen.findByRole('status')
-    expect(bought).toHaveTextContent('Extra Pack is yours!')
+    expect(bought).toHaveTextContent('Purchased! Extra Pack is yours.')
     expect(within(bought).getByRole('link', { name: 'Open packs' })).toHaveAttribute('href', '/tcg')
     expect(await within(screen.getByRole('main')).findByText('1,140 coins', { selector: 'span.sr-only' })).toBeInTheDocument()
-    expect(await (await item('Extra Pack')).findByText('1 left')).toBeInTheDocument()
+    expect(await (await item('Extra Pack')).findByText('You have 1')).toBeInTheDocument()
+    // The header's wallet follows at once.
+    expect(await screen.findByRole('link', { name: '1,140 coins' })).toHaveAttribute('href', '/shop')
 
     const [body] = purchaseBodies(fetchSpy)
     expect(Object.keys(body).sort()).toEqual(['itemId', 'requestId'])
@@ -51,7 +53,7 @@ describe('the shop', () => {
     expect(body.requestId).toMatch(/^[0-9a-f-]{36}$/)
 
     const inventory = within(screen.getByRole('region', { name: 'Your items' }))
-    expect(await inventory.findByText('1 extra pack')).toBeInTheDocument()
+    expect(await inventory.findByText('1 bought pack')).toBeInTheDocument()
   })
 
   it('uses a new request id for every purchase the player means to make', async () => {
@@ -77,7 +79,7 @@ describe('the shop', () => {
     expect(box.getByRole('button', { name: /buy pack box/i })).toBeDisabled()
 
     const title = await item('High Roller')
-    expect(title.getByText('Not enough coins yet')).toBeInTheDocument()
+    expect(title.getByText('Not enough coins: 880 more to go')).toBeInTheDocument()
     expect(title.getByRole('button', { name: /buy high roller/i })).toBeDisabled()
 
     expect((await item('Extra Pack')).getByRole('button', { name: /buy extra pack/i })).toBeEnabled()
@@ -105,19 +107,26 @@ describe('the shop', () => {
     expect(screen.queryByText(/is yours/)).not.toBeInTheDocument()
   })
 
-  it('puts on a bought badge and takes it off again', async () => {
+  it('wears a bought badge straight away, and takes it off and puts it on again', async () => {
     mockApi({ user: pixel, coins: 2000 })
     renderRoute('/shop')
 
     await userEvent.click((await item('Gold Coin')).getByRole('button', { name: /buy gold coin/i }))
     await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Buy it' }))
-    expect(await (await item('Gold Coin')).findByText('Owned')).toBeInTheDocument()
-    expect((await item('Gold Coin')).getByText('You own this')).toBeInTheDocument()
+    expect(await screen.findByRole('status')).toHaveTextContent('Purchased! Gold Coin is yours and already on your profile.')
+    const card = await item('Gold Coin')
+    expect(await card.findByText('Equipped')).toBeInTheDocument()
+    expect(card.getByText('In your collection')).toBeInTheDocument()
+    expect(card.queryByRole('button', { name: /buy gold coin/i })).not.toBeInTheDocument()
 
     const inventory = within(screen.getByRole('region', { name: 'Your items' }))
-    await userEvent.click(await inventory.findByRole('button', { name: 'Wear Gold Coin' }))
-    expect(await inventory.findByRole('button', { name: 'Take off Gold Coin' })).toHaveTextContent('Wearing')
-    await userEvent.click(inventory.getByRole('button', { name: 'Take off Gold Coin' }))
-    expect(await inventory.findByRole('button', { name: 'Wear Gold Coin' })).toBeInTheDocument()
+    await userEvent.click(await inventory.findByRole('button', { name: 'Unequip Gold Coin' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('Unequipped Gold Coin.')
+    expect(await inventory.findByRole('button', { name: 'Equip Gold Coin' })).toHaveTextContent('Equip')
+    expect(await (await item('Gold Coin')).findByText('Owned')).toBeInTheDocument()
+
+    await userEvent.click(inventory.getByRole('button', { name: 'Equip Gold Coin' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('Equipped! Gold Coin is on your profile.')
+    expect(await inventory.findByRole('button', { name: 'Unequip Gold Coin' })).toBeInTheDocument()
   })
 })

@@ -1,3 +1,4 @@
+import { CalendarCheck, Gamepad2, Gift, ShoppingBag, Target, Trophy, Zap, type LucideIcon } from 'lucide-react'
 import { useState } from 'react'
 import { useTransactions, type CoinTransactionType } from '@/api/economy'
 import { Card } from '@/components/ui/Card'
@@ -6,19 +7,23 @@ import { ErrorState } from '@/components/ui/ErrorState'
 import { LoadingState } from '@/components/ui/LoadingState'
 import { Pager } from '@/components/ui/Pager'
 import { cn } from '@/lib/cn'
-import { formatDate } from '@/lib/format'
+import { formatDate, formatScore } from '@/lib/format'
 
-const typeLabels: Record<CoinTransactionType, string> = {
-  GAME_COMPLETION: 'Game',
-  HIGH_SCORE: 'New best',
-  ACHIEVEMENT: 'Achievement',
-  DAILY_CHALLENGE: 'Challenge',
-  DAILY_LOGIN: 'Daily reward',
-  SHOP_PURCHASE: 'Shop',
-  ADMIN_GRANT: 'Gift',
+/** Where coins came from (or went), as a player would say it. */
+const sources: Record<CoinTransactionType, { label: string; icon: LucideIcon; tone: string }> = {
+  GAME_COMPLETION: { label: 'Game played', icon: Gamepad2, tone: 'bg-brand-100 text-brand-800' },
+  HIGH_SCORE: { label: 'New personal best', icon: Zap, tone: 'bg-orange-100 text-orange-800' },
+  ACHIEVEMENT: { label: 'Achievement', icon: Trophy, tone: 'bg-amber-100 text-amber-800' },
+  DAILY_CHALLENGE: { label: 'Daily challenge', icon: Target, tone: 'bg-rose-100 text-rose-800' },
+  DAILY_LOGIN: { label: 'Daily reward', icon: CalendarCheck, tone: 'bg-emerald-100 text-emerald-800' },
+  SHOP_PURCHASE: { label: 'Shop', icon: ShoppingBag, tone: 'bg-purple-100 text-purple-800' },
+  ADMIN_GRANT: { label: 'Gift', icon: Gift, tone: 'bg-sky-100 text-sky-800' },
 }
 
-/** Every coin the player earned or spent, newest first: the ledger, as the player sees it. */
+/**
+ * Every coin the player earned or spent, newest first, and why: the ledger, as the player sees it.
+ * Only the player's own; it never shows on the public profile.
+ */
 export function CoinHistory() {
   const [page, setPage] = useState(0)
   const { data, isPending, isError, isPlaceholderData, refetch } = useTransactions(page, true)
@@ -36,20 +41,32 @@ export function CoinHistory() {
       {data && data.totalEntries > 0 && (
         <Card padding="none" className="overflow-hidden">
           <ul className={cn('divide-y divide-line transition-opacity', isPlaceholderData && 'opacity-50')}>
-            {data.entries.map((entry) => (
-              <li key={entry.id} className="flex items-center gap-3 px-5 py-3">
-                <span className="w-24 shrink-0 text-xs font-bold tracking-wide text-ink-soft uppercase">
-                  {typeLabels[entry.type] ?? entry.type}
-                </span>
-                <span className="min-w-0 flex-1 truncate">{entry.description}</span>
-                <span className="hidden text-sm text-ink-soft sm:inline">{formatDate(entry.createdAt)}</span>
-                <CoinAmount
-                  amount={entry.amount}
-                  signed
-                  className={cn('w-20 justify-end', entry.amount < 0 ? 'text-rose-700' : 'text-emerald-700')}
-                />
-              </li>
-            ))}
+            {data.entries.map((entry) => {
+              const source = sources[entry.type] ?? { label: entry.type, icon: Gift, tone: 'bg-surface-muted text-ink-soft' }
+              return (
+                <li key={entry.id} className="flex items-center gap-3 px-4 py-3 sm:px-5">
+                  <span className={cn('grid size-9 shrink-0 place-items-center rounded-xl', source.tone)}>
+                    <source.icon aria-hidden className="size-4.5" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-display font-semibold">{entry.description}</span>
+                    <span className="block text-xs font-bold tracking-wide text-ink-soft uppercase">
+                      {source.label} · {formatDate(entry.createdAt)}
+                    </span>
+                  </span>
+                  <span className="flex shrink-0 flex-col items-end">
+                    <CoinAmount
+                      amount={entry.amount}
+                      signed
+                      className={entry.amount < 0 ? 'text-rose-700' : 'text-emerald-700'}
+                    />
+                    <span className="hidden text-xs text-ink-soft tabular-nums sm:block">
+                      Balance {formatScore(entry.balanceAfter)}
+                    </span>
+                  </span>
+                </li>
+              )
+            })}
           </ul>
           <Pager
             label="Coin history pages"

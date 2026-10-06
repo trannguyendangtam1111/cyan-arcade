@@ -1,5 +1,4 @@
 import { Gamepad2, SearchX } from 'lucide-react'
-import type { ReactNode } from 'react'
 import { useSearchParams } from 'react-router'
 import type { GameCategory } from '@/api/games'
 import { categoryIcons } from '@/components/categoryIcons'
@@ -7,13 +6,13 @@ import { GameGrid } from '@/components/GameGrid'
 import { JumpBackIn } from '@/components/JumpBackIn'
 import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { FilterChip } from '@/components/ui/FilterChip'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { categoryLabels } from '@/games/registry'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useGameCatalog } from '@/hooks/useGameCatalog'
 import { useRecentGames } from '@/hooks/useRecentGames'
 import { TcgHubBanner } from '@/tcg/components/TcgHubBanner'
-import { cn } from '@/lib/cn'
 
 const ALL_CATEGORIES = Object.keys(categoryLabels) as GameCategory[]
 
@@ -113,40 +112,5 @@ export function GamesPage() {
         <TcgHubBanner />
       </section>
     </>
-  )
-}
-
-interface FilterChipProps {
-  label: string
-  count: number
-  pressed: boolean
-  onClick: () => void
-  icon?: ReactNode
-}
-
-function FilterChip({ label, count, pressed, onClick, icon }: FilterChipProps) {
-  return (
-    <button
-      type="button"
-      aria-pressed={pressed}
-      onClick={onClick}
-      className={cn(
-        'inline-flex items-center gap-1.5 rounded-full px-4 py-2 font-display font-medium ring-2 transition-all active:scale-95',
-        pressed
-          ? 'bg-brand-500 text-brand-950 ring-brand-500'
-          : 'bg-surface text-ink-soft ring-line hover:text-ink hover:ring-brand-300',
-      )}
-    >
-      {icon}
-      {label}
-      <span
-        className={cn(
-          'rounded-full px-1.5 text-xs font-bold tabular-nums',
-          pressed ? 'bg-white/45' : 'bg-surface-muted text-ink-soft',
-        )}
-      >
-        {count}
-      </span>
-    </button>
   )
 }

@@ -68,16 +68,17 @@ class ShopStore {
 
 	/** A player's inventory, in the shop's display order. Items they used up are left out. */
 	List<Owned> inventoryOf(Long userId) {
+		// The item has a quantity too (units per purchase): the one owned needs a name of its own.
 		return this.jdbc.sql("SELECT " + ITEM_COLUMNS + """
-				, inv.quantity, inv.equipped, inv.acquired_at
+				, inv.quantity AS owned_quantity, inv.equipped, inv.acquired_at
 				FROM user_inventory inv
 				JOIN shop_items i ON i.id = inv.item_id
 				WHERE inv.user_id = :userId AND inv.quantity > 0
 				ORDER BY i.sort_order, i.id
 				""")
 			.param("userId", userId)
-			.query((row, index) -> new Owned(toItem(row, index), row.getInt("quantity"), row.getBoolean("equipped"),
-					row.getObject("acquired_at", OffsetDateTime.class).toInstant()))
+			.query((row, index) -> new Owned(toItem(row, index), row.getInt("owned_quantity"),
+					row.getBoolean("equipped"), row.getObject("acquired_at", OffsetDateTime.class).toInstant()))
 			.list();
 	}
 

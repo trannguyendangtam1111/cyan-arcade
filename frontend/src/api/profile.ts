@@ -30,6 +30,8 @@ export interface ProfileResponse {
   title: Cosmetic | null
   /** The badge the player wears; `null` when none. */
   badge: Cosmetic | null
+  /** The frame the player wears around their avatar; `null` when none. */
+  cosmetic: Cosmetic | null
   memberSince: string
 }
 
@@ -195,6 +197,7 @@ export interface PublicProfile {
   memberSince: string
   title: Cosmetic | null
   badge: Cosmetic | null
+  cosmetic: Cosmetic | null
   stats: {
     gamesPlayed: number
     totalScore: number
