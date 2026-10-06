@@ -80,10 +80,10 @@ describe('leaderboard page', () => {
       user: pixel,
       scores: {
         snake: [
-          { score: 50, player: { username: longName, avatar: 'GHOST' } },
-          { score: 45, player: { username: 'zelda_fan', avatar: 'ROBOT' } },
+          { score: 50, player: { username: longName, displayName: longName, avatar: 'GHOST' } },
+          { score: 45, player: { username: 'zelda_fan', displayName: 'zelda_fan', avatar: 'ROBOT' } },
           { score: 42 },
-          { score: 40, player: { username: 'pixel', avatar: 'CAT' }, you: true },
+          { score: 40, player: { username: 'pixel', displayName: 'pixel', avatar: 'CAT' }, you: true },
           { score: 20 },
         ],
       },
@@ -94,7 +94,7 @@ describe('leaderboard page', () => {
     expect(podium()[0]).toHaveTextContent(longName)
     const name = within(podium()[0]).getByText(longName)
     expect(name).toHaveClass('truncate')
-    expect(name).toHaveAttribute('title', longName)
+    expect(name).toHaveAttribute('title', `${longName} (@${longName})`)
     expect(podium()[2]).toHaveTextContent('Guest')
     expect(cells(rows()[0]).slice(0, 3)).toEqual(['4', 'pixelYou', '40'])
     expect(cells(rows()[1]).slice(0, 3)).toEqual(['5', 'Guest', '20'])
@@ -104,7 +104,7 @@ describe('leaderboard page', () => {
     const fetchSpy = mockApi({
       scores: {
         snake: [{ score: 90 }, { score: 80 }],
-        'snake:WEEKLY': [{ score: 60, player: { username: 'weekly_star', avatar: 'CAT' } }],
+        'snake:WEEKLY': [{ score: 60, player: { username: 'weekly_star', displayName: 'weekly_star', avatar: 'CAT' } }],
         'snake:DAILY': [],
       },
       standings: { 'snake:WEEKLY': { rank: 1, score: 60 } },

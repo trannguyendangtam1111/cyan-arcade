@@ -99,10 +99,30 @@ public class UserService {
 		return this.users.findByUsernameLike(pattern, Limit.of(limit)).stream().map(UserAccount::from).toList();
 	}
 
+	/** An account by its username, matched regardless of case. */
+	public Optional<UserAccount> findByUsername(String username) {
+		return this.users.findByUsernameIgnoreCase(username).map(UserAccount::from);
+	}
+
+	/**
+	 * Changes what a player shows of themselves. Only these three can be changed: the username,
+	 * role, XP and everything earned stay as they are. Values must already be validated.
+	 * @param displayName the new display name, or {@code null} to keep it
+	 * @param bio the new bio ({@code ""} to remove it), or {@code null} to keep it
+	 * @param avatar the new avatar, or {@code null} to keep it
+	 */
 	@Transactional
-	public UserAccount changeAvatar(Long id, Avatar avatar) {
+	public UserAccount changeProfile(Long id, String displayName, String bio, Avatar avatar) {
 		User user = this.users.findById(id).orElseThrow(() -> new NotFoundException("User", id));
-		user.setAvatar(avatar);
+		if (displayName != null) {
+			user.setDisplayName(displayName);
+		}
+		if (bio != null) {
+			user.setBio(bio.isEmpty() ? null : bio);
+		}
+		if (avatar != null) {
+			user.setAvatar(avatar);
+		}
 		return UserAccount.from(user);
 	}
 

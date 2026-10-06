@@ -71,8 +71,9 @@ class SecurityConfig {
 				// Public, read-only platform endpoints.
 				// Today's daily challenges are public; "/api/daily-challenges/me" is not listed and needs a session.
 				// So is what the shop sells; buying, coins, inventories and the daily login reward are not.
+				// Players' public profiles too; everything under /api/users/me is not.
 				.requestMatchers(HttpMethod.GET, "/api/games", "/api/games/**", "/api/leaderboards/**",
-						"/api/daily-challenges", "/api/shop/items", "/api/auth/session")
+						"/api/daily-challenges", "/api/shop/items", "/api/users/*/profile", "/api/auth/session")
 				.permitAll()
 				// The card catalog can be browsed by anyone. Opening packs, collections and opening
 				// histories are not listed and need a session.

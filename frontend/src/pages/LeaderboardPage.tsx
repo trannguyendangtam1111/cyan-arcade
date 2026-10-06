@@ -313,12 +313,19 @@ function PlayerName({ entry, size = 'sm', className }: PlayerNameProps) {
   return (
     <span className={cn('flex min-w-0 items-center gap-2', className)}>
       {entry.player ? (
-        <>
+        // The display name is shown; the username, which never changes, is what the link uses.
+        <Link
+          to={`/players/${encodeURIComponent(entry.player.username)}`}
+          className={cn('flex min-w-0 items-center gap-2 rounded hover:text-brand-700', className)}
+        >
           <Avatar avatar={entry.player.avatar} size={size === 'lg' ? 'md' : 'sm'} />
-          <span className={cn('min-w-0 max-w-full truncate font-bold', size === 'lg' && 'text-lg')} title={entry.player.username}>
-            {entry.player.username}
+          <span
+            className={cn('min-w-0 max-w-full truncate font-bold', size === 'lg' && 'text-lg')}
+            title={`${entry.player.displayName} (@${entry.player.username})`}
+          >
+            {entry.player.displayName}
           </span>
-        </>
+        </Link>
       ) : (
         <span className="text-ink-soft">Guest</span>
       )}

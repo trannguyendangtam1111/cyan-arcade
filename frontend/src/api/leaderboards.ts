@@ -26,8 +26,8 @@ export function leaderboardUrl(gameSlug: string, period: LeaderboardPeriod = 'AL
 export interface LeaderboardEntry {
   /** 1 for the best. No two entries share one: equal scores are ranked by who set theirs first. */
   rank: number
-  /** Who set the score, or `null` for a guest. */
-  player: { username: string; avatar: AvatarKey } | null
+  /** Who set the score (`username` for links, `displayName` to show), or `null` for a guest. */
+  player: { username: string; displayName: string; avatar: AvatarKey } | null
   /** The player's best score in the period. */
   score: number
   durationMs: number

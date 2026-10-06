@@ -1,13 +1,19 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { authKeys, userKeys, type AvatarKey, type SessionResponse } from './auth'
+import { authKeys, userKeys, type AvatarKey, type Role, type SessionResponse } from './auth'
 import { apiFetch } from './client'
 import { leaderboardKeys, type PlayerRanks } from './leaderboards'
 
 /** The signed-in player's profile, as returned by `GET /api/users/me`. */
 export interface ProfileResponse {
   id: number
+  /** The account's identity: used to sign in and in profile links, never changed. */
   username: string
+  /** What other players see; the player may change it. */
+  displayName: string
+  /** A few words by the player, or `null`. */
+  bio: string | null
   avatar: AvatarKey
+  role: Role
   xp: number
   level: number
   /** XP earned since reaching the current level. */
@@ -144,18 +150,75 @@ export function useGameHistory(page: number, enabled: boolean) {
   })
 }
 
-export function useUpdateAvatar() {
+/**
+ * What a player may change about themselves; every field is optional and what is left out stays.
+ * The server checks and tidies each value, and ignores anything else.
+ */
+export interface ProfileChange {
+  displayName?: string
+  /** An empty bio removes it. */
+  bio?: string
+  avatar?: AvatarKey
+}
+
+/** The limits the server applies, repeated here only to help before sending. */
+export const DISPLAY_NAME_LENGTH = { min: 2, max: 24 }
+export const BIO_MAX_LENGTH = 160
+
+export function useUpdateProfile() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (avatar: AvatarKey) =>
-      apiFetch<ProfileResponse>('/api/users/me', { method: 'PATCH', body: { avatar } }),
+    mutationFn: (change: ProfileChange) =>
+      apiFetch<ProfileResponse>('/api/users/me', { method: 'PATCH', body: { ...change } }),
     onSuccess: (profile) => {
       queryClient.setQueryData(profileKeys.profile, profile)
-      // The avatar is also shown in the header and next to the player's leaderboard entries.
+      // The name and avatar are also shown in the header, on leaderboards and on the public profile.
       queryClient.setQueryData<SessionResponse>(authKeys.session, (session) =>
-        session?.user ? { ...session, user: { ...session.user, avatar: profile.avatar } } : session,
+        session?.user
+          ? { ...session, user: { ...session.user, avatar: profile.avatar, displayName: profile.displayName } }
+          : session,
       )
       void queryClient.invalidateQueries({ queryKey: leaderboardKeys.all })
+      void queryClient.invalidateQueries({ queryKey: publicProfileKeys.all })
     },
+  })
+}
+
+/** A player's public profile, as anyone sees it (`GET /api/users/{username}/profile`). */
+export interface PublicProfile {
+  username: string
+  displayName: string
+  avatar: AvatarKey
+  bio: string | null
+  role: Role
+  level: number
+  memberSince: string
+  title: Cosmetic | null
+  badge: Cosmetic | null
+  stats: {
+    gamesPlayed: number
+    totalScore: number
+    playTimeMs: number
+    activities: StatsResponse['activities']
+    games: GameStats[]
+  }
+  /** The achievements the player has unlocked, newest first. */
+  achievements: { code: string; name: string; description: string; unlockedAt: string | null }[]
+  achievementsTotal: number
+  ranks: PlayerRanks
+  /** Whether the caller is this player. */
+  you: boolean
+}
+
+export const publicProfileKeys = {
+  all: ['public-profiles'] as const,
+  player: (username: string) => [...publicProfileKeys.all, username.toLowerCase()] as const,
+}
+
+export function usePublicProfile(username: string) {
+  return useQuery({
+    queryKey: publicProfileKeys.player(username),
+    queryFn: ({ signal }) =>
+      apiFetch<PublicProfile>(`/api/users/${encodeURIComponent(username)}/profile`, { signal }),
   })
 }

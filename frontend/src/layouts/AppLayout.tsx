@@ -57,12 +57,12 @@ function AccountLink() {
       )}
       <Link
         to="/profile"
-        aria-label={`Your profile, ${user.username}`}
+        aria-label={`Your profile, ${user.displayName}`}
         className="flex max-w-[9rem] shrink-0 items-center gap-2 rounded-full xl:max-w-[11rem] bg-surface py-1 pl-1 max-sm:pr-1 sm:pr-3 font-display font-medium shadow-soft ring-1 ring-line transition-all hover:bg-brand-50 hover:ring-brand-300 active:scale-95"
       >
         <Avatar avatar={user.avatar} size="sm" />
         {/* On a phone the avatar alone stands for the player, leaving room for the coins. */}
-        <span className="truncate max-sm:hidden">{user.username}</span>
+        <span className="truncate max-sm:hidden">{user.displayName}</span>
       </Link>
     </span>
   )

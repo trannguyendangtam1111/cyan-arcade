@@ -15,11 +15,14 @@ public record SessionResponse(boolean authenticated, SessionUser user) {
 
 	static SessionResponse of(UserAccount account) {
 		return new SessionResponse(true,
-				new SessionUser(account.id(), account.username(), account.avatar(), account.role()));
+				new SessionUser(account.id(), account.username(), account.displayName(), account.avatar(), account.role()));
 	}
 
-	/** @param role what the player may do; the app shows AI mode and admin pages for {@code ADMIN} */
-	public record SessionUser(Long id, String username, Avatar avatar, Role role) {
+	/**
+	 * @param displayName what the player is called on screen; {@code username} is who they are
+	 * @param role what the player may do; the app shows AI mode and admin pages for {@code ADMIN}
+	 */
+	public record SessionUser(Long id, String username, String displayName, Avatar avatar, Role role) {
 	}
 
 }

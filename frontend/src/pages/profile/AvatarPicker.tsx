@@ -1,5 +1,5 @@
 import type { AvatarKey } from '@/api/auth'
-import { useUpdateAvatar } from '@/api/profile'
+import { useUpdateProfile } from '@/api/profile'
 import { Avatar } from '@/components/ui/Avatar'
 import { AVATAR_KEYS, AVATARS } from '@/components/ui/avatars'
 import { Modal } from '@/components/ui/Modal'
@@ -13,14 +13,14 @@ interface AvatarPickerProps {
 
 /** A dialog for choosing one of the available avatars. Choosing saves straight away. */
 export function AvatarPicker({ current, open, onClose }: AvatarPickerProps) {
-  const update = useUpdateAvatar()
+  const update = useUpdateProfile()
 
   const choose = (avatar: AvatarKey) => {
     if (avatar === current) {
       onClose()
       return
     }
-    update.mutate(avatar, { onSuccess: onClose })
+    update.mutate({ avatar }, { onSuccess: onClose })
   }
 
   return (

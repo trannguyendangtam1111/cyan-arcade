@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import com.cyan.arcade.common.error.NotFoundException;
 import com.cyan.arcade.common.platform.ActivityStatistics;
 import com.cyan.arcade.economy.CoinService;
 import com.cyan.arcade.game.GameInfo;
@@ -24,7 +25,6 @@ import com.cyan.arcade.score.ScoreQueries;
 import com.cyan.arcade.shop.InventoryResponse;
 import com.cyan.arcade.shop.ItemType;
 import com.cyan.arcade.shop.ShopService;
-import com.cyan.arcade.user.Avatar;
 import com.cyan.arcade.user.UserAccount;
 import com.cyan.arcade.user.UserService;
 
@@ -75,9 +75,38 @@ public class ProfileService {
 		return toProfile(this.users.get(userId));
 	}
 
+	/** Changes what the player shows of themselves: display name, bio, avatar. Nothing else. */
 	@Transactional
-	public ProfileResponse changeAvatar(Long userId, Avatar avatar) {
-		return toProfile(this.users.changeAvatar(userId, avatar));
+	public ProfileResponse changeProfile(Long userId, UpdateProfileRequest change) {
+		return toProfile(this.users.changeProfile(userId, change.displayName(), change.bio(), change.avatar()));
+	}
+
+	/**
+	 * What anyone may see of a player, found by username. Built from the same sources as the
+	 * player's own profile, minus what is private: coins, coin history, inventory, ids.
+	 * @param callerId the signed-in caller, or {@code null}, only to say whether it is them
+	 * @throws NotFoundException when there is no such player
+	 */
+	public PublicProfileResponse publicProfileOf(String username, Long callerId) {
+		UserAccount account = this.users.findByUsername(username)
+			.orElseThrow(() -> new NotFoundException("Player", username));
+		StatsResponse stats = statsOf(account.id());
+		List<AchievementStatus> achievements = this.progression.achievementsOf(account.id());
+		List<PublicProfileResponse.Achievement> unlocked = achievements.stream()
+			.filter(AchievementStatus::unlocked)
+			.sorted(Comparator.comparing(AchievementStatus::unlockedAt, Comparator.nullsLast(Comparator.reverseOrder())))
+			.map((achievement) -> new PublicProfileResponse.Achievement(achievement.code(), achievement.name(),
+					achievement.description(), achievement.unlockedAt()))
+			.toList();
+		List<InventoryResponse.Entry> worn = this.shop.equippedOf(account.id());
+
+		return new PublicProfileResponse(account.username(), account.displayName(), account.avatar(), account.bio(),
+				account.role(), Levels.levelFor(account.xp()), account.createdAt(), wornOf(worn, ItemType.TITLE),
+				wornOf(worn, ItemType.BADGE),
+				new PublicProfileResponse.Stats(stats.gamesPlayed(), stats.totalScore(), stats.playTimeMs(),
+						stats.activities(), stats.games()),
+				unlocked, achievements.size(), this.leaderboards.ranksOf(account.id()),
+				account.id().equals(callerId));
 	}
 
 	public List<AchievementStatus> achievementsOf(Long userId) {
@@ -141,7 +170,8 @@ public class ProfileService {
 		int unlocked = (int) achievements.stream().filter(AchievementStatus::unlocked).count();
 		List<InventoryResponse.Entry> worn = this.shop.equippedOf(account.id());
 
-		return new ProfileResponse(account.id(), account.username(), account.avatar(), account.xp(), level.level(),
+		return new ProfileResponse(account.id(), account.username(), account.displayName(), account.bio(),
+				account.avatar(), account.role(), account.xp(), level.level(),
 				level.xpIntoLevel(), level.xpForNextLevel(), this.coins.balanceOf(account.id()), stats.gamesPlayed(),
 				stats.totalScore(), unlocked, achievements.size(), wornOf(worn, ItemType.TITLE),
 				wornOf(worn, ItemType.BADGE), account.createdAt());

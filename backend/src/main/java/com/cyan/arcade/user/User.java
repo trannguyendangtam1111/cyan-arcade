@@ -28,6 +28,13 @@ class User {
 	@Column(name = "password_hash", nullable = false)
 	private String passwordHash;
 
+	// What other players see. Changeable; the username is the identity and is not.
+	@Column(name = "display_name", nullable = false)
+	private String displayName;
+
+	@Column(name = "bio")
+	private String bio;
+
 	@Enumerated(EnumType.STRING)
 	@Column(nullable = false)
 	private Avatar avatar;
@@ -50,6 +57,7 @@ class User {
 	User(String username, String passwordHash, Role role, Instant createdAt) {
 		this.username = username;
 		this.passwordHash = passwordHash;
+		this.displayName = username;
 		this.avatar = Avatar.ROBOT;
 		this.role = role;
 		this.createdAt = createdAt;
@@ -77,6 +85,22 @@ class User {
 
 	void setAvatar(Avatar avatar) {
 		this.avatar = avatar;
+	}
+
+	String getDisplayName() {
+		return this.displayName;
+	}
+
+	void setDisplayName(String displayName) {
+		this.displayName = displayName;
+	}
+
+	String getBio() {
+		return this.bio;
+	}
+
+	void setBio(String bio) {
+		this.bio = bio;
 	}
 
 	int getXp() {

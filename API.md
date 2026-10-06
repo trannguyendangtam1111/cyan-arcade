@@ -97,6 +97,7 @@ Platform codes: `VALIDATION_FAILED`, `BAD_REQUEST`, `UNAUTHORIZED`, `FORBIDDEN`,
 | `GET` | `/api/auth/session` | public |
 | `GET` | `/api/users/me` | signed in |
 | `PATCH` | `/api/users/me` | signed in |
+| `GET` | `/api/users/{username}/profile` | public |
 | `GET` | `/api/users/me/game-history` | signed in |
 | `GET` | `/api/users/me/achievements` | signed in |
 | `GET` | `/api/users/me/stats` | signed in |
@@ -150,7 +151,7 @@ Responds `201 Created`, sets `CYAN_SESSION`, and returns the session:
 ```json
 {
   "authenticated": true,
-  "user": { "id": 7, "username": "pixel", "avatar": "ROBOT", "role": "USER" }
+  "user": { "id": 7, "username": "pixel", "displayName": "pixel", "avatar": "ROBOT", "role": "USER" }
 }
 ```
 
@@ -214,7 +215,10 @@ All of these describe **the caller**. The player is taken from the session, neve
 {
   "id": 7,
   "username": "pixel",
+  "displayName": "Pixel Pal",
+  "bio": "Tetris every day.",
   "avatar": "GHOST",
+  "role": "USER",
   "xp": 185,
   "level": 2,
   "xpIntoLevel": 85,
@@ -232,6 +236,9 @@ All of these describe **the caller**. The player is taken from the session, neve
 
 | Field | Notes |
 | ----- | ----- |
+| `username` | The account's identity: unique (whatever the case), used to sign in and in profile links. It never changes |
+| `displayName` | What other players see (profile, leaderboards, header). The player may change it; it starts as the username and need not be unique |
+| `bio` | A few words by the player, or `null` |
 | `xp` | Total experience points |
 | `level` | Derived from `xp` (see [Experience and levels](#experience-and-levels)) |
 | `xpIntoLevel`, `xpForNextLevel` | Progress within the current level: 85 of the 200 XP that level 2 takes |
@@ -241,13 +248,46 @@ All of these describe **the caller**. The player is taken from the session, neve
 
 #### `PATCH /api/users/me`
 
-Changes the avatar, the one thing a player can edit.
+Changes what the player shows of themselves. Every field is optional; what is left out stays as it is.
 
 ```json
-{ "avatar": "GHOST" }
+{ "displayName": "Pixel Pal", "bio": "Java backend developer building things.", "avatar": "GHOST" }
 ```
 
-`avatar` is one of `ROBOT`, `CAT`, `DOG`, `GHOST`, `ROCKET`, `CROWN`, `BIRD`, `FISH`. Responds `200 OK` with the updated profile. Any other field in the body is ignored; `400 VALIDATION_FAILED` when `avatar` is missing, `400 BAD_REQUEST` when it is not one of the values.
+| Field | Rules (checked on the server) |
+| ----- | ----------------------------- |
+| `displayName` | Trimmed, and runs of spaces become one. Then 2 to 24 characters: letters (any alphabet), digits, spaces and `. _ ' ! -` |
+| `bio` | Trimmed; up to 160 characters, line breaks allowed, no control characters. `""` removes the bio |
+| `avatar` | One of `ROBOT`, `CAT`, `DOG`, `GHOST`, `ROCKET`, `CROWN`, `BIRD`, `FISH`: the arcade draws them, there are no uploads |
+
+Responds `200 OK` with the updated profile. **Nothing else can be changed here**: any other field (`username`, `role`, `coins`, `xp`, statistics, achievements, items, `id`) is ignored. The player is always the one in the session; there is no way to change another player's profile, and admins cannot either. `400 VALIDATION_FAILED` (with `errors[].field`) for a value outside the rules, `400 BAD_REQUEST` for an unknown avatar, `401` without a session.
+
+#### `GET /api/users/{username}/profile`
+
+A player's public profile. Public; the username is matched regardless of case. `404 NOT_FOUND` when there is no such player.
+
+```json
+{
+  "username": "pixel",
+  "displayName": "Pixel Pal",
+  "avatar": "GHOST",
+  "bio": "Tetris every day.",
+  "role": "USER",
+  "level": 2,
+  "memberSince": "2026-09-30T14:02:11.480Z",
+  "title": { "code": "TITLE_HIGH_ROLLER", "name": "High Roller", "icon": "dice" },
+  "badge": null,
+  "stats": { "gamesPlayed": 12, "totalScore": 4321, "playTimeMs": 3725000, "activities": [], "games": [] },
+  "achievements": [
+    { "code": "FIRST_GAME", "name": "First Coin", "description": "Finish your first game.", "unlockedAt": "2026-09-30T14:05:40.102Z" }
+  ],
+  "achievementsTotal": 9,
+  "ranks": { "bestRank": 3, "bestRankGame": { "slug": "tetris", "name": "Tetris" }, "games": [] },
+  "you": false
+}
+```
+
+`stats` is the [statistics](#get-apiusersmestats) without coins, `ranks` the same as [`/me/ranks`](#get-apiusersmeranks), `achievements` the unlocked ones, newest first. What the player wears (`title`, `badge`) is public; nothing else they own is. It never contains an account id, coins, coin history, inventory or anything about sign-in. `you` is `true` when the caller is this player.
 
 #### `GET /api/users/me/game-history`
 
@@ -611,7 +651,7 @@ One page of a game's leaderboard for a period. Public and read-only: there is no
   "entries": [
     {
       "rank": 1,
-      "player": { "username": "pixel", "avatar": "GHOST" },
+      "player": { "username": "pixel", "displayName": "Pixel Pal", "avatar": "GHOST" },
       "score": 15200,
       "durationMs": 412000,
       "achievedAt": "2026-10-06T13:28:40.975Z",
@@ -631,7 +671,7 @@ One page of a game's leaderboard for a period. Public and read-only: there is no
 - **Periods are the server's, in UTC.** `DAILY` counts scores set from 00:00 UTC today, `WEEKLY` from Monday 00:00 UTC this week (ISO weeks), `ALL_TIME` every score. `periodStart` is the first moment counted and `periodEnd` the moment the next board starts (both `null` for all time). No request carries a date. In Vietnam (UTC+7) a new day's board starts at 07:00 local time, and a new week's on Monday at 07:00.
 - **Each player once.** An entry is a player's best score in the period: the account for a signed-in player, the browser's `X-Player-Id` for a guest (a guest run without one is an entry of its own). `totalEntries` is how many players are on the board.
 - **Ranks are deterministic and never shared.** Entries are ordered by score (highest first), then by when it was set (earlier first), then by the score's id, and numbered 1, 2, 3, ... over the whole board, not just the page. The order is total, so a rank never changes between requests unless a new score arrives, and pages never overlap or skip anyone.
-- An entry's `player` is the username and avatar of the account, or `null` for a guest. Nothing else about an account is public.
+- An entry's `player` is the account's username (its identity, for a link to the public profile), display name and avatar, or `null` for a guest. Nothing else about an account is public. Entries are grouped by account, so changing a display name changes nothing about whose scores they are.
 - `you` marks the caller's entry. `myRank` and `myScore` are the caller's place and best score on this board, even when the entry is on another page, and `null` when the caller is unknown or has no score in the period; a rank is never made up. The caller is the signed-in player; for a guest it is the `X-Player-Id` header, matched only against scores made as a guest.
 - A page past the end returns an empty `entries` list, not an error.
 - Scores come only from `POST /api/game-sessions/{id}/finish`, with its checks. A leaderboard cannot be written to, by players or admins; `POST`, `PUT` and `DELETE` answer `405`.

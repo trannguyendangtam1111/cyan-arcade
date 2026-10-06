@@ -94,7 +94,9 @@ function TopScores({ game }: { game: GameDefinition }) {
                 {entry.player ? (
                   <>
                     <Avatar avatar={entry.player.avatar} size="sm" />
-                    <span className="truncate font-bold">{entry.player.username}</span>
+                    <span className="truncate font-bold" title={`@${entry.player.username}`}>
+                      {entry.player.displayName}
+                    </span>
                   </>
                 ) : (
                   <span className="text-ink-soft">Guest</span>

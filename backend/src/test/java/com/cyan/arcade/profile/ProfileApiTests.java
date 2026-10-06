@@ -74,7 +74,8 @@ class ProfileApiTests {
 		MockHttpSession session = Players.register(this.mockMvc);
 
 		update(session, "{\"avatar\":\"DRAGON\"}").andExpect(status().isBadRequest());
-		update(session, "{}").andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+		// Every field is optional: an empty update changes nothing.
+		update(session, "{}").andExpect(status().isOk()).andExpect(jsonPath("$.avatar").value("ROBOT"));
 	}
 
 	@Test
@@ -147,7 +148,8 @@ class ProfileApiTests {
 		MockHttpSession bob = Players.register(this.mockMvc);
 		Integer aliceId = JsonPath.read(me(alice).andReturn().getResponse().getContentAsString(), "$.id");
 
-		// The only profile endpoints are under /me; an id in the path leads nowhere.
+		// Their own data is only under /me; an id in the path leads nowhere (the public profile is by
+		// username, and read-only).
 		this.mockMvc.perform(get("/api/users/" + aliceId).session(bob)).andExpect(status().isNotFound());
 		this.mockMvc.perform(get("/api/users/" + aliceId + "/game-history").session(bob)).andExpect(status().isNotFound());
 		this.mockMvc

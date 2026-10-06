@@ -26,7 +26,7 @@ It is a portfolio project. The goal is a polished, extensible platform where **a
 
 ## Status
 
-Everything listed below works end to end, in Docker, with 370 backend and 519 frontend tests passing. Nothing is a mock-up. See the [roadmap](#roadmap) for what is next and what is deliberately left out.
+Everything listed below works end to end, in Docker, with 391 backend and 531 frontend tests passing. Nothing is a mock-up. See the [roadmap](#roadmap) for what is next and what is deliberately left out.
 
 ## Features
 
@@ -44,6 +44,7 @@ Everything listed below works end to end, in Docker, with 370 backend and 519 fr
 - **Daily login reward**: once a day (UTC), more for every day in a row, a free card pack on day 7.
 - **Daily challenges**: a new challenge per game every day, plus one for card packs ("open 3 packs"), created by a scheduled job and worth XP and coins.
 - **Shop**: extra card packs, badges and titles for coins; some unlock at higher levels.
+- **Player identity**: a stable username (the account) and a display name, bio and avatar the player edits; a **public profile** for every player (`/players/{username}`) with their worn title and badge, statistics, ranks and achievements, linked from the leaderboards.
 - **Profile**: level and XP progress, coins, statistics across the platform (games, play time, cards, packs, coins earned) and per game, game history, coin history, achievements, the badge and title you wear, and an avatar.
 - **Game hub**: the home page puts your coins, level and daily reward first, then today's challenges, recently played games, featured games, card packs, the top scores of each game, your latest achievements and categories.
 - **Admin dashboard**: users, active users, games, packs, cards and coins in circulation (all time and today), and audited coin grants.
@@ -167,7 +168,7 @@ Vite proxies `/api` and `/actuator` to the backend, so the browser talks to one 
 
 ### Database
 
-- The schema is created and upgraded by **Flyway** when the backend starts (`backend/src/main/resources/db/migration`, `V1` to `V14`). There is no manual step.
+- The schema is created and upgraded by **Flyway** when the backend starts (`backend/src/main/resources/db/migration`, `V1` to `V15`). There is no manual step.
 - The **admin account** is created at the first start (see [Roles](#roles-players-and-admins)).
 - The game catalog comes from migrations; the card catalog comes from the card game import (see [Card games](#card-games)).
 - To start over with an empty database: `docker compose down -v`, then `docker compose up -d`.
@@ -304,8 +305,8 @@ npm run build
 
 | | Tests | Line coverage | Branch coverage | Report |
 | --- | --- | --- | --- | --- |
-| Backend | 370 | 97.5 % | 87.4 % | `backend/target/site/jacoco/index.html` |
-| Frontend | 519 | 97.1 % | 90.4 % | `frontend/coverage/index.html` |
+| Backend | 391 | 97.6 % | 87.6 % | `backend/target/site/jacoco/index.html` |
+| Frontend | 531 | 97.1 % | 90.5 % | `frontend/coverage/index.html` |
 
 - **Backend** integration tests run against a real PostgreSQL in Testcontainers, never an in-memory substitute, and go through HTTP with MockMvc. They cover registration, authentication and login throttling, score submission (including simultaneous finishes), leaderboards, achievements and XP, daily challenges, the coin ledger (simultaneous spending, rewards paid once, rollbacks), the daily login reward over several days and under simultaneous claims, the shop (replayed and simultaneous purchases), admin grants, and card packs: the odds over 100,000 simulated packs, duplicates, the daily limit under concurrent requests, and a failure halfway through an opening that must leave nothing behind. The card game sources are tested on recorded answers of the real APIs (no network): mapping, retries, idempotent re-imports, alternate arts and reprints.
 - **Frontend** tests cover the game engines and AIs, the input hooks, every page through the real route table against an in-memory fake of the API, and architecture rules (engines import nothing from React or the browser, games do not reach into each other, the card game is used only through its routes).
@@ -327,7 +328,7 @@ npm run build
 │       │   ├── admin/        # admin dashboard, coin grants, AI access
 │       │   └── tcg/          # the card game module: game, set, card, pack, opening, collection, dataimport
 │       └── resources/
-│           ├── db/migration/     # Flyway migrations V1 to V14
+│           ├── db/migration/     # Flyway migrations V1 to V15
 │           └── tcg/sources/      # which sets to import, rarities and pack layouts, per card game
 ├── frontend/                 # React + Vite SPA, served by nginx in Docker
 │   ├── nginx/                # nginx configuration and security headers
@@ -355,6 +356,7 @@ npm run build
 10. ✅ **Roles**: USER and ADMIN, a seeded admin account, AI mode and unlimited packs for admins, enforced by the server
 11. ✅ **Platform economy**: coins and their ledger, rewards for playing, achievements and challenges, the daily login reward, card pack challenges, the shop with extra packs, badges and titles, statistics, the admin dashboard and coin grants
 12. ✅ **Competitive leaderboards**: daily, weekly and all-time boards per game, one entry per player, deterministic ranks, your rank everywhere, a podium, ranks on the profile
-13. **Next**: deployment to a host with HTTPS, login sessions that survive a restart (Spring Session), password reset, more games (Minesweeper, Memory) and multiplayer (Chess, Connect Four)
+13. ✅ **Player identity**: display names, bios, public profiles, display names on leaderboards
+14. **Next**: deployment to a host with HTTPS, login sessions that survive a restart (Spring Session), password reset, more games (Minesweeper, Memory) and multiplayer (Chess, Connect Four)
 
 Known limits, on purpose for now: no email or password reset; scores made as a guest are not moved to an account created later; scores and the numbers games report about a run are validated for range but not replayed, so they are not cheat-proof; login throttling is kept in memory per backend instance; card images depend on the sources' image hosts being up; the admin account is fixed by configuration (there is no page to manage roles); coins can be farmed only as fast as scores can, since scores are not replayed (finishing a game pays coins for the first 40 games a day only).

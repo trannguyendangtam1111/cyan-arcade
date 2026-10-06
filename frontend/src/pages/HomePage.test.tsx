@@ -135,8 +135,8 @@ describe('the rest of the hub', () => {
     mockApi({
       scores: {
         snake: [
-          { score: 40, player: { username: 'pixel', avatar: 'CAT' }, you: true },
-          { score: 30, player: { username: 'zelda_fan', avatar: 'ROBOT' } },
+          { score: 40, player: { username: 'pixel', displayName: 'pixel', avatar: 'CAT' }, you: true },
+          { score: 30, player: { username: 'zelda_fan', displayName: 'zelda_fan', avatar: 'ROBOT' } },
           { score: 20 },
           { score: 10 },
         ],

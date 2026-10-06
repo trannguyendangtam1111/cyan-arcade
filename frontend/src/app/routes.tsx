@@ -10,6 +10,7 @@ import { HomePage } from '@/pages/HomePage'
 import { LeaderboardPage } from '@/pages/LeaderboardPage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { ProfilePage } from '@/pages/profile/ProfilePage'
+import { PublicProfilePage } from '@/pages/PublicProfilePage'
 import { RouteErrorPage } from '@/pages/RouteErrorPage'
 import { ShopPage } from '@/pages/ShopPage'
 import { tcgRoutes } from '@/tcg/routes'
@@ -27,6 +28,8 @@ export const routes: RouteObject[] = [
       { path: 'shop', element: <ShopPage /> },
       { path: 'leaderboard', element: <LeaderboardPage /> },
       { path: 'profile', element: <ProfilePage /> },
+      // Anyone's public profile, by username.
+      { path: 'players/:username', element: <PublicProfilePage /> },
       // Shows nothing but "admins only" to anyone else; the data behind it is admin-only on the server.
       { path: 'admin', element: <AdminPage /> },
       // The card game is a module of its own; this is all the app knows of it.

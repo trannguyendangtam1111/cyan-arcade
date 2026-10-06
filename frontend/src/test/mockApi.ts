@@ -11,7 +11,7 @@ import type {
   PlayerRanks,
   Standing,
 } from '@/api/leaderboards'
-import type { AchievementStatus, GameHistoryEntry, ProfileResponse, StatsResponse } from '@/api/profile'
+import type { AchievementStatus, GameHistoryEntry, ProfileResponse, PublicProfile, StatsResponse } from '@/api/profile'
 
 export const catalogFixture: GameResponse[] = [
   {
@@ -47,10 +47,10 @@ export const catalogFixture: GameResponse[] = [
 ]
 
 /** A signed-in player for tests that need one. */
-export const pixel: SessionUser = { id: 7, username: 'pixel', avatar: 'ROBOT', role: 'USER' }
+export const pixel: SessionUser = { id: 7, username: 'pixel', displayName: 'pixel', avatar: 'ROBOT', role: 'USER' }
 
 /** The seeded admin account, as the session describes it. */
-export const admin: SessionUser = { id: 1, username: 'admin', avatar: 'ROBOT', role: 'ADMIN' }
+export const admin: SessionUser = { id: 1, username: 'admin', displayName: 'admin', avatar: 'ROBOT', role: 'ADMIN' }
 
 export const achievementsFixture: AchievementStatus[] = [
   {
@@ -254,6 +254,10 @@ interface MockApiOptions {
   level?: number
   /** Overrides for the signed-in player's statistics. */
   stats?: Partial<StatsResponse>
+  /** Other players' public profiles, by username (the signed-in player's own is built from the session). */
+  publicProfiles?: Record<string, Partial<PublicProfile>>
+  /** Make `PATCH /api/users/me` fail with this status. */
+  profileUpdateStatus?: number
   /** Asked first, in order. The first one that returns a response answers the request. */
   handlers?: MockHandler[]
 }
@@ -330,6 +334,8 @@ export function mockApi({
   shopItems = shopItemsFixture,
   level = 2,
   stats = {},
+  publicProfiles = {},
+  profileUpdateStatus = 200,
   handlers = [],
 }: MockApiOptions = {}) {
   document.cookie = `XSRF-TOKEN=${CSRF_TOKEN}; path=/`
@@ -342,11 +348,15 @@ export function mockApi({
   const owned = new Map<number, number>()
   const purchases = new Map<string, Record<string, unknown>>()
   const worn = new Set<number>()
+  let bio: string | null = null
   const passwords = new Map(Object.entries(accounts).map(([name, password]) => [name.toLowerCase(), password]))
 
   const profileOf = (player: SessionUser): ProfileResponse => ({
     id: player.id,
     username: player.username,
+    displayName: player.displayName,
+    bio,
+    role: player.role,
     xp: 185,
     level: 2,
     xpIntoLevel: 85,
@@ -388,7 +398,13 @@ export function mockApi({
       if (passwords.get(username.toLowerCase()) !== body.password) {
         return problem(401, 'INVALID_CREDENTIALS', 'Wrong username or password')
       }
-      currentUser = { id: 7, username, avatar: 'ROBOT', role: username.toLowerCase() === 'admin' ? 'ADMIN' : 'USER' }
+      currentUser = {
+        id: 7,
+        username,
+        displayName: username,
+        avatar: 'ROBOT',
+        role: username.toLowerCase() === 'admin' ? 'ADMIN' : 'USER',
+      }
       return session()
     }
     if (method === 'POST' && path === '/api/auth/register') {
@@ -402,7 +418,7 @@ export function mockApi({
         return problem(409, 'USERNAME_TAKEN', `The username '${username}' is already taken`)
       }
       passwords.set(username.toLowerCase(), String(body.password))
-      currentUser = { id: 8, username, avatar: 'ROBOT', role: 'USER' }
+      currentUser = { id: 8, username, displayName: username, avatar: 'ROBOT', role: 'USER' }
       return session(201)
     }
     if (method === 'POST' && path === '/api/auth/logout') {
@@ -540,11 +556,56 @@ export function mockApi({
       return json(status())
     }
 
+    // --- Public profiles --------------------------------------------------------------------
+    const profileOwner = /^\/api\/users\/([^/]+)\/profile$/.exec(path)?.[1]
+    if (profileOwner && method === 'GET') {
+      const name = decodeURIComponent(profileOwner).toLowerCase()
+      const own = currentUser && currentUser.username.toLowerCase() === name ? currentUser : null
+      const other = Object.entries(publicProfiles).find(([key]) => key.toLowerCase() === name)?.[1]
+      if (!own && !other) return notFound(`Player '${profileOwner}' was not found`)
+      const base: PublicProfile = {
+        username: own?.username ?? decodeURIComponent(profileOwner),
+        displayName: own?.displayName ?? decodeURIComponent(profileOwner),
+        avatar: own?.avatar ?? 'ROBOT',
+        bio: own ? bio : null,
+        role: own?.role ?? 'USER',
+        level: 2,
+        memberSince: '2026-09-01T08:00:00Z',
+        title: null,
+        badge: null,
+        stats: { gamesPlayed: 12, totalScore: 4321, playTimeMs: 3_725_000, activities: [], games: [] },
+        achievements: [],
+        achievementsTotal: 9,
+        ranks,
+        you: own !== null,
+      }
+      return json({ ...base, ...other })
+    }
+
     // --- The signed-in player's own data ---------------------------------------------------
     if (path.startsWith('/api/users/me')) {
       if (!currentUser) return unauthorized()
       if (path === '/api/users/me' && method === 'PATCH') {
-        currentUser = { ...currentUser, avatar: body.avatar as SessionUser['avatar'] }
+        if (profileUpdateStatus !== 200) return problem(profileUpdateStatus, 'INTERNAL_ERROR', 'Something went wrong')
+        // Checked and tidied like the server does; anything but these three fields is ignored.
+        const errors: { field: string; message: string }[] = []
+        const displayName = typeof body.displayName === 'string' ? body.displayName.trim().replace(/\s+/g, ' ') : undefined
+        if (displayName !== undefined && (displayName.length < 2 || displayName.length > 24)) {
+          errors.push({ field: 'displayName', message: 'must be 2 to 24 characters long' })
+        } else if (displayName !== undefined && !/^[\p{L}\p{M}\p{N} ._'!-]*$/u.test(displayName)) {
+          errors.push({ field: 'displayName', message: "may only contain letters, digits, spaces and . _ ' ! -" })
+        }
+        const newBio = typeof body.bio === 'string' ? body.bio.trim() : undefined
+        if (newBio !== undefined && newBio.length > 160) {
+          errors.push({ field: 'bio', message: 'must be at most 160 characters long' })
+        }
+        if (errors.length > 0) return problem(400, 'VALIDATION_FAILED', 'Request validation failed', { errors })
+        currentUser = {
+          ...currentUser,
+          ...(body.avatar !== undefined && { avatar: body.avatar as SessionUser['avatar'] }),
+          ...(displayName !== undefined && { displayName }),
+        }
+        if (newBio !== undefined) bio = newBio === '' ? null : newBio
         return json(profileOf(currentUser))
       }
       if (path === '/api/users/me') return json(profileOf(currentUser))

@@ -12,7 +12,10 @@ export type Role = 'USER' | 'ADMIN'
 
 export interface SessionUser {
   id: number
+  /** The account's identity: used to sign in and in profile links. */
   username: string
+  /** What the player is called on screen. */
+  displayName: string
   avatar: AvatarKey
   role: Role
 }

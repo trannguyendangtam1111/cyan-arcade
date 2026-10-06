@@ -109,7 +109,7 @@ public class LeaderboardService {
 
 	private static Entry toEntry(RankedScore score, UserAccount account, Long userId, UUID playerId) {
 		// Ids never leave the server: callers learn a name and avatar, and which entries are their own.
-		Player player = (account != null) ? new Player(account.username(), account.avatar()) : null;
+		Player player = (account != null) ? new Player(account.username(), account.displayName(), account.avatar()) : null;
 		return new Entry(score.rank(), player, score.score(), score.durationMs(), score.achievedAt(),
 				score.belongsTo(userId, playerId));
 	}

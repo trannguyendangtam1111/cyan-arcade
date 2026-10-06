@@ -1,11 +1,13 @@
-import { Award, Clock, Gamepad2, Layers, LogOut, Package, Pencil, PiggyBank, Star, type LucideIcon } from 'lucide-react'
+import { Award, Clock, Eye, Gamepad2, Layers, LogOut, Package, Pencil, PiggyBank, Star, type LucideIcon } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
+import { Link } from 'react-router'
 import { useLogout } from '@/api/auth'
 import { useProfile, useStats, type ProfileResponse, type StatsResponse } from '@/api/profile'
 import { ItemIcon } from '@/components/ItemIcon'
 import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { buttonStyles } from '@/components/ui/buttonStyles'
 import { Card } from '@/components/ui/Card'
 import { CoinAmount, CoinIcon } from '@/components/ui/CoinAmount'
 import { ErrorState } from '@/components/ui/ErrorState'
@@ -14,6 +16,7 @@ import { cn } from '@/lib/cn'
 import { formatDate, formatDuration, formatScore } from '@/lib/format'
 import { AchievementGrid } from './AchievementGrid'
 import { AvatarPicker } from './AvatarPicker'
+import { EditProfileDialog } from './EditProfileDialog'
 import { CoinHistory } from './CoinHistory'
 import { GameStatsTable } from './GameStatsTable'
 import { Rankings } from './Rankings'
@@ -48,6 +51,7 @@ export function PlayerProfile() {
 
 function ProfileHeader({ profile }: { profile: ProfileResponse }) {
   const [choosingAvatar, setChoosingAvatar] = useState(false)
+  const [editing, setEditing] = useState(false)
   const logout = useLogout()
 
   return (
@@ -72,7 +76,8 @@ function ProfileHeader({ profile }: { profile: ProfileResponse }) {
           </span>
         )}
       </div>
-      <h2 className="text-2xl font-semibold break-all">{profile.username}</h2>
+      <h2 className="text-2xl font-semibold break-words">{profile.displayName}</h2>
+      <p className="font-display font-medium text-ink-soft">@{profile.username}</p>
       {profile.title && <p className="font-display font-medium text-purple-700">{profile.title.name}</p>}
       <div className="mt-2 flex flex-wrap justify-center gap-2">
         <Badge tone="brand" className="px-3 py-1 text-sm">
@@ -82,11 +87,27 @@ function ProfileHeader({ profile }: { profile: ProfileResponse }) {
           <CoinAmount amount={profile.coins} />
         </span>
       </div>
+      {profile.bio && <p className="mt-3 max-w-prose whitespace-pre-line break-words">{profile.bio}</p>}
       <p className="mt-3 text-sm text-ink-soft">Playing since {formatDate(profile.memberSince)}</p>
+      <div className="mt-5 flex flex-wrap justify-center gap-2">
+        <Button size="sm" onClick={() => setEditing(true)}>
+          <Pencil aria-hidden className="size-4" />
+          Edit profile
+        </Button>
+        <Link to={`/players/${encodeURIComponent(profile.username)}`} className={buttonStyles('secondary', 'sm')}>
+          <Eye aria-hidden className="size-4" />
+          Public profile
+        </Link>
+      </div>
+      <EditProfileDialog
+        open={editing}
+        onClose={() => setEditing(false)}
+        current={{ displayName: profile.displayName, bio: profile.bio, avatar: profile.avatar }}
+      />
       <Button
         variant="ghost"
         size="sm"
-        className="mt-5"
+        className="mt-3"
         disabled={logout.isPending}
         onClick={() => logout.mutate()}
       >

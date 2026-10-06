@@ -28,8 +28,11 @@ public record LeaderboardResponse(String gameSlug, LeaderboardPeriod period, Ins
 	public record Entry(long rank, Player player, int score, long durationMs, Instant achievedAt, boolean you) {
 	}
 
-	/** The public face of an account: a name and an avatar, nothing else. */
-	public record Player(String username, Avatar avatar) {
+	/**
+	 * The public face of an account: its username (the identity, for links to the profile), the name
+	 * it shows and its avatar, nothing else.
+	 */
+	public record Player(String username, String displayName, Avatar avatar) {
 	}
 
 }
