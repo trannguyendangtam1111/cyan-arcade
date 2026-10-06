@@ -134,14 +134,18 @@ public class ShopService {
 				this.store.inventoryOf(userId).stream().map(this::toEntry).toList(), this.packs.countOf(userId));
 	}
 
-	/** What a player wears on their profile: at most one item of each equippable type. */
+	/**
+	 * What a player wears: at most one item of each equippable type on the profile, and one game skin
+	 * per slot of a game.
+	 */
 	@Transactional(readOnly = true)
 	public List<InventoryResponse.Entry> equippedOf(Long userId) {
 		return this.store.inventoryOf(userId).stream().filter(Owned::equipped).map(this::toEntry).toList();
 	}
 
 	/**
-	 * Puts on an item the player owns, taking off the one of the same type they wore. Only the
+	 * Puts on an item the player owns, taking off the one of the same kind they wore (the same type
+	 * or, for a game skin, the same slot of the same game). Only the
 	 * player's own inventory is looked at: an item they do not own cannot be worn.
 	 */
 	@Transactional
@@ -225,13 +229,14 @@ public class ShopService {
 		if (viewer == null) {
 			return new ShopResponse.Item(item.id(), item.code(), item.name(), item.description(), item.type(),
 					item.price(), item.quantity(), item.maxOwned(), item.minLevel(), item.icon(), equippable,
-					consumable, null, null, null, null, null);
+					consumable, null, null, null, null, null, item.gameSlug(), item.slot());
 		}
 		int owned = viewer.quantityOf(item);
 		boolean soldOut = item.maxOwned() != null && owned + item.quantity() > item.maxOwned();
 		return new ShopResponse.Item(item.id(), item.code(), item.name(), item.description(), item.type(),
 				item.price(), item.quantity(), item.maxOwned(), item.minLevel(), item.icon(), equippable, consumable,
-				owned, viewer.level() >= item.minLevel(), soldOut, viewer.wears(item), viewer.balance() >= item.price());
+				owned, viewer.level() >= item.minLevel(), soldOut, viewer.wears(item), viewer.balance() >= item.price(),
+				item.gameSlug(), item.slot());
 	}
 
 	private InventoryResponse.Entry toEntry(Owned owned) {
@@ -239,7 +244,7 @@ public class ShopService {
 		ItemHandler handler = this.handlers.get(item.type());
 		return new InventoryResponse.Entry(item.id(), item.code(), item.name(), item.description(), item.type(),
 				item.icon(), owned.quantity(), handler.isEquippable(item.type()), owned.equipped(),
-				handler.isConsumable(item.type()), owned.acquiredAt());
+				handler.isConsumable(item.type()), owned.acquiredAt(), item.gameSlug(), item.slot());
 	}
 
 }

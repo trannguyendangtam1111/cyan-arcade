@@ -20,7 +20,15 @@ class ShopStore {
 
 	private static final String ITEM_COLUMNS = """
 			i.id, i.code, i.name, i.description, i.type, i.price, i.quantity, i.max_owned, i.min_level, i.icon,
-			i.active""";
+			i.active, i.game_slug, i.slot""";
+
+	/**
+	 * Items worn together with {@code i}: of its type and, for a game skin, of its game and slot.
+	 * Badges, titles and frames have neither, so for them this is just the type.
+	 */
+	private static final String SAME_KIND = """
+			i.type = :type AND i.game_slug IS NOT DISTINCT FROM CAST(:gameSlug AS VARCHAR)
+			AND i.slot IS NOT DISTINCT FROM CAST(:slot AS VARCHAR)""";
 
 	private final JdbcClient jdbc;
 
@@ -136,8 +144,8 @@ class ShopStore {
 	}
 
 	/**
-	 * Makes one owned item of a type the one the player wears, and takes off the others of that type,
-	 * in one statement.
+	 * Makes one owned item the one the player wears, and takes off the others of its kind (its type
+	 * and, for a game skin, its game's slot), in one statement.
 	 * @return {@code false} when the player does not own that item
 	 */
 	boolean equip(Long userId, ShopItem item, Instant now) {
@@ -151,11 +159,12 @@ class ShopStore {
 		this.jdbc.sql("""
 				UPDATE user_inventory inv SET equipped = (inv.item_id = :itemId), updated_at = :now
 				FROM shop_items i
-				WHERE i.id = inv.item_id AND inv.user_id = :userId AND i.type = :type
-				""")
+				WHERE i.id = inv.item_id AND inv.user_id = :userId AND\s""" + SAME_KIND)
 			.param("userId", userId)
 			.param("itemId", item.id())
 			.param("type", item.type().name())
+			.param("gameSlug", item.gameSlug())
+			.param("slot", item.slot())
 			.param("now", at(now))
 			.update();
 		return true;
@@ -168,12 +177,17 @@ class ShopStore {
 				""").param("userId", userId).param("itemId", itemId).param("now", at(now)).update();
 	}
 
-	/** Whether the player wears any item of a type. */
-	boolean wearsAny(Long userId, ItemType type) {
+	/** Whether the player wears any item of the same kind as this one (see {@link #equip}). */
+	boolean wearsAnyLike(Long userId, ShopItem item) {
 		return this.jdbc.sql("""
 				SELECT count(*) FROM user_inventory inv JOIN shop_items i ON i.id = inv.item_id
-				WHERE inv.user_id = :userId AND i.type = :type AND inv.equipped
-				""").param("userId", userId).param("type", type.name()).query(Integer.class).single() > 0;
+				WHERE inv.user_id = :userId AND inv.equipped AND\s""" + SAME_KIND)
+			.param("userId", userId)
+			.param("type", item.type().name())
+			.param("gameSlug", item.gameSlug())
+			.param("slot", item.slot())
+			.query(Integer.class)
+			.single() > 0;
 	}
 
 	Optional<Purchase> findPurchase(Long userId, UUID requestId) {
@@ -208,7 +222,7 @@ class ShopStore {
 		return new ShopItem(row.getLong("id"), row.getString("code"), row.getString("name"),
 				row.getString("description"), ItemType.valueOf(row.getString("type")), row.getInt("price"),
 				row.getInt("quantity"), row.getObject("max_owned", Integer.class), row.getInt("min_level"),
-				row.getString("icon"), row.getBoolean("active"));
+				row.getString("icon"), row.getBoolean("active"), row.getString("game_slug"), row.getString("slot"));
 	}
 
 	private static OffsetDateTime at(Instant instant) {

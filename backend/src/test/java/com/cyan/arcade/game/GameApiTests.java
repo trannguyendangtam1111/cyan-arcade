@@ -33,7 +33,7 @@ class GameApiTests {
 		this.mockMvc.perform(get("/api/games"))
 			.andExpect(status().isOk())
 			.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-			.andExpect(jsonPath("$[*].slug", contains("snake", "2048", "tetris", "minesweeper")))
+			.andExpect(jsonPath("$[*].slug", contains("snake", "2048", "tetris", "minesweeper", "flappy-bird")))
 			.andExpect(jsonPath("$[0].id").isNumber())
 			.andExpect(jsonPath("$[0].name").value("Snake"))
 			.andExpect(jsonPath("$[0].description").isNotEmpty())

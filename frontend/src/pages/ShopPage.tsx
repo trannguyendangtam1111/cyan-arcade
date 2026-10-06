@@ -11,6 +11,7 @@ import {
   useEquip,
   usePurchase,
   useShop,
+  type ItemType,
   type PurchaseResponse,
   type ShopItem,
 } from '@/api/economy'
@@ -36,6 +37,15 @@ interface Feedback {
   tone: 'success' | 'error'
   text: string
   link?: { to: string; label: string }
+}
+
+/** Something the player can wear or take off, from the shop's shelves or their inventory. */
+interface Wearable {
+  itemId: number
+  name: string
+  equipped: boolean
+  type: ItemType
+  gameSlug: string | null
 }
 
 /** Says what a refused purchase or change means, with the server's own words. */
@@ -72,7 +82,7 @@ export function ShopPage() {
   const avatar = user?.avatar ?? 'ROBOT'
   const select = (category: ShopCategory | null) => setParams(category ? { category: category.slug } : {})
 
-  const toggleWear = (item: { itemId: number; name: string; equipped: boolean }) => {
+  const toggleWear = (item: Wearable) => {
     setFeedback(null)
     equip.mutate(
       { itemId: item.itemId, equipped: !item.equipped },
@@ -81,11 +91,17 @@ export function ShopPage() {
           setFeedback(
             item.equipped
               ? { tone: 'success', text: `Unequipped ${item.name}.` }
-              : {
-                  tone: 'success',
-                  text: `Equipped! ${item.name} is on your profile.`,
-                  link: { to: '/profile', label: 'See your profile' },
-                },
+              : item.type === 'GAME_SKIN' && item.gameSlug
+                ? {
+                    tone: 'success',
+                    text: `Equipped! You'll see ${item.name} next time you play.`,
+                    link: { to: `/games/${item.gameSlug}`, label: 'Play now' },
+                  }
+                : {
+                    tone: 'success',
+                    text: `Equipped! ${item.name} is on your profile.`,
+                    link: { to: '/profile', label: 'See your profile' },
+                  },
           ),
         onError: (error) => setFeedback({ tone: 'error', text: problemText(error, "Couldn't change that. Try again.") }),
       },
@@ -95,6 +111,14 @@ export function ShopPage() {
   const bought = (purchase: PurchaseResponse) => {
     setBuying(null)
     const { item } = purchase
+    if (item.type === 'GAME_SKIN' && item.gameSlug) {
+      setFeedback({
+        tone: 'success',
+        text: `Purchased! ${item.name} is yours${item.equipped ? ' and already equipped in its game' : ''}.`,
+        link: { to: `/games/${item.gameSlug}`, label: 'Play now' },
+      })
+      return
+    }
     setFeedback({
       tone: 'success',
       text: `Purchased! ${item.name} is yours${item.equipped ? ' and already on your profile' : ''}.`,
@@ -112,7 +136,7 @@ export function ShopPage() {
       <PageHeader
         icon={ShoppingBag}
         title="Shop"
-        description="Spend the coins you earn playing on card packs, badges, titles and profile frames."
+        description="Spend the coins you earn playing on card packs, badges, titles, profile frames and game skins."
         actions={
           balance !== null && (
             <p className="flex items-center gap-2 rounded-full bg-amber-50 px-4 py-2 text-lg text-amber-900 ring-2 ring-amber-300">
@@ -224,7 +248,13 @@ export function ShopPage() {
                               setBuying({ item, requestId: newRequestId() })
                             }}
                             onToggleWear={() =>
-                              toggleWear({ itemId: item.id, name: item.name, equipped: item.equipped === true })
+                              toggleWear({
+                                itemId: item.id,
+                                name: item.name,
+                                equipped: item.equipped === true,
+                                type: item.type,
+                                gameSlug: item.gameSlug,
+                              })
                             }
                           />
                         </li>
@@ -294,8 +324,14 @@ function ConfirmPurchase({ item, requestId, balance, onClose, onBought }: Confir
           <CoinAmount amount={balance - item.price} className="text-ink" /> left.
         </p>
         {item.consumable && <p className="text-sm text-ink-soft">Bought packs are opened once today's free packs are used up.</p>}
-        {item.equippable && (
-          <p className="text-sm text-ink-soft">You can equip and unequip it on your profile whenever you like.</p>
+        {item.type === 'GAME_SKIN' ? (
+          <p className="text-sm text-ink-soft">
+            A skin only changes how the game looks, never how it plays. Equip it here or from the game's Customize button.
+          </p>
+        ) : (
+          item.equippable && (
+            <p className="text-sm text-ink-soft">You can equip and unequip it on your profile whenever you like.</p>
+          )
         )}
         {error && (
           <p role="alert" className="font-bold text-rose-700">

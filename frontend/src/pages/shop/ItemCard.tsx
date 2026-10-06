@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 import type { AvatarKey } from '@/api/auth'
 import type { ShopItem } from '@/api/economy'
 import { FramedAvatar } from '@/components/FramedAvatar'
+import { GameSkinBadge, GameSkinPreview } from '@/components/GameSkinPreview'
 import { ItemIcon } from '@/components/ItemIcon'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -64,6 +65,8 @@ export function ItemCard({ item, balance, signedIn, avatar, busy, onBuy, onToggl
         <span className={cn('grid size-16 shrink-0 place-items-center rounded-2xl shadow-soft', category.tile)}>
           {item.type === 'COSMETIC' ? (
             <FramedAvatar avatar={avatar} frame={item} size="md" />
+          ) : item.type === 'GAME_SKIN' ? (
+            <GameSkinPreview item={item} className="h-14" />
           ) : (
             <ItemIcon icon={item.icon} className="size-8" />
           )}
@@ -75,6 +78,7 @@ export function ItemCard({ item, balance, signedIn, avatar, busy, onBuy, onToggl
       </div>
 
       <div className="flex flex-wrap gap-2">
+        {item.type === 'GAME_SKIN' && <GameSkinBadge item={item} />}
         {item.type === 'PACK' && (
           <Badge tone="neutral">
             <Tag aria-hidden className="size-3.5" />

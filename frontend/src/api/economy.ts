@@ -75,7 +75,8 @@ export interface DailyLoginClaim {
   status: DailyLoginStatus
 }
 
-export type ItemType = 'PACK' | 'BADGE' | 'TITLE' | 'COSMETIC'
+/** `GAME_SKIN`: a new look for one of a game's pieces (Flappy Bird's bird, say), worn in that game. */
+export type ItemType = 'PACK' | 'BADGE' | 'TITLE' | 'COSMETIC' | 'GAME_SKIN'
 
 export interface ShopItem {
   id: number
@@ -104,6 +105,10 @@ export interface ShopItem {
   equipped: boolean | null
   /** Whether the player has the coins for it; `null` for guests. */
   affordable: boolean | null
+  /** For a game skin, the game it is worn in; otherwise `null`. */
+  gameSlug: string | null
+  /** For a game skin, the piece of the game it dresses (e.g. `bird`); otherwise `null`. */
+  slot: string | null
 }
 
 /** `GET /api/shop/items`. Balance and level are `null` for guests. */
@@ -138,6 +143,9 @@ export interface InventoryEntry {
   /** Used up, like card packs. */
   consumable: boolean
   acquiredAt: string
+  /** For a game skin, the game it is worn in and the piece it dresses; otherwise `null`. */
+  gameSlug: string | null
+  slot: string | null
 }
 
 /** `GET /api/users/me/inventory`. */
@@ -205,13 +213,14 @@ export function useClaimDailyLogin() {
   })
 }
 
-export function useShop() {
+/** @param enabled whether to load it at all (a game page only needs it for a game with skins) */
+export function useShop(enabled = true) {
   const session = useSession()
   const signedIn = Boolean(session.user)
   return useQuery({
     queryKey: economyKeys.shop(signedIn),
     queryFn: ({ signal }) => apiFetch<ShopResponse>('/api/shop/items', { signal }),
-    enabled: !session.isPending,
+    enabled: enabled && !session.isPending,
   })
 }
 
@@ -239,7 +248,7 @@ export function useInventory(enabled: boolean) {
   })
 }
 
-/** Wears (or takes off) a badge, title or frame the player owns. The server checks they own it. */
+/** Wears (or takes off) a badge, title, frame or game skin the player owns. The server checks they own it. */
 export function useEquip() {
   const queryClient = useQueryClient()
   return useMutation({

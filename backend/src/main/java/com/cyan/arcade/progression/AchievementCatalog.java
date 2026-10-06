@@ -36,7 +36,21 @@ class AchievementCatalog {
 					Reward.of(250, 400), "tetris", "lines", 40),
 
 			Achievement.forDetail("MINESWEEPER_CLEAR", "All Clear", "Clear a board in Minesweeper.",
-					Reward.of(100, 150), "minesweeper", "won", 1));
+					Reward.of(100, 150), "minesweeper", "won", 1),
+
+			Achievement.forScore("FLAPPY_FIRST_FLIGHT", "First Flight", "Finish your first flight in Flappy Bird.",
+					Reward.of(50, 75), "flappy-bird", 0),
+			Achievement.forScore("FLAPPY_10", "Sky Rookie", "Fly past 10 pipes in one flight of Flappy Bird.",
+					Reward.of(75, 100), "flappy-bird", 10),
+			Achievement.forScore("FLAPPY_25", "High Flyer", "Fly past 25 pipes in one flight of Flappy Bird.",
+					Reward.of(100, 150), "flappy-bird", 25),
+			Achievement.forScore("FLAPPY_50", "Cloud Breaker", "Fly past 50 pipes in one flight of Flappy Bird.",
+					Reward.of(200, 300), "flappy-bird", 50),
+			Achievement.forScore("FLAPPY_100", "Sky Master", "Fly past 100 pipes in one flight of Flappy Bird.",
+					Reward.of(400, 600), "flappy-bird", 100),
+			Achievement.forDetail("FLAPPY_UNTOUCHABLE", "Untouchable",
+					"Stay in the air for a whole minute without touching anything in Flappy Bird.", Reward.of(150, 200),
+					"flappy-bird", "seconds", 60));
 
 	List<Achievement> all() {
 		return ALL;

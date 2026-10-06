@@ -587,7 +587,7 @@ Ends the run and records its score.
 | Field | Notes |
 | ----- | ----- |
 | `score` | Required, zero or more |
-| `details` | Up to 10 whole numbers the game reports about the run, keyed by a short name. Each game has its own, and **they are required**: Snake `length` and `level`; 2048 `highestTile` and `moves`; Tetris `lines`, `level` and `pieces`; Minesweeper `rows`, `columns`, `mines`, `revealedCells`, `flagsUsed`, `won` (0 or 1), `moves` and `seconds`. They are checked against the score, and only a game's own are kept (others are ignored); they then decide achievements and daily challenges. Not stored |
+| `details` | Up to 10 whole numbers the game reports about the run, keyed by a short name. Each game has its own, and **they are required**: Snake `length` and `level`; 2048 `highestTile` and `moves`; Tetris `lines`, `level` and `pieces`; Minesweeper `rows`, `columns`, `mines`, `revealedCells`, `flagsUsed`, `won` (0 or 1), `moves` and `seconds`; Flappy Bird `pipes`, `flaps`, `flightMs`, `seconds`, `level` and `seed`. They are checked against the score, and only a game's own are kept (others are ignored); they then decide achievements and daily challenges. Not stored |
 
 A guest finishes their run with the same `X-Player-Id` header they started it with.
 
@@ -643,6 +643,7 @@ The games run in the browser, so the server cannot know what really happened in 
 | 2048 | `highestTile` is a power of two; the score is a multiple of 4, at least what building the highest tile scores and at most what the tiles on the board can have scored; the board holds no more than 8 + 4 per move; no more than 25 moves a second |
 | Tetris | `level` is one more than every 10 lines; the pieces placed fill the lines cleared and no more than the board; the score is between all singles and all fours for those lines, plus at most 44 drop points a piece; no more than 10 pieces a second |
 | Minesweeper | The board is 9 × 9 with 10 mines; `won` exactly when all 71 safe cells are uncovered; at most one flag per mine, on covered cells; every reveal uncovers a safe cell except a losing one, and the first is always safe; the score is exactly 10 a safe cell, plus 500 and `600 − seconds` (at least 0) for a cleared board; for a cleared board `seconds` must agree with the server's time (within 3 seconds); no more than 10 clicks a second |
+| Flappy Bird | `pipes` is the score, `level` the course's level for it and `seconds` the whole seconds of `flightMs`; the flight (game time, which stops while paused) no longer than the session; the course passes pipes at fixed times, so `flightMs` must lie between passing the last pipe scored and the next one (within 250 ms); at least one flap, and between 0.6 a second (minus two) and 20 a second |
 
 The time is the server's, from opening the session to finishing it, with 2 seconds added for the requests travelling. The limits are generous: an unusual but real run always passes. **This is practical integrity protection, not a perfect anti-cheat system**: a client that plays a fake run slowly enough, with consistent numbers, can still submit it. What it cannot do is submit scores no run could produce, finish a run twice, finish someone else's run, or earn any reward from a run the server refused.
 
@@ -819,8 +820,9 @@ Virtual items for coins; there are no real-money payments. A purchase names the 
 | `BADGE` | Worn on the profile, one at a time; owned once |
 | `TITLE` | Shown under the name on the profile, one at a time; owned once |
 | `COSMETIC` | A profile frame around the avatar, worn one at a time like a badge; owned once. `icon` names the frame (`frame-ocean`, `frame-gold`, ...) |
+| `GAME_SKIN` | A new look for one of a game's pieces, worn in that game; owned once. `gameSlug` says which game and `slot` which piece (Flappy Bird: `bird`, `pipes`, `sky`); `icon` names the look. One is worn per slot of a game; wearing none means the game's own free look. Purely cosmetic: never shown on the profile and never part of a game's rules |
 
-Packs are **consumable**: owning some never stops a player buying more. Badges, titles and frames are **equippable** and owned once. Each item says which it is (`consumable`, `equippable`), so a new type of item needs no change to the app's logic, only a handler on the server.
+Packs are **consumable**: owning some never stops a player buying more. Badges, titles, frames and game skins are **equippable** and owned once. Every item also has `gameSlug` and `slot`, `null` except for game skins. Each item says which it is (`consumable`, `equippable`), so a new type of item needs no change to the app's logic, only a handler on the server.
 
 #### `GET /api/shop/items`
 
@@ -908,11 +910,11 @@ Public. Query: `type` (optional, one of the types above) for one category only; 
 }
 ```
 
-`bonusPacks` is the extra card packs the player has, from every pack item together. The first badge, title or frame a player gets is worn straight away.
+`bonusPacks` is the extra card packs the player has, from every pack item together. The first badge, title or frame a player gets is worn straight away, and so is the first game skin of each slot.
 
 #### `PUT /api/users/me/inventory/{itemId}/equipped`, `DELETE …`
 
-Wears (`PUT`) or takes off (`DELETE`) a badge, title or frame the caller owns; wearing one takes off the other of its type. Answers with the inventory. `404 NOT_FOUND` for an item the caller does not own, `400 ITEM_NOT_EQUIPPABLE` for a pack.
+Wears (`PUT`) or takes off (`DELETE`) a badge, title, frame or game skin the caller owns; wearing one takes off the other of its kind (its type, and for a game skin the same slot of the same game). Answers with the inventory. `404 NOT_FOUND` for an item the caller does not own, `400 ITEM_NOT_EQUIPPABLE` for a pack.
 
 ## Admin
 

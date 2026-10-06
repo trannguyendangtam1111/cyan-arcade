@@ -50,7 +50,14 @@ class ChallengeTemplates {
 					ChallengeTemplate.score("Four Digits", "Score 1,000 points in one game of Tetris.", 1000, 40, 80)),
 			"minesweeper",
 			List.of(ChallengeTemplate.score("Careful Steps", "Score 300 points in one game of Minesweeper.", 300, 25,
-					50), ChallengeTemplate.detail("Mine Free", "Clear a board in Minesweeper.", "won", 1, 50, 100)));
+					50), ChallengeTemplate.detail("Mine Free", "Clear a board in Minesweeper.", "won", 1, 50, 100)),
+			"flappy-bird",
+			List.of(ChallengeTemplate.score("Take Off", "Fly past 5 pipes in one flight of Flappy Bird.", 5, 25, 50),
+					ChallengeTemplate.score("Pipe Dream", "Fly past 15 pipes in one flight of Flappy Bird.", 15, 40,
+							80),
+					ChallengeTemplate.score("Sky High", "Fly past 30 pipes in one flight of Flappy Bird.", 30, 60, 120),
+					ChallengeTemplate.detail("Hang Time", "Stay in the air for 30 seconds in one flight of Flappy Bird.",
+							"seconds", 30, 45, 90)));
 
 	private static final List<Activity> ACTIVITIES = List.of(new Activity(PlayerActivity.TCG_PACK_OPENED, "Card packs",
 			List.of(ChallengeTemplate.count("Pack Opener", "Open 3 card packs today.", 3, 30, 60),

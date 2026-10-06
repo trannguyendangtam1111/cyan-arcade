@@ -1,6 +1,6 @@
 # Cyan Arcade
 
-**Cyan Arcade is a modular full-stack game platform built with React and Spring Boot.** It is a cute, colorful browser arcade: Snake, 2048, Tetris and Minesweeper, with AI players for the first three, leaderboards, accounts with XP and achievements, daily challenges, and booster packs of real **Pokémon** and **One Piece** trading cards, opened on the server.
+**Cyan Arcade is a modular full-stack game platform built with React and Spring Boot.** It is a cute, colorful browser arcade: Snake, 2048, Tetris, Minesweeper and Flappy Bird, with AI players for all but Minesweeper and shop skins for Flappy Bird, leaderboards, accounts with XP and achievements, daily challenges, and booster packs of real **Pokémon** and **One Piece** trading cards, opened on the server.
 
 It is a portfolio project. The goal is a polished, extensible platform where **adding a game means adding a module**: the platform is not rewritten and existing games are not touched.
 
@@ -32,6 +32,7 @@ Everything listed below works end to end, in Docker, with 431 backend and 594 fr
 
 **Games**
 - **Snake, 2048, Tetris and Minesweeper**, playable with keyboard and touch. Minesweeper (9 × 9, 10 mines, a safe first click, a Reveal/Flag switch for phones) is the reference for [adding a game](ARCHITECTURE.md#how-to-add-a-new-game): a module of its own and one rules class on the server, and the leaderboards, rewards, achievements, challenges and statistics work for it unchanged.
+- **Flappy Bird**, an original take with a seeded course that speeds up and narrows over seven levels, frame-rate-independent physics, a canvas renderer, an admin-only look-ahead AI, and 16 birds, 11 obstacle themes and 5 skies sold in the shop. Skins are visual only: every bird flies with the same physics.
 - **An AI mode for each, for admins**, written as classic algorithms that run in the browser (no AI service): a Hamiltonian-cycle Snake that fills the board, an expectimax 2048 player, and a Tetris player that searches every placement with one piece of lookahead. Speed control (0.25x to 8x), pause and restart.
 - Pure, deterministic game engines shared by the human player, the AI and the tests.
 
@@ -43,7 +44,7 @@ Everything listed below works end to end, in Docker, with 431 backend and 594 fr
 - **Coins**: a platform-wide currency earned by playing, beating your best, achievements, daily challenges and the daily login reward, and spent in the shop. Every change is a row in an auditable ledger; the server decides every amount. See [Economy](#economy-coins-rewards-and-the-shop).
 - **Daily login reward**: once a day (UTC), more for every day in a row, a free card pack on day 7.
 - **Daily challenges**: a new challenge per game every day, plus one for card packs ("open 3 packs"), created by a scheduled job and worth XP and coins.
-- **Shop**: extra card packs, badges, titles and profile frames for coins, by category; some unlock at higher levels. Every item shows whether it is locked, too dear, owned or equipped; the shop explains the day's free packs and the bought ones. Badges, titles and frames are equipped from the shop and shown on the public profile; a coin history explains every reward.
+- **Shop**: extra card packs, badges, titles, profile frames and game skins for coins, by category; some unlock at higher levels. Every item shows whether it is locked, too dear, owned or equipped; the shop explains the day's free packs and the bought ones. Badges, titles and frames are equipped from the shop and shown on the public profile; a coin history explains every reward.
 - **Player identity**: a stable username (the account) and a display name, bio and avatar the player edits; a **public profile** for every player (`/players/{username}`) with their worn title and badge, statistics, ranks and achievements, linked from the leaderboards.
 - **Profile**: level and XP progress, coins, statistics across the platform (games, play time, cards, packs, coins earned) and per game, game history, coin history, achievements, the badge and title you wear, and an avatar.
 - **Game hub**: the home page puts your coins, level and daily reward first, then today's challenges, recently played games, featured games, card packs, the top scores of each game, your latest achievements and categories.
@@ -264,7 +265,7 @@ Coins are the platform's currency. Players earn them by playing and spend them i
 - **All or nothing.** A reward is paid in the same transaction as what earned it (the score, the claim, the challenge); if anything fails, all of it is rolled back.
 - **The day is the server's, in UTC**, for the daily login reward as for challenges and the pack allowance. The client's date is never asked for.
 
-**The shop** sells extra card packs (consumable: opened once the daily allowance is gone, from any booster, and bought as often as you like) and badges, titles and profile frames (owned once and equipped on the profile, one of each, visible on the public profile). Some items need a level (the level system's unlocks). A purchase names the item and a random request id: the server checks the level, what you already own and your balance, takes the price and hands the item over in one transaction, and the same request id never buys twice. What an item does is decided by a handler for its type (`PACK`, `BADGE`, `TITLE`, `COSMETIC`), so a new kind of item is a new handler, not a change to the shop.
+**The shop** sells extra card packs (consumable: opened once the daily allowance is gone, from any booster, and bought as often as you like) and badges, titles and profile frames (owned once and equipped on the profile, one of each, visible on the public profile). Some items need a level (the level system's unlocks). A purchase names the item and a random request id: the server checks the level, what you already own and your balance, takes the price and hands the item over in one transaction, and the same request id never buys twice. What an item does is decided by a handler for its type (`PACK`, `BADGE`, `TITLE`, `COSMETIC`, `GAME_SKIN`), so a new kind of item is a new handler, not a change to the shop. Game skins belong to a game and a slot (Flappy Bird's `bird`, `pipes` and `sky`): one is worn per slot, wearing none means the game's own free look, and the game draws them itself, in the game and in the shop.
 
 **Admins** keep their unlimited card packs and never use bought ones. They can give a player coins from the admin page: between 1 and 100,000, with a reason, recorded in the player's ledger as an `ADMIN_GRANT` with who gave them.
 
@@ -361,6 +362,7 @@ npm run build
 14. ✅ **Shop and rewards**: shop categories, item states (locked, owned, equipped, affordable), profile frames, pack rules in the shop, a grouped inventory, the reward history and clearer daily rewards
 15. ✅ **Score integrity**: each game's runs checked against its engine's rules and the server's clock, guest runs tied to their browser, expired sessions, players' runs judged one at a time, a daily limit on best-score coins. Practical protection, not perfect anti-cheat
 16. ✅ **New games**: a clean game boundary (game rules in their own backend package, guarded by architecture tests on both sides) and Minesweeper as its reference game
-17. **Next**: deployment to a host with HTTPS, login sessions that survive a restart (Spring Session), password reset, more games (Memory) and multiplayer (Chess, Connect Four)
+17. ✅ **Flappy Bird**: a seeded, deterministic course with server-side timing checks, an admin-only AI, and game skins (birds, obstacles, skies) through the ordinary shop and inventory
+18. **Next**: deployment to a host with HTTPS, login sessions that survive a restart (Spring Session), password reset, more games (Memory) and multiplayer (Chess, Connect Four)
 
 Known limits, on purpose for now: no email or password reset; scores made as a guest are not moved to an account created later; scores and the numbers games report about a run are validated for range but not replayed, so they are not cheat-proof; login throttling is kept in memory per backend instance; card images depend on the sources' image hosts being up; the admin account is fixed by configuration (there is no page to manage roles); coins can be farmed only as fast as scores can, since scores are not replayed (finishing a game pays coins for the first 40 games a day only).

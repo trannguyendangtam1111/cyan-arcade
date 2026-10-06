@@ -151,6 +151,8 @@ export const shopItemsFixture: ShopItem[] = [
     soldOut: null,
     equipped: null,
     affordable: null,
+    gameSlug: null,
+    slot: null,
   },
   {
     id: 3,
@@ -170,6 +172,8 @@ export const shopItemsFixture: ShopItem[] = [
     soldOut: null,
     equipped: null,
     affordable: null,
+    gameSlug: null,
+    slot: null,
   },
   {
     id: 4,
@@ -189,6 +193,8 @@ export const shopItemsFixture: ShopItem[] = [
     soldOut: null,
     equipped: null,
     affordable: null,
+    gameSlug: null,
+    slot: null,
   },
   {
     id: 7,
@@ -208,6 +214,8 @@ export const shopItemsFixture: ShopItem[] = [
     soldOut: null,
     equipped: null,
     affordable: null,
+    gameSlug: null,
+    slot: null,
   },
   {
     id: 11,
@@ -227,6 +235,8 @@ export const shopItemsFixture: ShopItem[] = [
     soldOut: null,
     equipped: null,
     affordable: null,
+    gameSlug: null,
+    slot: null,
   },
 ]
 
@@ -405,6 +415,8 @@ export function mockApi({
   let bio: string | null = null
   const passwords = new Map(Object.entries(accounts).map(([name, password]) => [name.toLowerCase(), password]))
 
+  /** Worn one at a time: the same type and, for a game skin, the same slot of the same game. */
+  const sameKind = (a: ShopItem, b: ShopItem) => a.type === b.type && a.gameSlug === b.gameSlug && a.slot === b.slot
   /** What the player wears of a type, as the profile shows it. */
   const wornOf = (type: ItemType): Cosmetic | null => {
     const item = shopItems.find((candidate) => candidate.type === type && worn.has(candidate.id))
@@ -575,7 +587,7 @@ export function mockApi({
       balance -= item.price
       owned.set(item.id, (owned.get(item.id) ?? 0) + item.quantity)
       // Like the server: the first badge, title or frame of a kind is put on straight away.
-      if (item.equippable && !shopItems.some((other) => other.type === item.type && worn.has(other.id))) {
+      if (item.equippable && !shopItems.some((other) => sameKind(other, item) && worn.has(other.id))) {
         worn.add(item.id)
       }
       const purchase = {
@@ -764,6 +776,8 @@ export function mockApi({
               equipped: worn.has(item.id),
               consumable: item.consumable,
               acquiredAt: '2026-09-30T10:00:00Z',
+              gameSlug: item.gameSlug,
+              slot: item.slot,
             }),
           ),
         bonusPacks: shopItems
@@ -777,7 +791,7 @@ export function mockApi({
         if (method === 'PUT') {
           if (!item || !(owned.get(item.id) ?? 0)) return notFound('Owned item was not found')
           // One of each kind at a time.
-          for (const other of shopItems) if (other.type === item.type) worn.delete(other.id)
+          for (const other of shopItems) if (sameKind(other, item)) worn.delete(other.id)
           worn.add(item.id)
         } else worn.delete(Number(wearing))
         return json(inventoryOf())

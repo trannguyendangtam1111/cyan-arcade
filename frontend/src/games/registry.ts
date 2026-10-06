@@ -1,5 +1,6 @@
 import type { GameCategory, GameResponse } from '@/api/games'
 import { game2048Module } from './2048'
+import { flappyBirdModule } from './flappy-bird'
 import { minesweeperModule } from './minesweeper'
 import { snakeModule } from './snake'
 import { tetrisModule } from './tetris'
@@ -11,7 +12,13 @@ import type { GameDefinition, GameModule } from './types'
  *
  * A game that is in the backend catalog but not in this list is shown as "coming soon".
  */
-export const gameModules: readonly GameModule[] = [snakeModule, game2048Module, tetrisModule, minesweeperModule]
+export const gameModules: readonly GameModule[] = [
+  snakeModule,
+  game2048Module,
+  tetrisModule,
+  minesweeperModule,
+  flappyBirdModule,
+]
 
 export function findGameModule(slug: string): GameModule | undefined {
   return gameModules.find((module) => module.slug === slug)

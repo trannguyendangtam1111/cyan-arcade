@@ -90,11 +90,46 @@ public final class HonestRuns {
 				details.put("moves", won ? 1 : 2);
 				details.put("seconds", (int) PLAYED_FOR.toSeconds());
 			}
+			case "flappy-bird" -> {
+				// Halfway between passing the last pipe scored and the next one, as a real flight ends.
+				int flightMs = (int) ((flappyPassTimeMs(score - 1) + flappyPassTimeMs(score)) / 2);
+				details.put("pipes", score);
+				details.put("flaps", (int) Math.ceil(flightMs / 1000.0 * 1.6) + 1);
+				details.put("flightMs", flightMs);
+				details.put("seconds", flightMs / 1000);
+				details.put("level", FLAPPY_LEVELS_FROM.length - (int) java.util.Arrays.stream(FLAPPY_LEVELS_FROM)
+					.filter((from) -> score < from)
+					.count());
+				details.put("seed", 12345);
+			}
 			default -> {
 			}
 		}
 		details.putAll(given);
 		return details;
+	}
+
+	/** Flappy Bird's difficulty table (the engine's difficulty.ts): each level's first pipe, speed and spacing. */
+	private static final int[] FLAPPY_LEVELS_FROM = { 0, 5, 15, 30, 50, 75, 100 };
+
+	private static final double[] FLAPPY_SPEEDS = { 150, 158, 168, 180, 192, 204, 216 };
+
+	private static final double[] FLAPPY_SPACINGS = { 250, 245, 240, 234, 228, 222, 216 };
+
+	/** When a flight passes pipe number {@code pipe}; 0 for "before the first". */
+	private static double flappyPassTimeMs(int pipe) {
+		if (pipe < 0) {
+			return 0;
+		}
+		double seconds = (460 + 70 - 120) / FLAPPY_SPEEDS[0];
+		for (int next = 1; next <= pipe; next++) {
+			int level = 0;
+			while (level + 1 < FLAPPY_LEVELS_FROM.length && next >= FLAPPY_LEVELS_FROM[level + 1]) {
+				level++;
+			}
+			seconds += FLAPPY_SPACINGS[level] / FLAPPY_SPEEDS[level];
+		}
+		return seconds * 1000;
 	}
 
 	/** Details as the JSON object a finish request carries. */

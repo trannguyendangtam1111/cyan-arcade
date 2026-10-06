@@ -19,10 +19,13 @@ public record ShopResponse(Long balance, Integer level, List<Item> items) {
 	 * @param soldOut whether the player already owns as many as one may
 	 * @param equipped whether the player wears it
 	 * @param affordable whether the player has the coins for it
+	 * @param gameSlug for a game skin, the game it is worn in; otherwise {@code null}
+	 * @param slot for a game skin, the piece of the game it dresses; otherwise {@code null}
 	 */
 	public record Item(Long id, String code, String name, String description, ItemType type, int price,
 			int quantity, Integer maxOwned, int minLevel, String icon, boolean equippable, boolean consumable,
-			Integer owned, Boolean unlocked, Boolean soldOut, Boolean equipped, Boolean affordable) {
+			Integer owned, Boolean unlocked, Boolean soldOut, Boolean equipped, Boolean affordable, String gameSlug,
+			String slot) {
 	}
 
 }

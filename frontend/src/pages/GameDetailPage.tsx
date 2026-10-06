@@ -27,6 +27,7 @@ import type { GameDefinition, GameModule } from '@/games/types'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useGameAi } from '@/hooks/useGameAi'
 import { useGameDefinition } from '@/hooks/useGameCatalog'
+import { useGameCosmetics } from '@/hooks/useGameCosmetics'
 import { useScoreSubmission, type ScoreSubmission } from '@/hooks/useScoreSubmission'
 import { accentStyle } from '@/lib/accent'
 import { recordRecentGame } from '@/lib/recentGames'
@@ -139,6 +140,8 @@ function GameStage({ game, gameModule }: { game: GameDefinition; gameModule: Gam
   const { submission, onGameStart, onGameOver, retry } = useScoreSubmission(game.slug)
   // AI mode is for admins: everyone else gets the game without its AI.
   const ai = useGameAi(gameModule)
+  // Skins from the shop, for a game that has them.
+  const cosmetics = useGameCosmetics(gameModule)
 
   const handleGameStart = useCallback(() => {
     // Remembered on this device, for the hub's "Jump back in" row.
@@ -150,7 +153,12 @@ function GameStage({ game, gameModule }: { game: GameDefinition; gameModule: Gam
     <Card padding="none" className="overflow-hidden border-t-8 border-(--accent)">
       <Suspense fallback={<LoadingState label={`Loading ${game.name}…`} className="min-h-80" />}>
         {/* The module pairs the component with its own AI (defineGameModule), so this is that AI. */}
-        <gameModule.Component onGameStart={handleGameStart} onGameOver={onGameOver} ai={ai as (() => never) | undefined} />
+        <gameModule.Component
+          onGameStart={handleGameStart}
+          onGameOver={onGameOver}
+          ai={ai as (() => never) | undefined}
+          cosmetics={cosmetics}
+        />
       </Suspense>
       <ScoreStatus submission={submission} onRetry={retry} gameSlug={game.slug} />
     </Card>

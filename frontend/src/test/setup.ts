@@ -17,6 +17,9 @@ HTMLDialogElement.prototype.close ??= function (this: HTMLDialogElement) {
   this.dispatchEvent(new Event('close'))
 }
 
+// jsdom has no canvas: drawing code gets no 2D context (and must cope), without jsdom's warning.
+HTMLCanvasElement.prototype.getContext = (() => null) as typeof HTMLCanvasElement.prototype.getContext
+
 afterEach(() => {
   cleanup()
   // What one test leaves on the "device" (best scores, recent games) must not reach the next.

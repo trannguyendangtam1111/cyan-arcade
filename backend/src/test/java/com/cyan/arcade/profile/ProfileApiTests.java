@@ -44,7 +44,7 @@ class ProfileApiTests {
 			.andExpect(jsonPath("$.gamesPlayed").value(0))
 			.andExpect(jsonPath("$.totalScore").value(0))
 			.andExpect(jsonPath("$.achievementsUnlocked").value(0))
-			.andExpect(jsonPath("$.achievementsTotal").value(10))
+			.andExpect(jsonPath("$.achievementsTotal").value(16))
 			.andExpect(jsonPath("$.memberSince").exists())
 			.andExpect(jsonPath("$.passwordHash").doesNotExist())
 			.andExpect(jsonPath("$.password").doesNotExist());
@@ -165,7 +165,7 @@ class ProfileApiTests {
 		MockHttpSession session = Players.register(this.mockMvc);
 
 		achievements(session).andExpect(status().isOk())
-			.andExpect(jsonPath("$", hasSize(10)))
+			.andExpect(jsonPath("$", hasSize(16)))
 			.andExpect(jsonPath("$[0].code").value("FIRST_GAME"))
 			.andExpect(jsonPath("$[0].name").value("First Coin"))
 			.andExpect(jsonPath("$[0].description").isNotEmpty())

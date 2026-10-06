@@ -1,4 +1,4 @@
-import { Award, CircleUserRound, Package, Tag, type LucideIcon } from 'lucide-react'
+import { Award, CircleUserRound, Package, Palette, Tag, type LucideIcon } from 'lucide-react'
 import type { ItemType } from '@/api/economy'
 
 export interface ShopCategory {
@@ -51,6 +51,15 @@ export const shopCategories: ShopCategory[] = [
     description: 'A colourful ring around your avatar, for everyone who visits your profile.',
     icon: CircleUserRound,
     tile: 'bg-pink-50 text-pink-700 ring-2 ring-pink-200',
+  },
+  {
+    type: 'GAME_SKIN',
+    slug: 'skins',
+    label: 'Game skins',
+    title: 'Game skins',
+    description: 'New looks for the games you play. Purely cosmetic: a skin never changes how a game plays.',
+    icon: Palette,
+    tile: 'bg-sky-50 text-sky-700 ring-2 ring-sky-200',
   },
 ]
 

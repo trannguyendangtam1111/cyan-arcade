@@ -50,7 +50,7 @@ class ShopController {
 		return this.shop.inventoryOf(user.id());
 	}
 
-	/** Wears a badge, title or frame the player owns. */
+	/** Wears a badge, title, frame or game skin the player owns. */
 	@PutMapping("/api/users/me/inventory/{itemId}/equipped")
 	InventoryResponse equip(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable Long itemId) {
 		return this.shop.equip(user.id(), itemId);

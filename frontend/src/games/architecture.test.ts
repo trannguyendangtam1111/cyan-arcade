@@ -42,7 +42,7 @@ const pureFiles = gameFolders.flatMap((game) =>
 
 describe('game engines and AIs', () => {
   it('exist for every game', () => {
-    expect(gameFolders.sort()).toEqual(['2048', 'minesweeper', 'snake', 'tetris'])
+    expect(gameFolders.sort()).toEqual(['2048', 'flappy-bird', 'minesweeper', 'snake', 'tetris'])
     expect(pureFiles.length).toBeGreaterThan(10)
   })
 
@@ -54,6 +54,11 @@ describe('game engines and AIs', () => {
     // No DOM, no timers, no storage: the rules run the same in a browser, a test or a server.
     expect(code(path)).not.toMatch(/\b(document|window|localStorage|sessionStorage)\s*\./)
     expect(code(path)).not.toMatch(/\b(setTimeout|setInterval|requestAnimationFrame)\s*\(/)
+  })
+
+  it.each(pureFiles.map((path) => [name(path), path]))('%s knows nothing of how the game looks', (_, path) => {
+    // Skins and drawing are pictures of the state: the rules, and the AI that plays by them, never see them.
+    expect(imports(path).filter((specifier) => /(^|\/)(skins|render|components)(\/|$)/.test(specifier))).toEqual([])
   })
 
   it.each(pureFiles.map((path) => [name(path), path]))('%s is deterministic', (_, path) => {
@@ -98,7 +103,7 @@ describe('AI mode', () => {
   const gamesWithAi = gameFolders.filter((game) => statSync(join(SRC, 'games', game, 'ai'), { throwIfNoEntry: false })?.isDirectory())
 
   it('are the games that have one', () => {
-    expect(gamesWithAi.sort()).toEqual(['2048', 'snake', 'tetris'])
+    expect(gamesWithAi.sort()).toEqual(['2048', 'flappy-bird', 'snake', 'tetris'])
     expect(code(join(SRC, 'games', 'minesweeper', 'index.ts'))).not.toMatch(/loadAi/)
   })
 

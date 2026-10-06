@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 import type { AvatarKey } from '@/api/auth'
 import { useInventory, type InventoryEntry } from '@/api/economy'
 import { FramedAvatar } from '@/components/FramedAvatar'
+import { GameSkinPreview } from '@/components/GameSkinPreview'
 import { ItemIcon } from '@/components/ItemIcon'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -18,7 +19,7 @@ interface InventoryProps {
 }
 
 /**
- * What the player owns: packs to open, and the badges, titles and frames to wear, each kind on its
+ * What the player owns: packs to open, and the badges, titles, frames and game skins to wear, each kind on its
  * own. Wearing is checked by the server, which only lets a player wear what they own.
  */
 export function Inventory({ avatar, busy, onToggleWear }: InventoryProps) {
@@ -59,7 +60,7 @@ export function Inventory({ avatar, busy, onToggleWear }: InventoryProps) {
           </div>
 
           {data.items.every((entry) => !entry.equippable) ? (
-            <p className="text-ink-soft">Nothing to wear yet. Badges, titles and frames you buy show up here.</p>
+            <p className="text-ink-soft">Nothing to wear yet. Badges, titles, frames and game skins you buy show up here.</p>
           ) : (
             shopCategories
               .filter((category) => data.items.some((entry) => entry.equippable && entry.type === category.type))
@@ -111,6 +112,8 @@ function WearableRow({ entry, avatar, tile, busy, onToggle }: WearableRowProps) 
       <span className={cn('grid size-11 shrink-0 place-items-center rounded-xl', tile)}>
         {entry.type === 'COSMETIC' ? (
           <FramedAvatar avatar={avatar} frame={entry} size="sm" />
+        ) : entry.type === 'GAME_SKIN' ? (
+          <GameSkinPreview item={entry} className="h-9" />
         ) : (
           <ItemIcon icon={entry.icon} className="size-5" />
         )}

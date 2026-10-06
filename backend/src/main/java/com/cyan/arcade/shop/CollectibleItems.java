@@ -6,14 +6,15 @@ import java.util.Set;
 import org.springframework.stereotype.Component;
 
 /**
- * Badges, titles and cosmetics (profile frames): owned once and shown on the profile, one of each
- * type at a time. The first of a type a player gets is put on straight away, so buying one shows at
- * once.
+ * Badges, titles, cosmetics (profile frames) and game skins: owned once and worn one of a kind at a
+ * time: one badge, one title and one frame on the profile, and one skin per slot of a game. The
+ * first of a kind a player gets is put on straight away, so buying one shows at once.
  */
 @Component
 class CollectibleItems implements ItemHandler {
 
-	private static final Set<ItemType> EQUIPPABLE = Set.of(ItemType.BADGE, ItemType.TITLE, ItemType.COSMETIC);
+	private static final Set<ItemType> EQUIPPABLE = Set.of(ItemType.BADGE, ItemType.TITLE, ItemType.COSMETIC,
+			ItemType.GAME_SKIN);
 
 	private final ShopStore store;
 
@@ -23,7 +24,7 @@ class CollectibleItems implements ItemHandler {
 
 	@Override
 	public Set<ItemType> types() {
-		return Set.of(ItemType.BADGE, ItemType.TITLE, ItemType.COSMETIC);
+		return EQUIPPABLE;
 	}
 
 	@Override
@@ -33,7 +34,7 @@ class CollectibleItems implements ItemHandler {
 
 	@Override
 	public void give(Long userId, ShopItem item, int units, Instant now) {
-		boolean wearsOne = this.store.wearsAny(userId, item.type());
+		boolean wearsOne = this.store.wearsAnyLike(userId, item);
 		this.store.add(userId, item.id(), units, now);
 		if (isEquippable(item.type()) && !wearsOne) {
 			this.store.equip(userId, item, now);

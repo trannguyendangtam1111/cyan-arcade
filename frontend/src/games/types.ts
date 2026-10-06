@@ -41,6 +41,22 @@ export interface GameModule {
    * import the AI's code, or it would ship with the game to everyone.
    */
   loadAi?: () => Promise<() => unknown>
+  /** For a game with skins in the shop: how to show them. See {@link GameCosmeticsModule}. */
+  cosmetics?: GameCosmeticsModule
+}
+
+/**
+ * How the platform shows a game's skins (shop items of type `GAME_SKIN`) outside the game: in the
+ * shop and the inventory. The game alone knows what its skins look like.
+ */
+export interface GameCosmeticsModule {
+  /** What each slot is called, e.g. `{ bird: 'Bird' }`. */
+  slots: Record<string, string>
+  /**
+   * A picture of one skin. Declare it with `lazy(...)` so the shop only downloads it when it shows a
+   * skin. It must draw something reasonable (or nothing) for a skin id it does not know.
+   */
+  Preview: ComponentType<{ slot: string; skinId: string; className?: string }>
 }
 
 /** A game module whose component and AI belong together. See {@link defineGameModule}. */
@@ -49,6 +65,7 @@ export interface TypedGameModule<Ai> {
   controls: { keyboard: boolean; touch: boolean }
   Component: ComponentType<GameProps<Ai>>
   loadAi?: () => Promise<() => Ai>
+  cosmetics?: GameCosmeticsModule
 }
 
 /** Declares a game module, checking that its `loadAi` gives the AI its component expects. */
@@ -67,6 +84,50 @@ export interface GameProps<Ai = unknown> {
    * is played by a human only and shows no AI controls.
    */
   ai?: () => Ai
+  /**
+   * The game's skins from the shop and which ones the player wears, for a module that declares
+   * `cosmetics`. Skins are only looks: a game must play exactly the same whatever is worn.
+   */
+  cosmetics?: GameCosmetics
+}
+
+/** One of a game's skins as the player stands with it. Everything here is the server's. */
+export interface GameSkin {
+  /** The shop item. */
+  itemId: number
+  /** The piece of the game it dresses, e.g. `bird`. */
+  slot: string
+  /** Which look, in the game's own terms (the shop item's `icon`). */
+  skinId: string
+  name: string
+  price: number
+  minLevel: number
+  owned: boolean
+  equipped: boolean
+  /** Whether the player's level allows buying it; `null` for a guest. */
+  unlocked: boolean | null
+}
+
+/**
+ * A game's skins, from the platform's shop and inventory. A game never buys or grants anything
+ * itself: it shows what the player has, and asks the platform to wear one.
+ */
+export interface GameCosmetics {
+  /** Guests play with the game's own looks; skins need an account. */
+  signedIn: boolean
+  /** Every skin the shop has for this game, or `null` while loading. */
+  skins: GameSkin[] | null
+  /**
+   * Wears an owned skin in its slot, or with `null` goes back to the game's own look there. The
+   * server checks the player owns it.
+   */
+  equip: (slot: string, itemId: number | null) => void
+  /** Whether a change is being saved. */
+  saving: boolean
+  /** Where to get skins: the shop, at the skins. */
+  shopPath: string
+  /** Where to sign in, coming back to this game afterwards. */
+  loginPath: string
 }
 
 /**
