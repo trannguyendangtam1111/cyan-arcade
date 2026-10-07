@@ -103,6 +103,11 @@ export interface GameSkin {
   price: number
   minLevel: number
   owned: boolean
+  /**
+   * Whether the player may wear it now, as the server decides: owned, or included without buying it
+   * (every Brick Breaker skin for an admin). Missing means the same as `owned`.
+   */
+  wearable?: boolean
   equipped: boolean
   /** Whether the player's level allows buying it; `null` for a guest. */
   unlocked: boolean | null

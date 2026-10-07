@@ -156,6 +156,28 @@ class ShopStore {
 			.single() == 0) {
 			return false;
 		}
+		wear(userId, item, now);
+		return true;
+	}
+
+	/**
+	 * Wears a game skin the player does not own (see {@link SkinAccess}): its row has a quantity of 0,
+	 * so it is never counted as owned, and only says that it is worn. Callers check the player may.
+	 */
+	void wearWithoutOwning(Long userId, ShopItem item, Instant now) {
+		this.jdbc.sql("""
+				INSERT INTO user_inventory (user_id, item_id, quantity, equipped, acquired_at, updated_at)
+				VALUES (:userId, :itemId, 0, FALSE, :now, :now)
+				ON CONFLICT (user_id, item_id) DO NOTHING
+				""").param("userId", userId).param("itemId", item.id()).param("now", at(now)).update();
+		wear(userId, item, now);
+	}
+
+	/**
+	 * Puts the item on and takes off the others of its kind; a skin worn without being owned that was
+	 * taken off this way leaves no row behind.
+	 */
+	private void wear(Long userId, ShopItem item, Instant now) {
 		this.jdbc.sql("""
 				UPDATE user_inventory inv SET equipped = (inv.item_id = :itemId), updated_at = :now
 				FROM shop_items i
@@ -167,7 +189,11 @@ class ShopStore {
 			.param("slot", item.slot())
 			.param("now", at(now))
 			.update();
-		return true;
+		this.jdbc.sql("""
+				DELETE FROM user_inventory inv USING shop_items i
+				WHERE i.id = inv.item_id AND inv.user_id = :userId AND inv.quantity = 0 AND NOT inv.equipped
+				AND i.type = 'GAME_SKIN'
+				""").param("userId", userId).update();
 	}
 
 	void unequip(Long userId, Long itemId, Instant now) {
@@ -175,6 +201,27 @@ class ShopStore {
 				UPDATE user_inventory SET equipped = FALSE, updated_at = :now
 				WHERE user_id = :userId AND item_id = :itemId
 				""").param("userId", userId).param("itemId", itemId).param("now", at(now)).update();
+		// A skin that was only worn, never owned, is gone once it is taken off.
+		this.jdbc.sql("""
+				DELETE FROM user_inventory inv USING shop_items i
+				WHERE i.id = inv.item_id AND inv.user_id = :userId AND inv.item_id = :itemId AND inv.quantity = 0
+				AND i.type = 'GAME_SKIN'
+				""").param("userId", userId).param("itemId", itemId).update();
+	}
+
+	/** The game skins a player wears without owning them (see {@link #wearWithoutOwning}). */
+	List<Owned> wornWithoutOwning(Long userId) {
+		return this.jdbc.sql("SELECT " + ITEM_COLUMNS + """
+				, inv.quantity AS owned_quantity, inv.equipped, inv.acquired_at
+				FROM user_inventory inv
+				JOIN shop_items i ON i.id = inv.item_id
+				WHERE inv.user_id = :userId AND inv.quantity = 0 AND inv.equipped AND i.type = 'GAME_SKIN'
+				ORDER BY i.sort_order, i.id
+				""")
+			.param("userId", userId)
+			.query((row, index) -> new Owned(toItem(row, index), 0, true,
+					row.getObject("acquired_at", OffsetDateTime.class).toInstant()))
+			.list();
 	}
 
 	/** Whether the player wears any item of the same kind as this one (see {@link #equip}). */

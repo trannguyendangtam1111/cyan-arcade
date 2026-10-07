@@ -6,13 +6,16 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import com.cyan.arcade.common.error.ApiException;
 import com.cyan.arcade.common.error.ConflictException;
 import com.cyan.arcade.common.error.NotFoundException;
+import com.cyan.arcade.common.security.Role;
 import com.cyan.arcade.economy.CoinReference;
 import com.cyan.arcade.economy.CoinService;
 import com.cyan.arcade.economy.CoinTransactionType;
@@ -136,17 +139,23 @@ public class ShopService {
 
 	/**
 	 * What a player wears: at most one item of each equippable type on the profile, and one game skin
-	 * per slot of a game.
+	 * per slot of a game, owned or (for an admin) worn without owning it.
 	 */
 	@Transactional(readOnly = true)
 	public List<InventoryResponse.Entry> equippedOf(Long userId) {
-		return this.store.inventoryOf(userId).stream().filter(Owned::equipped).map(this::toEntry).toList();
+		Role role = roleOf(userId);
+		return Stream
+			.concat(this.store.inventoryOf(userId).stream().filter(Owned::equipped),
+					this.store.wornWithoutOwning(userId).stream().filter((worn) -> SkinAccess.wearsFree(role, worn.item())))
+			.map(this::toEntry)
+			.toList();
 	}
 
 	/**
-	 * Puts on an item the player owns, taking off the one of the same kind they wore (the same type
-	 * or, for a game skin, the same slot of the same game). Only the
-	 * player's own inventory is looked at: an item they do not own cannot be worn.
+	 * Puts on an item, taking off the one of the same kind they wore (the same type or, for a game
+	 * skin, the same slot of the same game). The player must own it, except for the skins an admin may
+	 * wear without owning ({@link SkinAccess}): those are worn at once, with no purchase and no coins.
+	 * The role is the account's on the server. Anything else they do not own cannot be worn.
 	 */
 	@Transactional
 	public InventoryResponse equip(Long userId, Long itemId) {
@@ -155,8 +164,12 @@ public class ShopService {
 			throw new ApiException(HttpStatus.BAD_REQUEST, ITEM_NOT_EQUIPPABLE,
 					"%s cannot be worn".formatted(item.name()));
 		}
-		if (!this.store.equip(userId, item, this.clock.instant())) {
-			throw new NotFoundException("Owned item", itemId);
+		Instant now = this.clock.instant();
+		if (!this.store.equip(userId, item, now)) {
+			if (!SkinAccess.wearsFree(roleOf(userId), item)) {
+				throw new NotFoundException("Owned item", itemId);
+			}
+			this.store.wearWithoutOwning(userId, item, now);
 		}
 		return inventoryOf(userId);
 	}
@@ -195,19 +208,28 @@ public class ShopService {
 		return Levels.levelFor(this.users.get(userId).xp());
 	}
 
+	private Role roleOf(Long userId) {
+		return this.users.get(userId).role();
+	}
+
 	/** What the shop needs to know about the player looking at it. */
 	private Viewer viewerOf(Long userId) {
 		Map<Long, Owned> owned = this.store.inventoryOf(userId)
 			.stream()
 			.collect(Collectors.toMap((entry) -> entry.item().id(), Function.identity()));
-		return new Viewer(levelOf(userId), this.coins.balanceOf(userId), owned);
+		Set<Long> wornWithoutOwning = this.store.wornWithoutOwning(userId)
+			.stream()
+			.map((worn) -> worn.item().id())
+			.collect(Collectors.toSet());
+		return new Viewer(levelOf(userId), this.coins.balanceOf(userId), roleOf(userId), owned, wornWithoutOwning);
 	}
 
 	/**
 	 * A signed-in player as the shop sees them.
 	 * @param owned what they own, by item id
+	 * @param wornWithoutOwning the skins they wear without owning them, by item id
 	 */
-	private record Viewer(int level, long balance, Map<Long, Owned> owned) {
+	private record Viewer(int level, long balance, Role role, Map<Long, Owned> owned, Set<Long> wornWithoutOwning) {
 
 		int quantityOf(ShopItem item) {
 			Owned entry = this.owned.get(item.id());
@@ -216,7 +238,13 @@ public class ShopService {
 
 		boolean wears(ShopItem item) {
 			Owned entry = this.owned.get(item.id());
-			return entry != null && entry.equipped();
+			return (entry != null && entry.equipped())
+					|| (this.wornWithoutOwning.contains(item.id()) && SkinAccess.wearsFree(this.role, item));
+		}
+
+		/** Whether they may put it on now: they own it, or may wear it without owning it. */
+		boolean mayWear(ShopItem item, boolean equippable) {
+			return equippable && (quantityOf(item) > 0 || SkinAccess.wearsFree(this.role, item));
 		}
 
 	}
@@ -229,14 +257,14 @@ public class ShopService {
 		if (viewer == null) {
 			return new ShopResponse.Item(item.id(), item.code(), item.name(), item.description(), item.type(),
 					item.price(), item.quantity(), item.maxOwned(), item.minLevel(), item.icon(), equippable,
-					consumable, null, null, null, null, null, item.gameSlug(), item.slot());
+					consumable, null, null, null, null, null, item.gameSlug(), item.slot(), null);
 		}
 		int owned = viewer.quantityOf(item);
 		boolean soldOut = item.maxOwned() != null && owned + item.quantity() > item.maxOwned();
 		return new ShopResponse.Item(item.id(), item.code(), item.name(), item.description(), item.type(),
 				item.price(), item.quantity(), item.maxOwned(), item.minLevel(), item.icon(), equippable, consumable,
 				owned, viewer.level() >= item.minLevel(), soldOut, viewer.wears(item), viewer.balance() >= item.price(),
-				item.gameSlug(), item.slot());
+				item.gameSlug(), item.slot(), viewer.mayWear(item, equippable));
 	}
 
 	private InventoryResponse.Entry toEntry(Owned owned) {

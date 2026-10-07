@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 240" role="img" aria-label="Brick Breaker" shape-rendering="crispEdges">
+  <!-- Cute Sakura, the first level's world, in 4-unit pixels. -->
+  <rect width="400" height="240" fill="#fde2f0"/>
+  <rect y="60" width="400" height="60" fill="#f6cdee"/>
+  <rect y="120" width="400" height="60" fill="#e7dafc"/>
+  <rect y="180" width="400" height="60" fill="#f3dcf3"/>
+  <!-- Mountain and hills. -->
+  <path d="M120 200 L200 112 L280 200 Z" fill="#e6c3ea"/>
+  <path d="M184 128 L200 112 L216 128 Z" fill="#fff7fc"/>
+  <rect x="0" y="208" width="400" height="32" fill="#f5b3d6"/>
+  <rect x="0" y="224" width="400" height="16" fill="#ec8fbd"/>
+  <!-- Sakura trees. -->
+  <rect x="20" y="132" width="12" height="92" fill="#6b2f45"/>
+  <rect x="368" y="132" width="12" height="92" fill="#6b2f45"/>
+  <g fill="#f472b6"><rect x="4" y="112" width="44" height="28"/><rect x="12" y="104" width="28" height="44"/><rect x="352" y="112" width="44" height="28"/><rect x="360" y="104" width="28" height="44"/></g>
+  <g fill="#f9a8d4"><rect x="36" y="100" width="24" height="20"/><rect x="340" y="100" width="24" height="20"/></g>
+  <g fill="#fff1f7"><rect x="16" y="112" width="4" height="4"/><rect x="32" y="124" width="4" height="4"/><rect x="368" y="116" width="4" height="4"/><rect x="380" y="128" width="4" height="4"/></g>
+  <!-- Bricks: plain, tough (double frame), armored (rivets) and a special one (star). -->
+  <g>
+    <rect x="44" y="20" width="72" height="28" fill="#5b1035"/><rect x="48" y="24" width="64" height="20" fill="#f472b6"/><rect x="48" y="24" width="64" height="4" fill="#fce7f3"/><rect x="48" y="40" width="64" height="4" fill="#be185d"/>
+    <rect x="124" y="20" width="72" height="28" fill="#5b1035"/><rect x="128" y="24" width="64" height="20" fill="#a78bfa"/><rect x="132" y="28" width="56" height="12" fill="#5b1035"/><rect x="136" y="32" width="48" height="4" fill="#a78bfa"/>
+    <rect x="204" y="20" width="72" height="28" fill="#ca8a04"/><rect x="208" y="24" width="64" height="20" fill="#fde047"/>
+    <rect x="284" y="20" width="72" height="28" fill="#5b1035"/><rect x="288" y="24" width="64" height="20" fill="#f472b6"/><rect x="288" y="24" width="64" height="4" fill="#fce7f3"/><rect x="288" y="40" width="64" height="4" fill="#be185d"/>
+    <rect x="84" y="56" width="72" height="28" fill="#5b1035"/><rect x="88" y="60" width="64" height="20" fill="#d6d3d1"/><rect x="96" y="68" width="48" height="8" fill="#78716c"/>
+    <rect x="164" y="56" width="72" height="28" fill="#5b1035"/><rect x="168" y="60" width="64" height="20" fill="#f472b6"/><rect x="168" y="60" width="64" height="4" fill="#fce7f3"/><rect x="168" y="76" width="64" height="4" fill="#be185d"/>
+    <rect x="244" y="56" width="72" height="28" fill="#5b1035"/><rect x="248" y="60" width="64" height="20" fill="#a78bfa"/><rect x="252" y="64" width="56" height="12" fill="#5b1035"/><rect x="256" y="68" width="48" height="4" fill="#a78bfa"/>
+  </g>
+  <g fill="#fafaf9"><rect x="92" y="64" width="4" height="4"/><rect x="144" y="64" width="4" height="4"/><rect x="92" y="72" width="4" height="4"/><rect x="144" y="72" width="4" height="4"/></g>
+  <g fill="#ffffff"><rect x="236" y="26" width="8" height="4"/><rect x="232" y="30" width="16" height="4"/><rect x="228" y="34" width="24" height="4"/><rect x="232" y="38" width="16" height="4"/></g>
+  <g fill="#fce7f3"><rect x="76" y="32" width="4" height="4"/><rect x="72" y="36" width="12" height="4"/><rect x="316" y="32" width="4" height="4"/><rect x="312" y="36" width="12" height="4"/><rect x="196" y="68" width="4" height="4"/><rect x="192" y="72" width="12" height="4"/></g>
+  <!-- A falling x2 capsule and the ball with its trail. -->
+  <rect x="128" y="124" width="48" height="24" fill="#0f172a"/><rect x="132" y="128" width="40" height="16" fill="#c084fc"/>
+  <g fill="#1e1b4b"><rect x="140" y="132" width="4" height="4"/><rect x="148" y="132" width="4" height="4"/><rect x="144" y="136" width="4" height="4"/><rect x="140" y="140" width="4" height="4"/><rect x="148" y="140" width="4" height="4"/><rect x="156" y="132" width="12" height="4"/><rect x="164" y="136" width="4" height="4"/><rect x="156" y="140" width="12" height="4"/></g>
+  <g fill="#67e8f9" opacity=".6"><rect x="252" y="132" width="8" height="8"/><rect x="240" y="148" width="8" height="8"/></g>
+  <rect x="220" y="160" width="20" height="20" fill="#0e7490"/><rect x="224" y="164" width="12" height="12" fill="#ecfeff"/><rect x="224" y="164" width="4" height="4" fill="#ffffff"/>
+  <!-- The paddle with its happy face. -->
+  <rect x="156" y="200" width="112" height="20" fill="#083344"/><rect x="160" y="204" width="104" height="12" fill="#22d3ee"/><rect x="164" y="204" width="96" height="4" fill="#cffafe"/>
+  <g fill="#1e1b4b"><rect x="196" y="208" width="4" height="8"/><rect x="224" y="208" width="4" height="8"/><rect x="208" y="212" width="8" height="4"/></g>
+  <g fill="#f9a8d4"><rect x="184" y="212" width="8" height="4"/><rect x="232" y="212" width="8" height="4"/></g>
+</svg>

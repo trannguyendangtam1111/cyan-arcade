@@ -41,9 +41,12 @@ export function ItemCard({ item, balance, signedIn, avatar, busy, onBuy, onToggl
   // Something owned once (a badge, a title, a frame), not packs that get used up.
   const collected = !item.consumable && owned > 0
   const equipped = item.equipped === true
+  // A skin the server lets this player wear without buying it (every Brick Breaker skin, for an admin).
+  const included = !collected && item.equippable && item.wearable === true
 
   let reason: string | null = null
-  if (locked) reason = `Unlocks at level ${item.minLevel}`
+  if (included) reason = null
+  else if (locked) reason = `Unlocks at level ${item.minLevel}`
   else if (soldOut && !collected) reason = 'You own as many as you can'
   else if (signedIn && !collected && !affordable && balance !== null) {
     reason = `Not enough coins: ${formatScore(item.price - balance)} more to go`
@@ -56,7 +59,7 @@ export function ItemCard({ item, balance, signedIn, avatar, busy, onBuy, onToggl
         'none',
         cn(
           'flex flex-col gap-4 overflow-hidden p-5 transition-shadow',
-          locked && 'opacity-80',
+          locked && !included && 'opacity-80',
           equipped && 'ring-4 ring-brand-300',
         ),
       )}
@@ -85,7 +88,7 @@ export function ItemCard({ item, balance, signedIn, avatar, busy, onBuy, onToggl
             {item.quantity} {item.quantity === 1 ? 'pack' : 'packs'}
           </Badge>
         )}
-        {item.minLevel > 1 && (
+        {item.minLevel > 1 && !included && (
           <Badge tone={locked ? 'warning' : 'neutral'}>
             {locked ? <Lock aria-hidden className="size-3.5" /> : <Award aria-hidden className="size-3.5" />}
             Level {item.minLevel}
@@ -104,6 +107,12 @@ export function ItemCard({ item, balance, signedIn, avatar, busy, onBuy, onToggl
             </Badge>
           )
         )}
+        {included && (
+          <Badge tone="success">
+            <Check aria-hidden className="size-3.5" />
+            Included
+          </Badge>
+        )}
         {item.consumable && owned > 0 && (
           <Badge tone="success">
             <Check aria-hidden className="size-3.5" />
@@ -115,6 +124,8 @@ export function ItemCard({ item, balance, signedIn, avatar, busy, onBuy, onToggl
       <div className="mt-auto flex flex-wrap items-center justify-between gap-3">
         {collected ? (
           <span className="font-display text-sm font-semibold text-ink-soft">In your collection</span>
+        ) : included ? (
+          <span className="font-display text-sm font-semibold text-ink-soft">Free to wear, no purchase needed</span>
         ) : (
           <CoinAmount amount={item.price} className="text-xl text-amber-900" />
         )}
@@ -122,7 +133,7 @@ export function ItemCard({ item, balance, signedIn, avatar, busy, onBuy, onToggl
           <Link to="/login?redirect=%2Fshop" className={buttonStyles('secondary', 'sm')}>
             Log in to buy
           </Link>
-        ) : collected && item.equippable ? (
+        ) : (collected || included) && item.equippable ? (
           <Button
             size="sm"
             variant={equipped ? 'secondary' : 'primary'}

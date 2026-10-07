@@ -109,6 +109,11 @@ export interface ShopItem {
   gameSlug: string | null
   /** For a game skin, the piece of the game it dresses (e.g. `bird`); otherwise `null`. */
   slot: string | null
+  /**
+   * Whether the player may put it on now, as the server decides: they own it, or it is a skin they
+   * may wear without buying (every Brick Breaker skin, for an admin). `null` for guests.
+   */
+  wearable?: boolean | null
 }
 
 /** `GET /api/shop/items`. Balance and level are `null` for guests. */

@@ -50,7 +50,31 @@ class AchievementCatalog {
 					Reward.of(400, 600), "flappy-bird", 100),
 			Achievement.forDetail("FLAPPY_UNTOUCHABLE", "Untouchable",
 					"Stay in the air for a whole minute without touching anything in Flappy Bird.", Reward.of(150, 200),
-					"flappy-bird", "seconds", 60));
+					"flappy-bird", "seconds", 60),
+
+			Achievement.forDetail("BRICK_FIRST_BREAK", "First Break", "Destroy your first brick in Brick Breaker.",
+					Reward.of(50, 75), "brick-breaker", "bricks", 1),
+			Achievement.forDetail("BRICK_COMBO_5", "Combo Starter", "Reach a combo of 5 in Brick Breaker.",
+					Reward.of(75, 100), "brick-breaker", "maxCombo", 5),
+			Achievement.forDetail("BRICK_COMBO_15", "Combo Master", "Reach a combo of 15 in Brick Breaker.",
+					Reward.of(200, 300), "brick-breaker", "maxCombo", 15),
+			Achievement.forDetail("BRICK_POWER_HUNGRY", "Power Hungry",
+					"Catch 5 power-ups in one game of Brick Breaker.", Reward.of(100, 150), "brick-breaker", "powerUps",
+					5),
+			Achievement.forDetail("BRICK_MULTI_BALL", "Multi-Ball Mayhem",
+					"Have 3 balls in play at once in Brick Breaker.", Reward.of(100, 150), "brick-breaker", "maxBalls", 3),
+			Achievement.forDetail("BRICK_FIRESTORM", "Firestorm", "Destroy 10 bricks with Fireball in one game.",
+					Reward.of(150, 200), "brick-breaker", "fireBricks", 10),
+			Achievement.forDetail("BRICK_LASER_SHOW", "Laser Show", "Destroy 10 bricks with the Laser in one game.",
+					Reward.of(150, 200), "brick-breaker", "laserBricks", 10),
+			Achievement.forDetail("BRICK_CRUSHER", "Brick Crusher", "Destroy 100 bricks in one game of Brick Breaker.",
+					Reward.of(250, 400), "brick-breaker", "bricks", 100),
+			Achievement.forDetail("BRICK_PERFECT_CLEAR", "Perfect Clear",
+					"Clear a level of Brick Breaker without losing a life.", Reward.of(150, 200), "brick-breaker",
+					"perfectClears", 1),
+			Achievement.forDetail("BRICK_FLAWLESS", "Flawless",
+					"Clear 5 levels without losing a life in one game of Brick Breaker.", Reward.of(400, 600),
+					"brick-breaker", "perfectClears", 5));
 
 	List<Achievement> all() {
 		return ALL;

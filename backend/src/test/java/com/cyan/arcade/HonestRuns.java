@@ -102,6 +102,7 @@ public final class HonestRuns {
 					.count());
 				details.put("seed", 12345);
 			}
+			case "brick-breaker" -> details.putAll(brickBreakerRun(score));
 			default -> {
 			}
 		}
@@ -130,6 +131,37 @@ public final class HonestRuns {
 			seconds += FLAPPY_SPACINGS[level] / FLAPPY_SPEEDS[level];
 		}
 		return seconds * 1000;
+	}
+
+	/** Brick Breaker's handcrafted levels' bricks, then Endless's fewest and most (the engine's levels.ts). */
+	private static final int[] BRICK_LEVELS = { 44, 40, 46, 46, 58, 48, 58, 80 };
+
+	/**
+	 * A Brick Breaker run that ends on a game over with this score: the first level whose bricks can
+	 * give it, at 100 to 1,270 points a brick plus 500 to 4,100 for each level cleared.
+	 */
+	private static Map<String, Integer> brickBreakerRun(int score) {
+		long before = 0;
+		for (int level = 1;; level++) {
+			int inLevel = (level <= BRICK_LEVELS.length) ? BRICK_LEVELS[level - 1] : 36;
+			int cleared = level - 1;
+			long bricks = Math.max(before, Math.min(before + inLevel, (score - 500L * cleared) / 100));
+			if (score <= 1250 * bricks + 20 * (bricks + 96) + 4100L * cleared && score >= 100 * bricks + 500L * cleared) {
+				Map<String, Integer> details = new HashMap<>();
+				details.put("level", level);
+				details.put("bricks", (int) bricks);
+				details.put("maxCombo", (bricks > 0) ? 1 : 0);
+				details.put("powerUps", 0);
+				details.put("maxBalls", 1);
+				details.put("fireBricks", 0);
+				details.put("laserBricks", 0);
+				details.put("livesLost", 3);
+				details.put("perfectClears", 0);
+				details.put("gameMs", cleared * 1800 + 60_000);
+				return details;
+			}
+			before += inLevel;
+		}
 	}
 
 	/** Details as the JSON object a finish request carries. */

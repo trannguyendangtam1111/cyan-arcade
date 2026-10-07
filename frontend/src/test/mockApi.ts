@@ -422,6 +422,8 @@ export function mockApi({
     const item = shopItems.find((candidate) => candidate.type === type && worn.has(candidate.id))
     return item ? { code: item.code, name: item.name, icon: item.icon } : null
   }
+  /** Like the server: an admin wears every Brick Breaker skin without buying it. */
+  const freeToWear = (item: ShopItem) => currentUser?.role === 'ADMIN' && item.type === 'GAME_SKIN' && item.gameSlug === 'brick-breaker'
   /** An item as the signed-in player sees it in the shop. */
   const playerItem = (item: ShopItem): ShopItem => {
     const count = owned.get(item.id) ?? 0
@@ -432,6 +434,7 @@ export function mockApi({
       soldOut: item.maxOwned !== null && count + item.quantity > item.maxOwned,
       equipped: worn.has(item.id),
       affordable: balance >= item.price,
+      wearable: item.equippable && (count > 0 || freeToWear(item)),
     }
   }
 
@@ -789,7 +792,7 @@ export function mockApi({
       if (wearing) {
         const item = shopItems.find((candidate) => candidate.id === Number(wearing))
         if (method === 'PUT') {
-          if (!item || !(owned.get(item.id) ?? 0)) return notFound('Owned item was not found')
+          if (!item || !((owned.get(item.id) ?? 0) || freeToWear(item))) return notFound('Owned item was not found')
           // One of each kind at a time.
           for (const other of shopItems) if (sameKind(other, item)) worn.delete(other.id)
           worn.add(item.id)

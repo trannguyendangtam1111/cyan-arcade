@@ -5,6 +5,7 @@ import { economyKeys, useEquip, useShop, type ShopItem, type ShopResponse } from
 import type { GameCosmetics, GameModule, GameSkin } from '@/games/types'
 
 function toSkin(item: ShopItem): GameSkin {
+  const owned = (item.owned ?? 0) > 0
   return {
     itemId: item.id,
     slot: item.slot ?? '',
@@ -12,7 +13,8 @@ function toSkin(item: ShopItem): GameSkin {
     name: item.name,
     price: item.price,
     minLevel: item.minLevel,
-    owned: (item.owned ?? 0) > 0,
+    owned,
+    wearable: item.wearable ?? owned,
     equipped: item.equipped === true,
     unlocked: item.unlocked,
   }
@@ -51,7 +53,7 @@ export function useGameCosmetics(gameModule: GameModule): GameCosmetics | undefi
       const target =
         itemId === null
           ? skins.find((skin) => skin.slot === slot && skin.equipped)
-          : skins.find((skin) => skin.itemId === itemId && skin.owned)
+          : skins.find((skin) => skin.itemId === itemId && (skin.wearable ?? skin.owned))
       if (!target) return
       setChoice({ slot, itemId })
       mutate(
@@ -64,7 +66,12 @@ export function useGameCosmetics(gameModule: GameModule): GameCosmetics | undefi
                 ...current,
                 items: current.items.map((item) => {
                   const entry = inventory.items.find((owned) => owned.itemId === item.id)
-                  return entry ? { ...item, equipped: entry.equipped } : item
+                  if (entry) return { ...item, equipped: entry.equipped }
+                  // A skin worn without being owned is not in the inventory: in its slot, it is the one chosen.
+                  if (item.type === 'GAME_SKIN' && item.gameSlug === slug && item.slot === slot) {
+                    return { ...item, equipped: itemId !== null && item.id === target.itemId }
+                  }
+                  return item
                 }),
               },
             ),
@@ -72,7 +79,7 @@ export function useGameCosmetics(gameModule: GameModule): GameCosmetics | undefi
         },
       )
     },
-    [user, skins, mutate, queryClient],
+    [user, skins, mutate, queryClient, slug],
   )
 
   if (!hasSkins) return undefined

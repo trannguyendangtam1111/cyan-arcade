@@ -57,7 +57,19 @@ class ChallengeTemplates {
 							80),
 					ChallengeTemplate.score("Sky High", "Fly past 30 pipes in one flight of Flappy Bird.", 30, 60, 120),
 					ChallengeTemplate.detail("Hang Time", "Stay in the air for 30 seconds in one flight of Flappy Bird.",
-							"seconds", 30, 45, 90)));
+							"seconds", 30, 45, 90)),
+			"brick-breaker",
+			List.of(ChallengeTemplate.detail("Brick Smasher", "Destroy 20 bricks in one game of Brick Breaker.",
+					"bricks", 20, 25, 50),
+					ChallengeTemplate.detail("Chain Reaction", "Reach a combo of 10 in Brick Breaker.", "maxCombo", 10,
+							40, 80),
+					ChallengeTemplate.detail("Power Shopper", "Catch 3 power-ups in one game of Brick Breaker.",
+							"powerUps", 3, 35, 70),
+					ChallengeTemplate.detail("Level Up", "Clear a level of Brick Breaker.", "level", 2, 40, 80),
+					ChallengeTemplate.detail("Hot Streak", "Destroy 5 bricks with Fireball in Brick Breaker.",
+							"fireBricks", 5, 50, 100),
+					ChallengeTemplate.detail("Pew Pew", "Destroy 5 bricks with the Laser in Brick Breaker.",
+							"laserBricks", 5, 50, 100)));
 
 	private static final List<Activity> ACTIVITIES = List.of(new Activity(PlayerActivity.TCG_PACK_OPENED, "Card packs",
 			List.of(ChallengeTemplate.count("Pack Opener", "Open 3 card packs today.", 3, 30, 60),

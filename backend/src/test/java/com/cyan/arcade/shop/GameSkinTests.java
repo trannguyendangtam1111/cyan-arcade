@@ -18,6 +18,7 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.hasItems;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.oneOf;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -47,7 +48,7 @@ class GameSkinTests {
 		this.mockMvc.perform(get("/api/shop/items").param("type", "GAME_SKIN"))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.items[*].type", everyItem(is("GAME_SKIN"))))
-			.andExpect(jsonPath("$.items[*].gameSlug", everyItem(is("flappy-bird"))))
+			.andExpect(jsonPath("$.items[*].gameSlug", everyItem(oneOf("flappy-bird", "brick-breaker"))))
 			.andExpect(jsonPath("$.items[*].slot", hasItems("bird", "pipes", "sky")))
 			.andExpect(jsonPath("$.items[?(@.code == 'FLAPPY_BIRD_SAKURA')].icon").value("sakura"))
 			.andExpect(jsonPath("$.items[?(@.code == 'FLAPPY_BIRD_SAKURA')].equippable").value(true))
