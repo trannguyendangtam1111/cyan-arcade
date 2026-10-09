@@ -7,7 +7,8 @@ import type { SkinsBySlot } from '../skins/skinTypes'
 import type { Brick, BrickState } from '../types/brickTypes'
 import { drawBall, drawBolt, drawDrop, drawPaddle, powerUpIcon } from './drawActors'
 import { drawBrick } from './drawBricks'
-import { bitmap, blitPart, drawText, hash, PX, rect, textWidth } from './pixel'
+import { bitmap, blitPart, drawText, PX, rect, textWidth } from './pixel'
+import { drawAmbient } from '@/games/shared/pixel/scenery'
 import { LEVEL_WORLDS, SCENE_COLUMNS, SCENE_ROWS, worldOf, type World } from './worlds'
 
 /**
@@ -73,107 +74,7 @@ export function drawWorld(ctx: Ctx, world: World, time: number, width: number = 
   const sx = (SCENE_COLUMNS - sw) / 2
   const sy = Math.min(SCENE_ROWS - sh, Math.max(0, 40 - sh / 4))
   blitPart(ctx, `scene|${world.scene}`, SCENE_COLUMNS, SCENE_ROWS, world.paint, { x: sx, y: sy, w: sw, h: sh }, { x: 0, y: 0, w: width, h: height })
-  drawAmbient(ctx, world, time, width, height)
-}
-
-/**
- * What drifts in a world: falling petals and sprinkles, rising hearts, embers and wisps, twinkles,
- * rain and fireflies. Worked out from the clock alone, so it costs nothing to keep and never
- * touches the game.
- */
-function drawAmbient(ctx: Ctx, world: World, time: number, width: number, height: number): void {
-  const { kind, colours, count } = world.ambient
-  const snap = (value: number) => Math.round(value / PX) * PX
-  for (let i = 0; i < count; i++) {
-    const a = hash(i + 1)
-    const b = hash(i * 7.3 + 2)
-    const colour = colours[i % colours.length]
-    const fall = (speed: number) => (b * height + time * speed * (0.6 + a * 0.8)) % (height + 20)
-    const rise = (speed: number) => height - ((b * height + time * speed * (0.6 + a * 0.8)) % (height + 20))
-    const sway = Math.sin(time * (0.8 + a) + i) * 14
-    let x = a * width
-    let y = 0
-    let alpha = 0.8
-    switch (kind) {
-      case 'petals':
-        x += sway
-        y = fall(26)
-        rect(ctx, snap(x), snap(y), PX * 2, PX, colour)
-        rect(ctx, snap(x) + PX * (Math.sin(time * 3 + i) > 0 ? 1 : 0), snap(y) + PX, PX, PX, '#fff1f7')
-        continue
-      case 'sprinkles':
-        x += sway * 0.4
-        y = fall(22)
-        rect(ctx, snap(x), snap(y), PX, PX * 2, colour)
-        continue
-      case 'hearts':
-        x += sway
-        y = rise(14)
-        drawPixelHeart(ctx, snap(x), snap(y), colour)
-        continue
-      case 'twinkles':
-        x = snap(a * width)
-        y = snap(b * height * 0.9)
-        alpha = Math.max(0, Math.sin(time * (1.5 + a * 2) + i * 2))
-        ctx.globalAlpha = alpha
-        rect(ctx, x, y, PX, PX, colour)
-        if (alpha > 0.75) {
-          rect(ctx, x - PX, y, PX * 3, PX, colour)
-          rect(ctx, x, y - PX, PX, PX * 3, colour)
-        }
-        ctx.globalAlpha = 1
-        continue
-      case 'wisps':
-        x = snap(a * width + Math.sin(time * 0.6 + i) * 18)
-        y = snap(height * (0.45 + b * 0.45) + Math.sin(time * 1.3 + i * 2) * 10)
-        ctx.globalAlpha = 0.25
-        rect(ctx, x - PX * 2, y - PX, PX * 5, PX * 3, colour)
-        rect(ctx, x - PX, y - PX * 2, PX * 3, PX * 5, colour)
-        ctx.globalAlpha = 0.9
-        rect(ctx, x, y - PX, PX, PX * 2, '#ffffff')
-        rect(ctx, x - PX, y, PX * 3, PX, colour)
-        ctx.globalAlpha = 1
-        continue
-      case 'rain':
-        y = fall(240)
-        ctx.globalAlpha = 0.35
-        rect(ctx, snap(x), snap(y), PX, PX * 4, colour)
-        ctx.globalAlpha = 1
-        continue
-      case 'embers':
-        x += sway * 0.6
-        y = rise(36)
-        ctx.globalAlpha = 0.5 + 0.5 * Math.abs(Math.sin(time * 5 + i))
-        rect(ctx, snap(x), snap(y), PX, PX, colour)
-        ctx.globalAlpha = 1
-        continue
-      case 'fireflies':
-        x = snap(a * width + Math.sin(time * 0.7 + i * 3) * 24)
-        y = snap(height * (0.25 + b * 0.7) + Math.cos(time * 0.9 + i) * 16)
-        ctx.globalAlpha = 0.4 + 0.6 * Math.max(0, Math.sin(time * 2 + i))
-        rect(ctx, x, y, PX, PX, colour)
-        ctx.globalAlpha *= 0.3
-        rect(ctx, x - PX, y - PX, PX * 3, PX * 3, colour)
-        ctx.globalAlpha = 1
-        continue
-      case 'pixels':
-        x += sway * 0.5
-        y = rise(18)
-        ctx.globalAlpha = 0.55
-        rect(ctx, snap(x), snap(y), PX * 2, PX * 2, colour)
-        ctx.globalAlpha = 1
-        continue
-    }
-  }
-}
-
-function drawPixelHeart(ctx: Ctx, x: number, y: number, colour: string): void {
-  ctx.save()
-  ctx.globalAlpha = 0.7
-  ctx.translate(x, y)
-  ctx.scale(PX, PX)
-  bitmap(ctx, ['#.#', '###', '.#.'], { '#': colour })
-  ctx.restore()
+  drawAmbient(ctx, world.ambient, time, width, height)
 }
 
 function drawParticles(ctx: Ctx, juice: Juice): void {

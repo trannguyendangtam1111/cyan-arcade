@@ -92,7 +92,13 @@ class ChallengeTemplates {
 							"Solve today's Daily Sudoku without a hint or a mistake, within its par time.", "dailyGrade",
 							4, 50, 100),
 					ChallengeTemplate.detail("Back to Back", "Solve the Daily Sudoku two days in a row.", "streak", 2, 50,
-							100)));
+							100)),
+			"dino-run",
+			List.of(ChallengeTemplate.score("Morning Jog", "Score 300 in one run of Dino Run.", 300, 25, 50),
+					ChallengeTemplate.score("Long Haul", "Score 1,000 in one run of Dino Run.", 1000, 45, 90),
+					ChallengeTemplate.detail("Hurdler", "Clear 25 obstacles in one run of Dino Run.", "obstacles", 25, 40,
+							80),
+					ChallengeTemplate.detail("Low Rider", "Duck 10 times in one run of Dino Run.", "ducks", 10, 30, 60)));
 
 	private static final List<Activity> ACTIVITIES = List.of(new Activity(PlayerActivity.TCG_PACK_OPENED, "Card packs",
 			List.of(ChallengeTemplate.count("Pack Opener", "Open 3 card packs today.", 3, 30, 60),

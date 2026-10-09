@@ -1,6 +1,7 @@
 import type { GameCategory, GameResponse } from '@/api/games'
 import { game2048Module } from './2048'
 import { brickBreakerModule } from './brick-breaker'
+import { dinoRunModule } from './dino-run'
 import { flappyBirdModule } from './flappy-bird'
 import { minesweeperModule } from './minesweeper'
 import { snakeModule } from './snake'
@@ -24,6 +25,7 @@ export const gameModules: readonly GameModule[] = [
   brickBreakerModule,
   wordleModule,
   sudokuModule,
+  dinoRunModule,
 ]
 
 export function findGameModule(slug: string): GameModule | undefined {

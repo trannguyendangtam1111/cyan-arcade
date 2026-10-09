@@ -107,7 +107,19 @@ class AchievementCatalog {
 			Achievement.forDetail("SUDOKU_DAILY_STREAK", "Daily Streak", "Solve the Daily Sudoku 3 days in a row.",
 					Reward.of(150, 200), "sudoku", "streak", 3),
 			Achievement.forDetail("SUDOKU_PERFECT_WEEK", "Perfect Week", "Solve the Daily Sudoku 7 days in a row.",
-					Reward.of(300, 450), "sudoku", "streak", 7));
+					Reward.of(300, 450), "sudoku", "streak", 7),
+
+			// Dino Run: its score and details are checked against the speed curve and the session's time.
+			Achievement.forScore("DINO_FIRST_RUN", "First Run", "Finish your first run in Dino Run.", Reward.of(50, 75),
+					"dino-run", 0),
+			Achievement.forScore("DINO_HUNDRED", "First Hundred", "Score 100 in one run of Dino Run.",
+					Reward.of(75, 100), "dino-run", 100),
+			Achievement.forScore("DINO_DISTANCE_RUNNER", "Distance Runner", "Score 1,000 in one run of Dino Run.",
+					Reward.of(200, 300), "dino-run", 1000),
+			Achievement.forDetail("DINO_SPEED_DEMON", "Speed Demon", "Reach Dino Run's last level (a score of 4,500).",
+					Reward.of(300, 450), "dino-run", "level", 8),
+			Achievement.forDetail("DINO_UNTOUCHABLE", "Untouchable", "Clear 50 obstacles in one run of Dino Run.",
+					Reward.of(200, 300), "dino-run", "obstacles", 50));
 
 	List<Achievement> all() {
 		return ALL;

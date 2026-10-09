@@ -42,7 +42,7 @@ const pureFiles = gameFolders.flatMap((game) =>
 
 describe('game engines and AIs', () => {
   it('exist for every game', () => {
-    expect(gameFolders.sort()).toEqual(['2048', 'brick-breaker', 'flappy-bird', 'minesweeper', 'snake', 'sudoku', 'tetris', 'wordle'])
+    expect(gameFolders.sort()).toEqual(['2048', 'brick-breaker', 'dino-run', 'flappy-bird', 'minesweeper', 'snake', 'sudoku', 'tetris', 'wordle'])
     expect(pureFiles.length).toBeGreaterThan(10)
   })
 
@@ -122,7 +122,7 @@ describe('AI mode', () => {
   const gamesWithAi = gameFolders.filter((game) => statSync(join(SRC, 'games', game, 'ai'), { throwIfNoEntry: false })?.isDirectory())
 
   it('are the games that have one', () => {
-    expect(gamesWithAi.sort()).toEqual(['2048', 'brick-breaker', 'flappy-bird', 'snake', 'sudoku', 'tetris', 'wordle'])
+    expect(gamesWithAi.sort()).toEqual(['2048', 'brick-breaker', 'dino-run', 'flappy-bird', 'snake', 'sudoku', 'tetris', 'wordle'])
     expect(code(join(SRC, 'games', 'minesweeper', 'index.ts'))).not.toMatch(/loadAi/)
   })
 
