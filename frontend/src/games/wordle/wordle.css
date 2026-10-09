@@ -1,0 +1,125 @@
+/*
+ * Word Guess's motion: tiles turning over to show their answer, a little pop as a letter is typed,
+ * a hop for a solved row and a few falling sweets. Nothing moves for players who prefer less motion:
+ * the colours simply appear.
+ *
+ * A turning tile shows the plain typed look (--flip-from-*) on its way down and its answer
+ * (--tile-*) on its way up. --flip-ms sets the pace (the AI's speed changes it), --i the tile's place.
+ */
+
+.wordle-tile {
+  background: var(--tile-bg);
+  color: var(--tile-fg);
+  border-color: var(--tile-border);
+  box-shadow: var(--tile-glow);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .wordle-flip {
+    animation: wordle-flip var(--flip-ms, 500ms) ease-in-out both;
+    animation-delay: calc(var(--i, 0) * var(--flip-ms, 500ms) * 0.35);
+  }
+
+  .wordle-pop {
+    animation: wordle-pop 130ms ease-out;
+  }
+
+  .wordle-hop {
+    animation: wordle-hop 560ms ease-out both;
+    animation-delay: calc(var(--flip-ms, 500ms) * 2.4 + var(--i, 0) * 90ms);
+  }
+
+  .wordle-confetti {
+    animation: wordle-confetti var(--fall, 1800ms) cubic-bezier(0.2, 0.6, 0.4, 1) both;
+    animation-delay: var(--wait, 0ms);
+  }
+
+  .wordle-key-press {
+    animation: wordle-key 180ms ease-out;
+  }
+}
+
+@keyframes wordle-flip {
+  0% {
+    transform: rotateX(0deg);
+    background: var(--flip-from-bg);
+    color: var(--flip-from-fg);
+    border-color: var(--flip-from-border);
+    box-shadow: none;
+  }
+  49.9% {
+    transform: rotateX(90deg);
+    background: var(--flip-from-bg);
+    color: var(--flip-from-fg);
+    border-color: var(--flip-from-border);
+    box-shadow: none;
+  }
+  50% {
+    transform: rotateX(90deg);
+    background: var(--tile-bg);
+    color: var(--tile-fg);
+    border-color: var(--tile-border);
+    box-shadow: var(--tile-glow);
+  }
+  100% {
+    transform: rotateX(0deg);
+    background: var(--tile-bg);
+    color: var(--tile-fg);
+    border-color: var(--tile-border);
+    box-shadow: var(--tile-glow);
+  }
+}
+
+@keyframes wordle-pop {
+  0% {
+    transform: scale(0.82);
+  }
+  60% {
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes wordle-hop {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  35% {
+    transform: translateY(-14px);
+  }
+  60% {
+    transform: translateY(2px);
+  }
+  80% {
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes wordle-confetti {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, -10px, 0) rotate(0deg);
+  }
+  10% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(var(--drift, 0px), 260px, 0) rotate(var(--spin, 360deg));
+  }
+}
+
+@keyframes wordle-key {
+  0% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(2px) scale(0.94);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}

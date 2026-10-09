@@ -80,6 +80,12 @@ export interface GameProps<Ai = unknown> {
   /** Call once when that run ends. The platform submits the score. */
   onGameOver: (result: GameResult) => void
   /**
+   * The platform session of the human run started last, as the server opens it; `undefined` before
+   * a run has started. For a game whose server keeps the run itself (Word Guess) and ties it to the
+   * session; other games have no use for it.
+   */
+  currentSession?: () => Promise<RunSession> | undefined
+  /**
    * Creates the game's AI. Given only to players who may use AI mode (admins); without it the game
    * is played by a human only and shows no AI controls.
    */
@@ -105,7 +111,7 @@ export interface GameSkin {
   owned: boolean
   /**
    * Whether the player may wear it now, as the server decides: owned, or included without buying it
-   * (every Brick Breaker skin for an admin). Missing means the same as `owned`.
+   * (every Brick Breaker and Word Guess skin for an admin). Missing means the same as `owned`.
    */
   wearable?: boolean
   equipped: boolean
@@ -133,6 +139,11 @@ export interface GameCosmetics {
   shopPath: string
   /** Where to sign in, coming back to this game afterwards. */
   loginPath: string
+}
+
+/** The platform session of a human run, as {@link GameProps.currentSession} gives it. */
+export interface RunSession {
+  id: string
 }
 
 /**

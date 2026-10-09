@@ -5,6 +5,7 @@ import { flappyBirdModule } from './flappy-bird'
 import { minesweeperModule } from './minesweeper'
 import { snakeModule } from './snake'
 import { tetrisModule } from './tetris'
+import { wordleModule } from './wordle'
 import type { GameDefinition, GameModule } from './types'
 
 /**
@@ -20,6 +21,7 @@ export const gameModules: readonly GameModule[] = [
   minesweeperModule,
   flappyBirdModule,
   brickBreakerModule,
+  wordleModule,
 ]
 
 export function findGameModule(slug: string): GameModule | undefined {

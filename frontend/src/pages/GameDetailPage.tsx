@@ -137,7 +137,7 @@ function TodaysChallenge({ gameSlug }: { gameSlug: string }) {
 
 function GameStage({ game, gameModule }: { game: GameDefinition; gameModule: GameModule }) {
   // The platform owns score keeping: the game only reports that a run started and how it ended.
-  const { submission, onGameStart, onGameOver, retry } = useScoreSubmission(game.slug)
+  const { submission, onGameStart, onGameOver, retry, currentSession } = useScoreSubmission(game.slug)
   // AI mode is for admins: everyone else gets the game without its AI.
   const ai = useGameAi(gameModule)
   // Skins from the shop, for a game that has them.
@@ -156,6 +156,7 @@ function GameStage({ game, gameModule }: { game: GameDefinition; gameModule: Gam
         <gameModule.Component
           onGameStart={handleGameStart}
           onGameOver={onGameOver}
+          currentSession={currentSession}
           ai={ai as (() => never) | undefined}
           cosmetics={cosmetics}
         />

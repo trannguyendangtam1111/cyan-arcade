@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 240" role="img" aria-label="Word Guess">
+  <rect width="400" height="240" fill="#ec4899"/>
+  <circle cx="54" cy="210" r="96" fill="#f9a8d4" opacity=".4"/>
+  <circle cx="352" cy="26" r="84" fill="#fbcfe8" opacity=".35"/>
+  <rect x="50" y="26" width="300" height="188" rx="22" fill="#9d174d" opacity=".18"/>
+  <g font-family="ui-rounded, 'Arial Rounded MT Bold', Arial, sans-serif" font-weight="700" font-size="30" text-anchor="middle">
+    <g transform="translate(62 36)">
+      <rect x="0" y="0" width="48" height="48" rx="12" fill="#94a3b8"/><text x="24" y="35" fill="#ffffff">C</text>
+      <rect x="57" y="0" width="48" height="48" rx="12" fill="#94a3b8"/><text x="81" y="35" fill="#ffffff">R</text>
+      <rect x="114" y="0" width="48" height="48" rx="12" fill="#94a3b8"/><text x="138" y="35" fill="#ffffff">A</text>
+      <rect x="171" y="0" width="48" height="48" rx="12" fill="#14b8a6"/><text x="195" y="35" fill="#ffffff">N</text>
+      <rect x="228" y="0" width="48" height="48" rx="12" fill="#14b8a6"/><text x="252" y="35" fill="#ffffff">E</text>
+    </g>
+    <g transform="translate(62 96)">
+      <rect x="0" y="0" width="48" height="48" rx="12" fill="#fbbf24"/><text x="24" y="35" fill="#422006">O</text>
+      <rect x="57" y="0" width="48" height="48" rx="12" fill="#14b8a6"/><text x="81" y="35" fill="#ffffff">T</text>
+      <rect x="114" y="0" width="48" height="48" rx="12" fill="#94a3b8"/><text x="138" y="35" fill="#ffffff">H</text>
+      <rect x="171" y="0" width="48" height="48" rx="12" fill="#fbbf24"/><text x="195" y="35" fill="#422006">E</text>
+      <rect x="228" y="0" width="48" height="48" rx="12" fill="#94a3b8"/><text x="252" y="35" fill="#ffffff">R</text>
+    </g>
+    <g transform="translate(62 156)">
+      <rect x="0" y="0" width="48" height="48" rx="12" fill="#14b8a6"/><text x="24" y="35" fill="#ffffff">S</text>
+      <rect x="57" y="0" width="48" height="48" rx="12" fill="#14b8a6"/><text x="81" y="35" fill="#ffffff">T</text>
+      <rect x="114" y="0" width="48" height="48" rx="12" fill="#14b8a6"/><text x="138" y="35" fill="#ffffff">O</text>
+      <rect x="171" y="0" width="48" height="48" rx="12" fill="#14b8a6"/><text x="195" y="35" fill="#ffffff">N</text>
+      <rect x="228" y="0" width="48" height="48" rx="12" fill="#14b8a6"/><text x="252" y="35" fill="#ffffff">E</text>
+    </g>
+  </g>
+</svg>

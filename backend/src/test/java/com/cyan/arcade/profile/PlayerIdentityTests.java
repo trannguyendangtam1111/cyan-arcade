@@ -196,7 +196,7 @@ class PlayerIdentityTests {
 			.andExpect(jsonPath("$.stats.games[0].slug").value("tetris"))
 			.andExpect(jsonPath("$.stats.games[0].bestScore").value(1500))
 			.andExpect(jsonPath("$.achievements[*].code", contains("FIRST_GAME", "TETRIS_10_LINES")))
-			.andExpect(jsonPath("$.achievementsTotal").value(26))
+			.andExpect(jsonPath("$.achievementsTotal").value(32))
 			.andExpect(jsonPath("$.ranks.games[?(@.game.slug == 'tetris')].allTime.score", contains(1500)))
 			.andExpect(jsonPath("$.you").value(false));
 	}

@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * What one game's rules say a finished run can look like: the contract between the platform and a
@@ -39,6 +40,16 @@ public interface RunRules {
 	 * when it is plausible
 	 */
 	Optional<String> problemWith(int score, Map<String, Integer> details, Duration elapsed);
+
+	/**
+	 * The same, knowing which session is being finished. A game that keeps its runs on the server as
+	 * well (Word Guess holds the hidden word, every guess and every hint) judges the run by what it
+	 * recorded for that session rather than by the details alone. Other games need not override it.
+	 * @param sessionId the platform session the run is submitted with
+	 */
+	default Optional<String> problemWith(UUID sessionId, int score, Map<String, Integer> details, Duration elapsed) {
+		return problemWith(score, details, elapsed);
+	}
 
 	/** How many times an action taking at least {@code fastestMs} fits in the elapsed time. */
 	static long mostActionsIn(Duration elapsed, double fastestMs) {

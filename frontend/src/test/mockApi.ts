@@ -422,8 +422,9 @@ export function mockApi({
     const item = shopItems.find((candidate) => candidate.type === type && worn.has(candidate.id))
     return item ? { code: item.code, name: item.name, icon: item.icon } : null
   }
-  /** Like the server: an admin wears every Brick Breaker skin without buying it. */
-  const freeToWear = (item: ShopItem) => currentUser?.role === 'ADMIN' && item.type === 'GAME_SKIN' && item.gameSlug === 'brick-breaker'
+  /** Like the server: an admin wears every Brick Breaker and Word Guess skin without buying it. */
+  const freeToWear = (item: ShopItem) =>
+    currentUser?.role === 'ADMIN' && item.type === 'GAME_SKIN' && ['brick-breaker', 'wordle'].includes(item.gameSlug ?? '')
   /** An item as the signed-in player sees it in the shop. */
   const playerItem = (item: ShopItem): ShopItem => {
     const count = owned.get(item.id) ?? 0

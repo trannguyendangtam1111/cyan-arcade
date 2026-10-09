@@ -110,6 +110,9 @@ export function useScoreSubmission(gameSlug: string) {
     setSubmission({ status: 'idle' })
   }, [gameSlug])
 
+  /** The session of the run started last, for a game that ties its own server state to the run. */
+  const currentSession = useCallback(() => current.current?.session, [])
+
   const onGameOver = useCallback(
     (result: GameResult) => {
       const run = current.current
@@ -126,5 +129,5 @@ export function useScoreSubmission(gameSlug: string) {
     if (run?.result !== undefined) void submit(run, run.result)
   }, [submit])
 
-  return { submission, onGameStart, onGameOver, retry }
+  return { submission, onGameStart, onGameOver, retry, currentSession }
 }

@@ -74,7 +74,21 @@ class AchievementCatalog {
 					"perfectClears", 1),
 			Achievement.forDetail("BRICK_FLAWLESS", "Flawless",
 					"Clear 5 levels without losing a life in one game of Brick Breaker.", Reward.of(400, 600),
-					"brick-breaker", "perfectClears", 5));
+					"brick-breaker", "perfectClears", 5),
+
+			// Word Guess reports only daily puzzles, one a day, so none of these can be farmed.
+			Achievement.forScore("WORDLE_FIRST_GUESS", "First Guess", "Finish your first Daily Word in Word Guess.",
+					Reward.of(50, 75), "wordle", 0),
+			Achievement.forDetail("WORDLE_SOLVED", "Word Wizard", "Solve a Daily Word in Word Guess.",
+					Reward.of(75, 100), "wordle", "solved", 1),
+			Achievement.forDetail("WORDLE_CLEAN_SWEEP", "Clean Sweep", "Solve a Daily Word without a hint.",
+					Reward.of(100, 150), "wordle", "cleanSolve", 1),
+			Achievement.forDetail("WORDLE_SPEED_THINKER", "Speed Thinker", "Solve a Daily Word in 3 guesses or fewer.",
+					Reward.of(150, 200), "wordle", "speed", 4),
+			Achievement.forDetail("WORDLE_STREAK_3", "Daily Streak", "Solve the Daily Word 3 days in a row.",
+					Reward.of(150, 200), "wordle", "streak", 3),
+			Achievement.forDetail("WORDLE_PERFECT_WEEK", "Perfect Week", "Solve the Daily Word 7 days in a row.",
+					Reward.of(300, 450), "wordle", "streak", 7));
 
 	List<Achievement> all() {
 		return ALL;

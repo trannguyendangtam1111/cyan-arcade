@@ -366,7 +366,7 @@ class LeaderboardApiTests {
 
 		this.mockMvc.perform(get("/api/users/me/ranks").session(me))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.games[*].game.slug", contains("snake", "2048", "tetris", "minesweeper", "flappy-bird", "brick-breaker")))
+			.andExpect(jsonPath("$.games[*].game.slug", contains("snake", "2048", "tetris", "minesweeper", "flappy-bird", "brick-breaker", "wordle")))
 			// This week 3,000 beats my 1,000; of all time my older 5,000 is the best.
 			.andExpect(jsonPath("$.games[1].daily.rank").value(2))
 			.andExpect(jsonPath("$.games[1].daily.score").value(1000))

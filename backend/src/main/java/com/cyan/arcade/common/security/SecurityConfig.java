@@ -85,6 +85,12 @@ class SecurityConfig {
 				// Guests may play and submit scores; a run started while signed in belongs to that player.
 				.requestMatchers(HttpMethod.POST, "/api/game-sessions", "/api/game-sessions/*/finish")
 				.permitAll()
+				// Word Guess is played on the server, by guests too; its AI is under /api/ai below.
+				.requestMatchers(HttpMethod.GET, "/api/wordle/daily", "/api/wordle/stats")
+				.permitAll()
+				.requestMatchers(HttpMethod.POST, "/api/wordle/daily/runs", "/api/wordle/practice/runs",
+						"/api/wordle/runs/*/guesses", "/api/wordle/runs/*/hints")
+				.permitAll()
 				// Administration and the games' AI mode: admins only.
 				.requestMatchers("/api/admin/**", "/api/ai/**")
 				.hasRole(Role.ADMIN.name())

@@ -69,7 +69,17 @@ class ChallengeTemplates {
 					ChallengeTemplate.detail("Hot Streak", "Destroy 5 bricks with Fireball in Brick Breaker.",
 							"fireBricks", 5, 50, 100),
 					ChallengeTemplate.detail("Pew Pew", "Destroy 5 bricks with the Laser in Brick Breaker.",
-							"laserBricks", 5, 50, 100)));
+							"laserBricks", 5, 50, 100)),
+			"wordle",
+			List.of(ChallengeTemplate.detail("Word of the Day", "Solve today's Daily Word.", "solved", 1, 30, 60),
+					ChallengeTemplate.detail("Sharp Mind", "Solve today's Daily Word in 4 guesses or fewer.", "speed",
+							3, 45, 90),
+					ChallengeTemplate.detail("No Peeking", "Solve today's Daily Word without a hint.", "cleanSolve", 1,
+							40, 80),
+					ChallengeTemplate.detail("Little Nudge", "Solve today's Daily Word with exactly one hint.",
+							"oneHintSolve", 1, 35, 70),
+					ChallengeTemplate.detail("Keep It Going", "Solve the Daily Word two days in a row.", "streak", 2,
+							50, 100)));
 
 	private static final List<Activity> ACTIVITIES = List.of(new Activity(PlayerActivity.TCG_PACK_OPENED, "Card packs",
 			List.of(ChallengeTemplate.count("Pack Opener", "Open 3 card packs today.", 3, 30, 60),

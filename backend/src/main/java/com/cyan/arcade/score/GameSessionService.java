@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import com.cyan.arcade.common.error.ApiException;
@@ -123,6 +124,18 @@ public class GameSessionService {
 
 		return new ScoreResponse(session.getId(), game.slug(), recorded.getValue(), recorded.getDurationMs(),
 				recorded.getCreatedAt(), rewards);
+	}
+
+	/**
+	 * A session as another feature may see it: its game, its owner and whether its score is in. For
+	 * a game that keeps state of its own for each run (Word Guess), to tie that state to the
+	 * platform's run. Nothing about a session can be changed this way.
+	 */
+	@Transactional(readOnly = true)
+	public Optional<RunSession> find(UUID sessionId) {
+		return this.sessions.findById(sessionId)
+			.map((session) -> new RunSession(session.getId(), this.games.requireGame(session.getGameId()).slug(),
+					session.getUserId(), session.getPlayerId(), session.getStartedAt(), session.isFinished()));
 	}
 
 	/**

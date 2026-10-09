@@ -54,7 +54,7 @@ class RunValidator {
 		if (!reported.keySet().containsAll(rules.details())) {
 			throw rejected(session, game, score, "details missing");
 		}
-		Optional<String> problem = rules.problemWith(score, reported, elapsed);
+		Optional<String> problem = rules.problemWith(session.getId(), score, reported, elapsed);
 		if (problem.isPresent()) {
 			throw rejected(session, game, score, problem.get());
 		}

@@ -128,7 +128,11 @@ Platform codes: `VALIDATION_FAILED`, `BAD_REQUEST`, `UNAUTHORIZED`, `FORBIDDEN`,
 | `GET` | `/api/admin/stats` | admin |
 | `GET` | `/api/admin/users?query={text}` | admin |
 | `POST` | `/api/admin/users/{id}/coins` | admin |
+| `GET` | `/api/wordle/daily`, `/api/wordle/stats` | public (a guest's own with `X-Player-Id`) |
+| `POST` | `/api/wordle/daily/runs`, `/api/wordle/practice/runs` | public; a guest needs `X-Player-Id` |
+| `POST` | `/api/wordle/runs/{id}/guesses`, `/api/wordle/runs/{id}/hints` | public; only the run's own player |
 | `GET` | `/api/ai/access` | admin |
+| `POST`, `GET` | `/api/ai/wordle/solve`, `/api/ai/wordle/benchmark` | admin |
 | `GET` | `/actuator/health`, `/actuator/info` | public (through nginx, only `/actuator/health`) |
 
 ### Accounts
@@ -587,7 +591,7 @@ Ends the run and records its score.
 | Field | Notes |
 | ----- | ----- |
 | `score` | Required, zero or more |
-| `details` | Up to 10 whole numbers the game reports about the run, keyed by a short name. Each game has its own, and **they are required**: Snake `length` and `level`; 2048 `highestTile` and `moves`; Tetris `lines`, `level` and `pieces`; Minesweeper `rows`, `columns`, `mines`, `revealedCells`, `flagsUsed`, `won` (0 or 1), `moves` and `seconds`; Flappy Bird `pipes`, `flaps`, `flightMs`, `seconds`, `level` and `seed`; Brick Breaker `level`, `bricks`, `maxCombo`, `powerUps`, `maxBalls`, `fireBricks`, `laserBricks`, `livesLost`, `perfectClears` and `gameMs`. They are checked against the score, and only a game's own are kept (others are ignored); they then decide achievements and daily challenges. Not stored |
+| `details` | Up to 10 whole numbers the game reports about the run, keyed by a short name. Each game has its own, and **they are required**: Snake `length` and `level`; 2048 `highestTile` and `moves`; Tetris `lines`, `level` and `pieces`; Minesweeper `rows`, `columns`, `mines`, `revealedCells`, `flagsUsed`, `won` (0 or 1), `moves` and `seconds`; Flappy Bird `pipes`, `flaps`, `flightMs`, `seconds`, `level` and `seed`; Brick Breaker `level`, `bricks`, `maxCombo`, `powerUps`, `maxBalls`, `fireBricks`, `laserBricks`, `livesLost`, `perfectClears` and `gameMs`; Word Guess `solved`, `guesses`, `hints`, `speed`, `cleanSolve`, `oneHintSolve` and `streak`, exactly as the server gave them with the run. They are checked against the score, and only a game's own are kept (others are ignored); they then decide achievements and daily challenges. Not stored |
 
 A guest finishes their run with the same `X-Player-Id` header they started it with.
 
@@ -645,6 +649,7 @@ The games run in the browser, so the server cannot know what really happened in 
 | Minesweeper | The board is 9 × 9 with 10 mines; `won` exactly when all 71 safe cells are uncovered; at most one flag per mine, on covered cells; every reveal uncovers a safe cell except a losing one, and the first is always safe; the score is exactly 10 a safe cell, plus 500 and `600 − seconds` (at least 0) for a cleared board; for a cleared board `seconds` must agree with the server's time (within 3 seconds); no more than 10 clicks a second |
 | Flappy Bird | `pipes` is the score, `level` the course's level for it and `seconds` the whole seconds of `flightMs`; the flight (game time, which stops while paused) no longer than the session; the course passes pipes at fixed times, so `flightMs` must lie between passing the last pipe scored and the next one (within 250 ms); at least one flap, and between 0.6 a second (minus two) and 20 a second |
 | Brick Breaker | `bricks` at least every brick of the levels before `level` and at most those plus its own (handcrafted levels have 44, 40, 46, 46, 58, 48, 58 and 80; Endless levels 36 to 96); the score between 100 a brick plus 500 a cleared level and 1,250 a brick (plus 20 for cracks) plus 4,100 a cleared level; `maxCombo`, `fireBricks` + `laserBricks` and `powerUps` no more than the bricks (power-ups also within the drop rates); fireball, laser or more than one ball only with a power-up; at most 8 balls; `livesLost` between 3 and 3 plus the power-ups; `perfectClears` at most the levels cleared; `gameMs` no longer than the session (plus 5% and 2 seconds) and at least 1.8 seconds per level cleared |
+| Word Guess | Played on the server, so judged against the run it recorded for the session, not by plausibility: a daily run that is over, whose word is its day's Daily Word, whose guesses replay through the rules (allowed words, at most six, ending where recorded), with at most one hint of each kind, and a score and details exactly what the [score rule](#word-guess) gives with the streak the server worked out. A session with no daily run (or a practice game) scores nothing, and a day's run cannot be tied to a second session once its score is in |
 
 The time is the server's, from opening the session to finishing it, with 2 seconds added for the requests travelling. The limits are generous: an unusual but real run always passes. **This is practical integrity protection, not a perfect anti-cheat system**: a client that plays a fake run slowly enough, with consistent numbers, can still submit it. What it cannot do is submit scores no run could produce, finish a run twice, finish someone else's run, or earn any reward from a run the server refused.
 
@@ -720,6 +725,131 @@ Where the signed-in player stands on every board, for their profile. `401 UNAUTH
 ```
 
 One entry per active game, in catalog order. A period is `null` when the player has no score in it. `bestRank` is the best all-time rank in any game (`null` until there is one).
+
+### Word Guess
+
+Word Guess (slug `wordle`) is played on the server, which keeps the hidden word: the browser sends each guess and hint and gets the run back, and the word appears only once the run is over. Its score still goes through [game sessions](#game-sessions-and-scores) like every game's. Open to guests: a signed-in player is recognised from their session, a guest by `X-Player-Id` (required for a guest to play; `400 PLAYER_ID_REQUIRED` without it).
+
+A **daily** run plays the Daily Word: one puzzle per UTC calendar day, the same word for everyone (puzzle 1 is 2026-01-01, and day N's word is the N-th in a fixed list, so any day can be worked out again), one run per player and day. A **practice** run plays a random word (never today's) and has no session, no score and no rewards.
+
+#### `GET /api/wordle/daily`
+
+Today's puzzle, without its word, and the caller's run of it (`null` if they have not started it, or for a guest without `X-Player-Id`).
+
+```json
+{
+  "puzzleNumber": 281,
+  "date": "2026-10-08",
+  "nextPuzzleAt": "2026-10-09T00:00:00Z",
+  "wordLength": 5,
+  "maxGuesses": 6,
+  "maxHints": 3,
+  "hintPercents": [100, 90, 75, 60],
+  "run": null
+}
+```
+
+A **run** looks like this:
+
+```json
+{
+  "id": "3b7c…",
+  "mode": "DAILY",
+  "puzzleNumber": 281,
+  "date": "2026-10-08",
+  "status": "SOLVED",
+  "wordLength": 5,
+  "maxGuesses": 6,
+  "guesses": [
+    { "word": "ALLEY", "feedback": ["CORRECT", "PRESENT", "ABSENT", "PRESENT", "ABSENT"] },
+    { "word": "APPLE", "feedback": ["CORRECT", "CORRECT", "CORRECT", "CORRECT", "CORRECT"] }
+  ],
+  "hints": [{ "type": "CHECK_LETTER", "position": null, "letter": "E", "present": true, "letters": null }],
+  "hintsLeft": 2,
+  "availableHints": [],
+  "answer": "APPLE",
+  "result": {
+    "score": 460,
+    "hintPercent": 90,
+    "details": { "solved": 1, "guesses": 2, "hints": 1, "speed": 5, "cleanSolve": 0, "oneHintSolve": 1, "streak": 2 }
+  },
+  "scored": false
+}
+```
+
+`status` is `PLAYING`, `SOLVED` or `FAILED`. Each letter's feedback is `CORRECT` (right place), `PRESENT` (elsewhere in the word) or `ABSENT`; letters are counted, so a letter guessed twice where the word has it once is marked once. `answer` and `result` are `null` while the run is on. `scored` says whether a daily run's score has been submitted.
+
+#### `POST /api/wordle/daily/runs`
+
+Starts today's puzzle with a game session the caller has just opened (`POST /api/game-sessions` with `gameSlug` `wordle`), or picks up the caller's unfinished run of it with a new session (after a reload, say). Answers with the run.
+
+```json
+{ "sessionId": "8a3f…" }
+```
+
+| Error | When |
+| ----- | ---- |
+| `400 WRONG_SESSION` | No such session, not a Word Guess session, already finished, or not the caller's |
+| `409 DAILY_ALREADY_PLAYED` | The caller's run of today's puzzle already has its score in |
+
+#### `POST /api/wordle/practice/runs`
+
+Starts a practice game. `201` with the run.
+
+#### `POST /api/wordle/runs/{id}/guesses`
+
+```json
+{ "word": "CRANE" }
+```
+
+Plays a guess (any case) and answers with the run. A refused guess uses nothing.
+
+| Error | When |
+| ----- | ---- |
+| `400 VALIDATION_FAILED` | Not five letters A to Z |
+| `422 WORD_NOT_IN_LIST` | Five letters, but not a word the game knows |
+| `409 RUN_OVER` | The run is solved or out of guesses |
+| `404 NOT_FOUND` | No run with that id belongs to the caller |
+
+#### `POST /api/wordle/runs/{id}/hints`
+
+```json
+{ "type": "CHECK_LETTER", "letter": "E" }
+```
+
+Takes a hint and answers with the run. One of each type per run, while it is on; each lowers the score:
+
+| Type | What it tells |
+| ---- | ------------- |
+| `REVEAL_LETTER` | The letter in one position (picked at random) that no guess has right yet. Only while at least two positions are unknown, so never the whole word |
+| `CHECK_LETTER` | Whether `letter` is in the word. Not for a letter already guessed or named by a hint |
+| `ELIMINATE_LETTERS` | Up to three letters (picked at random) that the word does not have and the player has not ruled out |
+
+`409 HINT_UNAVAILABLE` when the hint cannot be taken (used already, none left, the run is over, a reveal would give the word away, the letter is known); `400` for a check without a letter A to Z. What a hint picks is fixed by the run and the hint's place, so asking again cannot fish for another answer.
+
+#### `GET /api/wordle/stats`
+
+The caller's daily puzzles (practice does not count): `played`, `solved`, `winRate` (whole percent), `currentStreak`, `bestStreak`, `averageGuesses` (over solved puzzles, one decimal, `null` before the first), `distribution` (solved puzzles by guesses used, index 0 is one guess) and `lastPlayed`. Only for the caller: there is no public Word Guess statistics endpoint.
+
+A **streak** is solved Daily Words on consecutive UTC days, counted by the server; a failed or missed day ends it. Until today's puzzle is finished, yesterday's streak still counts.
+
+#### Score
+
+```text
+failed: 0
+solved: floor(100 × (7 − guesses) × hint% / 100) + 10 × min(streak − 1, 10)
+        hint% = 100, 90, 75, 60 for 0, 1, 2, 3 hints; streak counts today's solve
+```
+
+One guess with no hint on a first day scores 600; the most a run can score is 700. The browser submits exactly `result.score` and `result.details` when it finishes the session.
+
+#### AI mode (admins)
+
+The AI solves on the server and plays the day's puzzle through the same rules as a player (it never sees the word; it takes no hints and has no streak). Nothing is saved or scored. A player gets `403`, a guest `401`.
+
+`POST /api/ai/wordle/solve` with `{ "strategy": "BALANCED", "date": "2026-10-01" }` (`date` optional: today; from 2026-01-01 to today) answers with `puzzleNumber`, `date`, `strategy`, `solved`, `guesses`, `score`, `answer` and the `steps`: each with its `guess`, `feedback`, `candidatesBefore`, `candidatesAfter`, the strategy's `reason`, `couldWin` and a few `remaining` words. Strategies: `BALANCED`, `INFORMATION_HUNTER`, `CONSERVATIVE`, `SPEED_SOLVER`. The same strategy and day always give the same steps.
+
+`GET /api/ai/wordle/benchmark?strategy=…` plays the strategy against every possible answer: `games`, `solved`, `failed`, `averageGuesses`, `distribution`, `millis`. Worked out once per strategy.
 
 ### Health
 
@@ -821,13 +951,13 @@ Virtual items for coins; there are no real-money payments. A purchase names the 
 | `BADGE` | Worn on the profile, one at a time; owned once |
 | `TITLE` | Shown under the name on the profile, one at a time; owned once |
 | `COSMETIC` | A profile frame around the avatar, worn one at a time like a badge; owned once. `icon` names the frame (`frame-ocean`, `frame-gold`, ...) |
-| `GAME_SKIN` | A new look for one of a game's pieces, worn in that game; owned once. `gameSlug` says which game and `slot` which piece (Flappy Bird: `bird`, `pipes`, `sky`; Brick Breaker: `paddle`, `ball`, `bricks`); `icon` names the look. One is worn per slot of a game; wearing none means the game's own free look. Purely cosmetic: never shown on the profile and never part of a game's rules |
+| `GAME_SKIN` | A new look for one of a game's pieces, worn in that game; owned once. `gameSlug` says which game and `slot` which piece (Flappy Bird: `bird`, `pipes`, `sky`; Brick Breaker: `paddle`, `ball`, `bricks`; Word Guess: `tiles`, `keyboard`); `icon` names the look. One is worn per slot of a game; wearing none means the game's own free look. Purely cosmetic: never shown on the profile and never part of a game's rules |
 
 Packs are **consumable**: owning some never stops a player buying more. Badges, titles, frames and game skins are **equippable** and owned once. Every item also has `gameSlug` and `slot`, `null` except for game skins. Each item says which it is (`consumable`, `equippable`), so a new type of item needs no change to the app's logic, only a handler on the server.
 
 #### `GET /api/shop/items`
 
-Public. Query: `type` (optional, one of the types above) for one category only; anything else is `400`. For a signed-in caller, also their `balance` and `level` and, per item, `owned`, `unlocked` (level high enough), `soldOut` (owns as many as one may), `equipped` (wears it), `affordable` (has the coins) and `wearable` (may put it on now: owns it, or, for an admin, it is a Brick Breaker skin, which admins wear without buying); for a guest these are `null`. Items taken off sale are not listed and cannot be bought.
+Public. Query: `type` (optional, one of the types above) for one category only; anything else is `400`. For a signed-in caller, also their `balance` and `level` and, per item, `owned`, `unlocked` (level high enough), `soldOut` (owns as many as one may), `equipped` (wears it), `affordable` (has the coins) and `wearable` (may put it on now: owns it, or, for an admin, it is a Brick Breaker or Word Guess skin, which admins wear without buying); for a guest these are `null`. Items taken off sale are not listed and cannot be bought.
 
 ```json
 {
@@ -916,7 +1046,7 @@ Public. Query: `type` (optional, one of the types above) for one category only; 
 
 #### `PUT /api/users/me/inventory/{itemId}/equipped`, `DELETE …`
 
-Wears (`PUT`) or takes off (`DELETE`) a badge, title, frame or game skin the caller owns; wearing one takes off the other of its kind (its type, and for a game skin the same slot of the same game). An admin may also wear any Brick Breaker skin on sale without owning it: nothing is bought or charged, and the skin stays out of the inventory (it shows as `equipped` in the shop). Answers with the inventory. `404 NOT_FOUND` for an item the caller may not wear (one they do not own, another game's skin they do not own, an item no longer on sale), `400 ITEM_NOT_EQUIPPABLE` for a pack.
+Wears (`PUT`) or takes off (`DELETE`) a badge, title, frame or game skin the caller owns; wearing one takes off the other of its kind (its type, and for a game skin the same slot of the same game). An admin may also wear any Brick Breaker or Word Guess skin on sale without owning it: nothing is bought or charged, and the skin stays out of the inventory (it shows as `equipped` in the shop). Answers with the inventory. `404 NOT_FOUND` for an item the caller may not wear (one they do not own, another game's skin they do not own, an item no longer on sale), `400 ITEM_NOT_EQUIPPABLE` for a pack.
 
 ## Admin
 

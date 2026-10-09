@@ -360,12 +360,12 @@ class DailyChallengeApiTests {
 		this.generator.generateFor(this.today);
 
 		this.mockMvc.perform(get("/api/daily-challenges"))
-			.andExpect(jsonPath("$.challenges", hasSize(7)))
-			.andExpect(jsonPath("$.challenges[0:6].game.slug",
-					contains("snake", "2048", "tetris", "minesweeper", "flappy-bird", "brick-breaker")))
-			.andExpect(jsonPath("$.challenges[6].game").value(nullValue()))
-			.andExpect(jsonPath("$.challenges[6].activity.code").value("TCG_PACK_OPENED"))
-			.andExpect(jsonPath("$.challenges[6].activity.name").value("Card packs"));
+			.andExpect(jsonPath("$.challenges", hasSize(8)))
+			.andExpect(jsonPath("$.challenges[0:7].game.slug",
+					contains("snake", "2048", "tetris", "minesweeper", "flappy-bird", "brick-breaker", "wordle")))
+			.andExpect(jsonPath("$.challenges[7].game").value(nullValue()))
+			.andExpect(jsonPath("$.challenges[7].activity.code").value("TCG_PACK_OPENED"))
+			.andExpect(jsonPath("$.challenges[7].activity.name").value("Card packs"));
 	}
 
 	@Test

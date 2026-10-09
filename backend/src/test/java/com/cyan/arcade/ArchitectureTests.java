@@ -1,6 +1,8 @@
 package com.cyan.arcade;
 
+import com.cyan.arcade.score.GameSessionService;
 import com.cyan.arcade.score.RunRules;
+import com.cyan.arcade.score.RunSession;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
@@ -99,6 +101,53 @@ class ArchitectureTests {
 		.should()
 		.dependOnClassesThat(resideInAPackage("com.cyan.arcade..").and(not(resideInAPackage("com.cyan.arcade.gamerules..")))
 			.and(not(equivalentTo(RunRules.class))));
+
+	/**
+	 * Word Guess is played on the server (the hidden word must not reach the browser), so it is a
+	 * module of its own, like the card game: nothing outside it knows it exists.
+	 */
+	@ArchTest
+	static final ArchRule nothingDependsOnTheWordGuessModule = noClasses().that()
+		.resideOutsideOfPackage("com.cyan.arcade.wordle..")
+		.should()
+		.dependOnClassesThat()
+		.resideInAPackage("com.cyan.arcade.wordle..");
+
+	/**
+	 * Of the platform it uses the shared infrastructure and the game contract only: its
+	 * {@link RunRules}, and the read-only view of the game session a run is tied to. Rewards,
+	 * achievements, leaderboards and coins are the platform's, as for every game.
+	 */
+	@ArchTest
+	static final ArchRule theWordGuessModuleUsesOnlyTheGameContract = noClasses().that()
+		.resideInAPackage("com.cyan.arcade.wordle..")
+		.should()
+		.dependOnClassesThat(resideInAPackage("com.cyan.arcade..").and(not(resideInAPackage("com.cyan.arcade.wordle..")))
+			.and(not(resideInAPackage("com.cyan.arcade.common..")))
+			.and(not(equivalentTo(RunRules.class)))
+			.and(not(equivalentTo(GameSessionService.class)))
+			.and(not(equivalentTo(RunSession.class))));
+
+	/**
+	 * Its rules, word lists, daily schedule and AI are plain Java, testable on their own: no Spring,
+	 * no web, no database, nothing of the platform.
+	 */
+	@ArchTest
+	static final ArchRule theWordGuessGameIsPlainJava = noClasses().that()
+		.resideInAnyPackage("com.cyan.arcade.wordle.engine..", "com.cyan.arcade.wordle.dictionary..",
+				"com.cyan.arcade.wordle.daily..", "com.cyan.arcade.wordle.ai..")
+		.should()
+		.dependOnClassesThat()
+		.resideInAnyPackage("org.springframework..", "jakarta..", "com.cyan.arcade.common..", "com.cyan.arcade.score..");
+
+	/** The AI plays by the engine's rules; the engine knows nothing of the AI, the word lists or the calendar. */
+	@ArchTest
+	static final ArchRule theWordGuessEngineStandsAlone = noClasses().that()
+		.resideInAPackage("com.cyan.arcade.wordle.engine..")
+		.should()
+		.dependOnClassesThat()
+		.resideInAnyPackage("com.cyan.arcade.wordle.ai..", "com.cyan.arcade.wordle.dictionary..",
+				"com.cyan.arcade.wordle.daily..");
 
 	/**
 	 * And the platform knows no particular game: it finds a game's rules by its slug, so adding a

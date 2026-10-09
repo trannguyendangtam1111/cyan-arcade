@@ -15,6 +15,8 @@ interface GameSessionRepository extends Repository<GameSession, UUID> {
 
 	GameSession save(GameSession session);
 
+	Optional<GameSession> findById(UUID id);
+
 	/**
 	 * Loads a session and locks its row until the transaction ends, so two simultaneous attempts to
 	 * finish the same session are handled one after the other instead of both succeeding.
