@@ -16,7 +16,7 @@ import com.cyan.arcade.common.security.Role;
 final class SkinAccess {
 
 	/** The games whose skins every admin may wear for free. */
-	static final Set<String> FREE_FOR_ADMINS = Set.of("brick-breaker", "wordle");
+	static final Set<String> FREE_FOR_ADMINS = Set.of("brick-breaker", "wordle", "sudoku");
 
 	private SkinAccess() {
 	}

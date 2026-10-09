@@ -131,8 +131,12 @@ Platform codes: `VALIDATION_FAILED`, `BAD_REQUEST`, `UNAUTHORIZED`, `FORBIDDEN`,
 | `GET` | `/api/wordle/daily`, `/api/wordle/stats` | public (a guest's own with `X-Player-Id`) |
 | `POST` | `/api/wordle/daily/runs`, `/api/wordle/practice/runs` | public; a guest needs `X-Player-Id` |
 | `POST` | `/api/wordle/runs/{id}/guesses`, `/api/wordle/runs/{id}/hints` | public; only the run's own player |
+| `GET` | `/api/sudoku/today`, `/api/sudoku/stats` | public (a guest's own with `X-Player-Id`) |
+| `POST` | `/api/sudoku/daily/runs`, `/api/sudoku/practice/runs` | public; a guest needs `X-Player-Id` |
+| `POST` | `/api/sudoku/runs/{id}/session`, `/moves`, `/hints`, `/pause`, `/resume` | public; only the run's own player |
 | `GET` | `/api/ai/access` | admin |
 | `POST`, `GET` | `/api/ai/wordle/solve`, `/api/ai/wordle/benchmark` | admin |
+| `POST` | `/api/ai/sudoku/solve` | admin |
 | `GET` | `/actuator/health`, `/actuator/info` | public (through nginx, only `/actuator/health`) |
 
 ### Accounts
@@ -591,7 +595,7 @@ Ends the run and records its score.
 | Field | Notes |
 | ----- | ----- |
 | `score` | Required, zero or more |
-| `details` | Up to 10 whole numbers the game reports about the run, keyed by a short name. Each game has its own, and **they are required**: Snake `length` and `level`; 2048 `highestTile` and `moves`; Tetris `lines`, `level` and `pieces`; Minesweeper `rows`, `columns`, `mines`, `revealedCells`, `flagsUsed`, `won` (0 or 1), `moves` and `seconds`; Flappy Bird `pipes`, `flaps`, `flightMs`, `seconds`, `level` and `seed`; Brick Breaker `level`, `bricks`, `maxCombo`, `powerUps`, `maxBalls`, `fireBricks`, `laserBricks`, `livesLost`, `perfectClears` and `gameMs`; Word Guess `solved`, `guesses`, `hints`, `speed`, `cleanSolve`, `oneHintSolve` and `streak`, exactly as the server gave them with the run. They are checked against the score, and only a game's own are kept (others are ignored); they then decide achievements and daily challenges. Not stored |
+| `details` | Up to 10 whole numbers the game reports about the run, keyed by a short name. Each game has its own, and **they are required**: Snake `length` and `level`; 2048 `highestTile` and `moves`; Tetris `lines`, `level` and `pieces`; Minesweeper `rows`, `columns`, `mines`, `revealedCells`, `flagsUsed`, `won` (0 or 1), `moves` and `seconds`; Flappy Bird `pipes`, `flaps`, `flightMs`, `seconds`, `level` and `seed`; Brick Breaker `level`, `bricks`, `maxCombo`, `powerUps`, `maxBalls`, `fireBricks`, `laserBricks`, `livesLost`, `perfectClears` and `gameMs`; Word Guess `solved`, `guesses`, `hints`, `speed`, `cleanSolve`, `oneHintSolve` and `streak`, exactly as the server gave them with the run; Sudoku `difficulty`, `seconds`, `mistakes`, `hints`, `solvedLevel`, `flawless`, `cleanSolve`, `speedSolve`, `streak` and `dailyGrade`, likewise. They are checked against the score, and only a game's own are kept (others are ignored); they then decide achievements and daily challenges. Not stored |
 
 A guest finishes their run with the same `X-Player-Id` header they started it with.
 
@@ -650,6 +654,7 @@ The games run in the browser, so the server cannot know what really happened in 
 | Flappy Bird | `pipes` is the score, `level` the course's level for it and `seconds` the whole seconds of `flightMs`; the flight (game time, which stops while paused) no longer than the session; the course passes pipes at fixed times, so `flightMs` must lie between passing the last pipe scored and the next one (within 250 ms); at least one flap, and between 0.6 a second (minus two) and 20 a second |
 | Brick Breaker | `bricks` at least every brick of the levels before `level` and at most those plus its own (handcrafted levels have 44, 40, 46, 46, 58, 48, 58 and 80; Endless levels 36 to 96); the score between 100 a brick plus 500 a cleared level and 1,250 a brick (plus 20 for cracks) plus 4,100 a cleared level; `maxCombo`, `fireBricks` + `laserBricks` and `powerUps` no more than the bricks (power-ups also within the drop rates); fireball, laser or more than one ball only with a power-up; at most 8 balls; `livesLost` between 3 and 3 plus the power-ups; `perfectClears` at most the levels cleared; `gameMs` no longer than the session (plus 5% and 2 seconds) and at least 1.8 seconds per level cleared |
 | Word Guess | Played on the server, so judged against the run it recorded for the session, not by plausibility: a daily run that is over, whose word is its day's Daily Word, whose guesses replay through the rules (allowed words, at most six, ending where recorded), with at most one hint of each kind, and a score and details exactly what the [score rule](#word-guess) gives with the streak the server worked out. A session with no daily run (or a practice game) scores nothing, and a day's run cannot be tied to a second session once its score is in |
+| Sudoku | Played on the server, so judged against the run it recorded for the session: a ranked run that is solved or failed, whose clues have exactly one solution (the stored one) and, for a daily run, are its day's stored puzzle; whose actions replay through the rules to the recorded end with the recorded mistakes and hints (at most three); and a score and details exactly what the [score rule](#sudoku) gives with the server's playing time (pauses left out) and streak. A relaxed game, or a session with no run, scores nothing |
 
 The time is the server's, from opening the session to finishing it, with 2 seconds added for the requests travelling. The limits are generous: an unusual but real run always passes. **This is practical integrity protection, not a perfect anti-cheat system**: a client that plays a fake run slowly enough, with consistent numbers, can still submit it. What it cannot do is submit scores no run could produce, finish a run twice, finish someone else's run, or earn any reward from a run the server refused.
 
@@ -850,6 +855,84 @@ The AI solves on the server and plays the day's puzzle through the same rules as
 `POST /api/ai/wordle/solve` with `{ "strategy": "BALANCED", "date": "2026-10-01" }` (`date` optional: today; from 2026-01-01 to today) answers with `puzzleNumber`, `date`, `strategy`, `solved`, `guesses`, `score`, `answer` and the `steps`: each with its `guess`, `feedback`, `candidatesBefore`, `candidatesAfter`, the strategy's `reason`, `couldWin` and a few `remaining` words. Strategies: `BALANCED`, `INFORMATION_HUNTER`, `CONSERVATIVE`, `SPEED_SOLVER`. The same strategy and day always give the same steps.
 
 `GET /api/ai/wordle/benchmark?strategy=…` plays the strategy against every possible answer: `games`, `solved`, `failed`, `averageGuesses`, `distribution`, `millis`. Worked out once per strategy.
+
+### Sudoku
+
+Sudoku (slug `sudoku`) is played on the server, which keeps the solution and the clock: the browser sends every digit entered or cleared and gets the run back, and the solution appears only once the run is over. Its score goes through [game sessions](#game-sessions-and-scores) like every game's. Open to guests on the same terms as Word Guess (`400 PLAYER_ID_REQUIRED` without a session or `X-Player-Id`). Boards are 81 characters in reading order, `0` for an empty cell; cells are numbered 0 (top left) to 80.
+
+#### `GET /api/sudoku/today`
+
+Today's daily puzzle (UTC) without its digits (they come with a run, when the clock starts), the rules, and the caller's runs:
+
+```json
+{
+  "puzzleNumber": 282, "date": "2026-10-09", "difficulty": "HARD", "nextPuzzleAt": "2026-10-10T00:00:00Z",
+  "maxHints": 3, "mistakeLimit": 3, "hintPercents": [100, 90, 75, 60],
+  "difficulties": [{ "id": "EASY", "label": "Easy", "level": 1, "baseScore": 1000, "parSeconds": 360 }],
+  "daily": null,
+  "practice": null
+}
+```
+
+`daily` is the caller's run of today's puzzle; `practice` their practice game in progress. A run:
+
+| Field | |
+| ----- | - |
+| `id`, `mode` (`DAILY`/`PRACTICE`), `ranked`, `difficulty`, `puzzleNumber`, `date` | Which game |
+| `status` | `PLAYING`, `SOLVED`, `FAILED` (third mistake of a ranked game) or `ABANDONED` |
+| `givens`, `values`, `revealed` | The clues, the board now, and the cells a hint revealed (locked) |
+| `wrong` | Ranked runs: cells holding a digit that is not the solution's. Relaxed: always empty |
+| `mistakes`, `mistakeRule` (`SOLUTION`/`CONFLICT`), `mistakeLimit` (3, or 0 for none) | |
+| `hintsUsed`, `hintsLeft`, `hints` | Hints taken, each `{ type, cell }` |
+| `elapsedMs`, `paused` | The server's playing time, pauses left out |
+| `solution` | Once the run is over; `null` before |
+| `result` | Once a ranked run is solved or failed: `score`, `seconds`, `timePercent`, `mistakePercent`, `hintPercent` and the `details` to submit |
+| `scored` | Whether its session has been finished |
+
+#### `POST /api/sudoku/daily/runs`
+
+`{ "sessionId": "…" }`: starts today's puzzle with a game session the caller has just opened (`gameSlug` `sudoku`), or picks up their run of it with the new session. `400 WRONG_SESSION` (not the caller's unfinished Sudoku session), `409 DAILY_ALREADY_PLAYED` (its score is in).
+
+#### `POST /api/sudoku/practice/runs`
+
+`{ "difficulty": "EXPERT", "sessionId": "…" }` starts a ranked practice game; without `sessionId`, a relaxed one (no score, no statistics, conflicts as mistakes, no limit). A new practice game abandons the caller's practice game in progress. `201` with the run; `503 PUZZLE_UNAVAILABLE` if no puzzle could be made.
+
+#### `POST /api/sudoku/runs/{id}/session`
+
+`{ "sessionId": "…" }`: ties a ranked run to a new session after a reload, so its score can still be submitted. `409 RUN_NOT_RANKED` for a relaxed game; `409 RUN_OVER` once scored or abandoned.
+
+#### `POST /api/sudoku/runs/{id}/moves`
+
+`{ "moves": [{ "cell": 2, "digit": 4 }, { "cell": 3, "digit": 0 }] }` (1 to 81 moves, applied in order; `digit` 0 clears) answers with the run. One refused move refuses them all: `409 CELL_LOCKED` (a clue or a revealed cell), `409 RUN_OVER`, `400 VALIDATION_FAILED`. Entering the digit a cell already holds changes nothing. A move starts a paused clock again. Pencil marks are never sent: they are the player's own.
+
+#### `POST /api/sudoku/runs/{id}/hints`
+
+`{ "type": "REVEAL", "cell": 40 }` (`cell` optional, for a reveal). Answers `{ "run": …, "hint": { "type", "cell", "digit", "technique", "explanation": […], "highlight": […], "eliminations": ["8:7"] } }`: `REVEAL` fills and locks the cell; `FIND` points at a cell logic can solve now (`digit` 0); `EXPLAIN` lists the deductions to the next digit. `409 HINT_UNAVAILABLE` (none left, a clue, a cell already right, no logical step) uses nothing up.
+
+#### `POST /api/sudoku/runs/{id}/pause`, `POST /api/sudoku/runs/{id}/resume`
+
+Stop and start the run's clock. Both answer with the run and are safe to repeat.
+
+#### `GET /api/sudoku/stats`
+
+The caller's ranked games (relaxed ones do not count), `daily` and `practice` apart: `played` (finished and abandoned), `completed`, `winRate`, `averageSeconds`, `averageMistakes` and `averageHints` (over solved runs, `null` before the first), `bestSeconds` per difficulty; and `currentStreak`, `bestStreak` (daily puzzles solved on consecutive UTC days) and `lastDaily`. Only for the caller.
+
+#### Score
+
+```text
+failed: 0
+solved: floor(base × time% × mistakes% × hints% / 1,000,000)
+        base      = 1,000 Easy · 2,000 Medium · 3,500 Hard · 5,000 Expert
+        time%     = 150 − 50 × seconds / par, between 50 and 150   (par 360, 600, 900, 1500 s)
+        mistakes% = 100 − 15 per mistake, at least 55
+        hints%    = 100, 90, 75, 60 for 0, 1, 2, 3 hints
+```
+
+At most 7,500. The browser submits exactly `result.score` and `result.details` when it finishes the session.
+
+#### AI mode (admins)
+
+`POST /api/ai/sudoku/solve` with `{ "strategy": "TEACHING", "date": "2026-10-01" }` (a day's daily puzzle; today when left out) or `{ "strategy": "FAST", "difficulty": "EXPERT", "seed": 7 }` (a practice puzzle; a new seed when left out). Strategies: `STEP_BY_STEP`, `FAST`, `TEACHING`. Answers with the puzzle (`givens`, `solution`, `difficulty`, `seed`, `date`, `puzzleNumber`), the `moves` (each with `kind` `PLACE`/`ELIMINATE`/`GUESS`/`BACKTRACK`, `cell`, `digit`, `eliminations`, `cleared`, `technique`, `text`, `lesson`, `highlight`), `guesses`, `backtracks`, the `techniques` used, `searched` (cells logic could not place), `trimmed` and `millis`. The same puzzle and strategy always give the same moves. Nothing is saved or scored. A player gets `403`, a guest `401`.
 
 ### Health
 

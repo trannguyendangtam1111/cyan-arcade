@@ -1,0 +1,178 @@
+/*
+ * Sudoku's board and number pad. Colours come from the worn skin as --sd-* variables (see skins/).
+ * Sizes follow the board's own width (container query units), so all 81 cells stay legible from a
+ * 320px phone to a desktop. Motion is a small pop when a digit lands and a short glow on a finished
+ * row, column or box; nothing moves for players who prefer less motion.
+ */
+
+.sudoku-board {
+  container-type: inline-size;
+  background: var(--sd-box);
+  border: 3px solid var(--sd-frame);
+  border-radius: 1rem;
+  overflow: hidden;
+  touch-action: manipulation;
+}
+
+.sudoku-cell {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  min-width: 0;
+  background: var(--sd-cell);
+  color: var(--sd-entry);
+  font-family: var(--font-display);
+  font-size: 6.4cqi;
+  font-weight: 600;
+  line-height: 1;
+  border-right: 1px solid var(--sd-line);
+  border-bottom: 1px solid var(--sd-line);
+  transition: background-color 120ms ease;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+.sudoku-cell[data-col='2'],
+.sudoku-cell[data-col='5'] {
+  border-right: 2px solid var(--sd-box);
+}
+
+.sudoku-cell[data-row='2'],
+.sudoku-cell[data-row='5'] {
+  border-bottom: 2px solid var(--sd-box);
+}
+
+.sudoku-cell[data-col='8'] {
+  border-right: 0;
+}
+
+.sudoku-cell[data-row='8'] {
+  border-bottom: 0;
+}
+
+.sudoku-cell[data-kind='given'] {
+  color: var(--sd-given);
+  font-weight: 700;
+}
+
+.sudoku-cell[data-related='true'] {
+  background: var(--sd-related);
+}
+
+.sudoku-cell[data-same='true'] {
+  background: var(--sd-same);
+}
+
+.sudoku-cell[data-hint='true'] {
+  background: var(--sd-hint);
+}
+
+.sudoku-cell[data-error='true'] {
+  background: var(--sd-wrong);
+  color: var(--sd-wrong-ink);
+}
+
+/* Mistakes are also marked by shape, not colour alone: a short bar under the digit. */
+.sudoku-cell[data-error='true']::after {
+  content: '';
+  position: absolute;
+  bottom: 12%;
+  left: 32%;
+  right: 32%;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--sd-wrong-ink);
+}
+
+.sudoku-cell[data-selected='true'] {
+  background: var(--sd-selected);
+  color: var(--sd-selected-ink);
+}
+
+.sudoku-cell:focus-visible {
+  outline: 3px solid var(--sd-frame);
+  outline-offset: -3px;
+  z-index: 1;
+}
+
+.sudoku-notes {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  width: 100%;
+  height: 100%;
+  padding: 6%;
+  color: var(--sd-note);
+  font-family: var(--font-sans);
+  font-size: 2.9cqi;
+  font-weight: 700;
+}
+
+.sudoku-notes > span {
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+}
+
+.sudoku-notes > span[data-same='true'] {
+  background: var(--sd-selected);
+  color: var(--sd-selected-ink);
+}
+
+.sudoku-notes > span[data-gone='true'] {
+  text-decoration: line-through;
+  opacity: 0.45;
+}
+
+.sudoku-pad-key {
+  background: var(--sd-pad-key);
+  color: var(--sd-pad-ink);
+  border: 2px solid var(--sd-pad-border);
+  box-shadow: var(--sd-pad-shadow);
+  border-radius: var(--sd-pad-radius);
+}
+
+.sudoku-pad-key[data-active='true'] {
+  background: var(--sd-pad-active);
+  color: var(--sd-pad-active-ink);
+}
+
+.sudoku-pad-key:disabled {
+  opacity: 0.45;
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .sudoku-pop {
+    animation: sudoku-pop 180ms ease-out;
+  }
+
+  .sudoku-glow {
+    animation: sudoku-glow 700ms ease-out;
+  }
+}
+
+@keyframes sudoku-pop {
+  0% {
+    transform: scale(0.6);
+  }
+  70% {
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes sudoku-glow {
+  0% {
+    box-shadow: inset 0 0 0 999px rgb(255 255 255 / 0);
+  }
+  35% {
+    box-shadow: inset 0 0 0 999px rgb(34 211 238 / 0.35);
+  }
+  100% {
+    box-shadow: inset 0 0 0 999px rgb(255 255 255 / 0);
+  }
+}

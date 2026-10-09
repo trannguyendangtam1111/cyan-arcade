@@ -48,7 +48,7 @@ class GameSkinTests {
 		this.mockMvc.perform(get("/api/shop/items").param("type", "GAME_SKIN"))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.items[*].type", everyItem(is("GAME_SKIN"))))
-			.andExpect(jsonPath("$.items[*].gameSlug", everyItem(oneOf("flappy-bird", "brick-breaker", "wordle"))))
+			.andExpect(jsonPath("$.items[*].gameSlug", everyItem(oneOf("flappy-bird", "brick-breaker", "wordle", "sudoku"))))
 			.andExpect(jsonPath("$.items[*].slot", hasItems("bird", "pipes", "sky")))
 			.andExpect(jsonPath("$.items[?(@.code == 'FLAPPY_BIRD_SAKURA')].icon").value("sakura"))
 			.andExpect(jsonPath("$.items[?(@.code == 'FLAPPY_BIRD_SAKURA')].equippable").value(true))

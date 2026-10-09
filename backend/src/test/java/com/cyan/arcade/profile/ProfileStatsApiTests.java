@@ -44,7 +44,7 @@ class ProfileStatsApiTests {
 			.andExpect(jsonPath("$.coins").value(0))
 			.andExpect(jsonPath("$.coinsEarned").value(0))
 			.andExpect(jsonPath("$.achievementsUnlocked").value(0))
-			.andExpect(jsonPath("$.achievementsTotal").value(32))
+			.andExpect(jsonPath("$.achievementsTotal").value(40))
 			.andExpect(jsonPath("$.games").isEmpty())
 			.andExpect(jsonPath("$.activities[*].key",
 					contains("tcg.packsOpened", "tcg.cardsCollected", "tcg.uniqueCards")))

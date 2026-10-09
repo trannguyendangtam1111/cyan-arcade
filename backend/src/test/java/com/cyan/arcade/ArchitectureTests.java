@@ -150,6 +150,45 @@ class ArchitectureTests {
 				"com.cyan.arcade.wordle.daily..");
 
 	/**
+	 * Sudoku is played on the server too (the solution must not reach the browser), so it is a
+	 * module of its own: nothing outside it knows it exists.
+	 */
+	@ArchTest
+	static final ArchRule nothingDependsOnTheSudokuModule = noClasses().that()
+		.resideOutsideOfPackage("com.cyan.arcade.sudoku..")
+		.should()
+		.dependOnClassesThat()
+		.resideInAPackage("com.cyan.arcade.sudoku..");
+
+	/** Of the platform it uses the shared infrastructure and the game contract only, like Word Guess. */
+	@ArchTest
+	static final ArchRule theSudokuModuleUsesOnlyTheGameContract = noClasses().that()
+		.resideInAPackage("com.cyan.arcade.sudoku..")
+		.should()
+		.dependOnClassesThat(resideInAPackage("com.cyan.arcade..").and(not(resideInAPackage("com.cyan.arcade.sudoku..")))
+			.and(not(resideInAPackage("com.cyan.arcade.common..")))
+			.and(not(equivalentTo(RunRules.class)))
+			.and(not(equivalentTo(GameSessionService.class)))
+			.and(not(equivalentTo(RunSession.class))));
+
+	/** Its engine, daily schedule and AI are plain Java, testable on their own. */
+	@ArchTest
+	static final ArchRule theSudokuGameIsPlainJava = noClasses().that()
+		.resideInAnyPackage("com.cyan.arcade.sudoku.engine..", "com.cyan.arcade.sudoku.daily..",
+				"com.cyan.arcade.sudoku.ai..")
+		.should()
+		.dependOnClassesThat()
+		.resideInAnyPackage("org.springframework..", "jakarta..", "com.cyan.arcade.common..", "com.cyan.arcade.score..");
+
+	/** The AI and the calendar build on the engine; the engine knows nothing of them. */
+	@ArchTest
+	static final ArchRule theSudokuEngineStandsAlone = noClasses().that()
+		.resideInAPackage("com.cyan.arcade.sudoku.engine..")
+		.should()
+		.dependOnClassesThat()
+		.resideInAnyPackage("com.cyan.arcade.sudoku.ai..", "com.cyan.arcade.sudoku.daily..");
+
+	/**
 	 * And the platform knows no particular game: it finds a game's rules by its slug, so adding a
 	 * game changes nothing outside {@code gamerules} and the catalogs.
 	 */

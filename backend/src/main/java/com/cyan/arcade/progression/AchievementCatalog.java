@@ -88,7 +88,26 @@ class AchievementCatalog {
 			Achievement.forDetail("WORDLE_STREAK_3", "Daily Streak", "Solve the Daily Word 3 days in a row.",
 					Reward.of(150, 200), "wordle", "streak", 3),
 			Achievement.forDetail("WORDLE_PERFECT_WEEK", "Perfect Week", "Solve the Daily Word 7 days in a row.",
-					Reward.of(300, 450), "wordle", "streak", 7));
+					Reward.of(300, 450), "wordle", "streak", 7),
+
+			// Sudoku's numbers are the server's own (it plays the run), so none can be claimed. Level
+			// flags hold the difficulty (1 Easy to 4 Expert) when met; daily ones come once a day.
+			Achievement.forDetail("SUDOKU_FIRST_SOLVE", "First Solve", "Solve your first Sudoku.", Reward.of(50, 75),
+					"sudoku", "solvedLevel", 1),
+			Achievement.forDetail("SUDOKU_HARD_THINKER", "Hard Thinker", "Solve a Hard Sudoku.", Reward.of(150, 200),
+					"sudoku", "solvedLevel", 3),
+			Achievement.forDetail("SUDOKU_EXPERT_SOLVER", "Expert Solver", "Solve an Expert Sudoku.",
+					Reward.of(300, 450), "sudoku", "solvedLevel", 4),
+			Achievement.forDetail("SUDOKU_NO_MISTAKES", "No Mistakes",
+					"Solve a Medium or harder Sudoku without a mistake.", Reward.of(100, 150), "sudoku", "flawless", 2),
+			Achievement.forDetail("SUDOKU_NO_HINTS", "No Hints", "Solve a Hard or Expert Sudoku without a hint.",
+					Reward.of(150, 200), "sudoku", "cleanSolve", 3),
+			Achievement.forDetail("SUDOKU_SPEED_SOLVER", "Speed Solver", "Solve a Sudoku in half its par time.",
+					Reward.of(150, 200), "sudoku", "speedSolve", 1),
+			Achievement.forDetail("SUDOKU_DAILY_STREAK", "Daily Streak", "Solve the Daily Sudoku 3 days in a row.",
+					Reward.of(150, 200), "sudoku", "streak", 3),
+			Achievement.forDetail("SUDOKU_PERFECT_WEEK", "Perfect Week", "Solve the Daily Sudoku 7 days in a row.",
+					Reward.of(300, 450), "sudoku", "streak", 7));
 
 	List<Achievement> all() {
 		return ALL;

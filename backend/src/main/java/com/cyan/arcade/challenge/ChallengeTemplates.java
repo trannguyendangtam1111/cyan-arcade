@@ -79,7 +79,20 @@ class ChallengeTemplates {
 					ChallengeTemplate.detail("Little Nudge", "Solve today's Daily Word with exactly one hint.",
 							"oneHintSolve", 1, 35, 70),
 					ChallengeTemplate.detail("Keep It Going", "Solve the Daily Word two days in a row.", "streak", 2,
-							50, 100)));
+							50, 100)),
+			"sudoku",
+			// "dailyGrade" is 0 except for a solved daily puzzle: 1, 2 without a hint, 3 without a hint
+			// or a mistake, 4 for that within par time.
+			List.of(ChallengeTemplate.detail("Grid of the Day", "Solve today's Daily Sudoku.", "dailyGrade", 1, 30, 60),
+					ChallengeTemplate.detail("Pencil Down", "Solve today's Daily Sudoku without a hint.", "dailyGrade", 2,
+							40, 80),
+					ChallengeTemplate.detail("Steady Hand", "Solve today's Daily Sudoku without a hint or a mistake.",
+							"dailyGrade", 3, 45, 90),
+					ChallengeTemplate.detail("Beat the Clock",
+							"Solve today's Daily Sudoku without a hint or a mistake, within its par time.", "dailyGrade",
+							4, 50, 100),
+					ChallengeTemplate.detail("Back to Back", "Solve the Daily Sudoku two days in a row.", "streak", 2, 50,
+							100)));
 
 	private static final List<Activity> ACTIVITIES = List.of(new Activity(PlayerActivity.TCG_PACK_OPENED, "Card packs",
 			List.of(ChallengeTemplate.count("Pack Opener", "Open 3 card packs today.", 3, 30, 60),

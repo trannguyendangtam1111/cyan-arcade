@@ -4,6 +4,7 @@ import { brickBreakerModule } from './brick-breaker'
 import { flappyBirdModule } from './flappy-bird'
 import { minesweeperModule } from './minesweeper'
 import { snakeModule } from './snake'
+import { sudokuModule } from './sudoku'
 import { tetrisModule } from './tetris'
 import { wordleModule } from './wordle'
 import type { GameDefinition, GameModule } from './types'
@@ -22,6 +23,7 @@ export const gameModules: readonly GameModule[] = [
   flappyBirdModule,
   brickBreakerModule,
   wordleModule,
+  sudokuModule,
 ]
 
 export function findGameModule(slug: string): GameModule | undefined {

@@ -91,6 +91,13 @@ class SecurityConfig {
 				.requestMatchers(HttpMethod.POST, "/api/wordle/daily/runs", "/api/wordle/practice/runs",
 						"/api/wordle/runs/*/guesses", "/api/wordle/runs/*/hints")
 				.permitAll()
+				// So is Sudoku, which keeps the solution on the server; its AI is under /api/ai below.
+				.requestMatchers(HttpMethod.GET, "/api/sudoku/today", "/api/sudoku/stats")
+				.permitAll()
+				.requestMatchers(HttpMethod.POST, "/api/sudoku/daily/runs", "/api/sudoku/practice/runs",
+						"/api/sudoku/runs/*/session", "/api/sudoku/runs/*/moves", "/api/sudoku/runs/*/hints",
+						"/api/sudoku/runs/*/pause", "/api/sudoku/runs/*/resume")
+				.permitAll()
 				// Administration and the games' AI mode: admins only.
 				.requestMatchers("/api/admin/**", "/api/ai/**")
 				.hasRole(Role.ADMIN.name())
