@@ -54,6 +54,9 @@ class Game {
 	@Column(nullable = false)
 	private boolean featured;
 
+	@Column(nullable = false)
+	private boolean scored;
+
 	protected Game() {
 	}
 
@@ -93,6 +96,14 @@ class Game {
 	/** Whether the hub puts this game in the spotlight. */
 	boolean isFeatured() {
 		return this.featured;
+	}
+
+	/**
+	 * Whether the platform keeps this game's scores: sessions, leaderboards, XP, coins and daily
+	 * challenges. A game whose results cannot be trusted (two players on one device) is not.
+	 */
+	boolean isScored() {
+		return this.scored;
 	}
 
 }

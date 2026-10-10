@@ -25,6 +25,7 @@ const flappyBird: GameResponse = {
   thumbnailUrl: '/thumbnails/flappy-bird.svg',
   accentColor: '#0ea5e9',
   featured: false,
+  scored: true,
 }
 const games = [...catalogFixture, flappyBird]
 

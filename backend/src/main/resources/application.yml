@@ -91,6 +91,55 @@ app:
     rewards: ${DAILY_LOGIN_REWARDS:50,60,70,80,100,125,200}
     bonus-item: ${DAILY_LOGIN_BONUS_ITEM:EXTRA_PACK}
     bonus-item-units: 1
+  chess:
+    # Move hints a player (not an admin) gets per game, counted on the server; a new game brings new
+    # ones. Guests get none: hints need an account.
+    hints-per-game: ${CHESS_HINTS_PER_GAME:3}
+    # Engine requests (hints, engine moves, evaluations, review starts) one account may make a minute.
+    requests-per-minute: ${CHESS_ENGINE_REQUESTS_PER_MINUTE:30}
+    engine:
+      # The Stockfish binary (on Windows the .exe may be left off). The default is where
+      # tools/stockfish/install.sh puts it, relative to backend/ (also found when the application is
+      # started from the repository root, as IDEs do); the Docker image sets its own.
+      path: ${STOCKFISH_PATH:../tools/stockfish/dist/stockfish}
+      # Engine processes at most; each searches for one request at a time.
+      pool-size: ${STOCKFISH_POOL_SIZE:2}
+      # Requests that may wait for a free engine (each at most acquire-timeout); more get 503 at once.
+      max-waiting: ${STOCKFISH_MAX_WAITING:4}
+      acquire-timeout: ${STOCKFISH_ACQUIRE_TIMEOUT:3s}
+      # UCI Threads and Hash (MB) per engine process.
+      threads: ${STOCKFISH_THREADS:1}
+      hash-mb: ${STOCKFISH_HASH_MB:32}
+      # A starting engine loads its neural network before it answers isready.
+      ready-timeout: ${STOCKFISH_READY_TIMEOUT:30s}
+      # An engine told to stop must answer within this, or it is ended and replaced.
+      stop-grace: ${STOCKFISH_STOP_GRACE:2s}
+    hints:
+      movetime: ${CHESS_HINT_MOVETIME:600ms}
+      depth: ${CHESS_HINT_DEPTH:18}
+    evaluation:
+      # Admin evaluations: the depth used when none is asked for, the deepest allowed, a time cap on
+      # any evaluation, and the principal variations allowed.
+      default-depth: ${CHESS_EVALUATION_DEFAULT_DEPTH:16}
+      max-depth: ${CHESS_EVALUATION_MAX_DEPTH:22}
+      max-movetime: ${CHESS_EVALUATION_MAX_MOVETIME:3s}
+      max-lines: ${CHESS_EVALUATION_MAX_LINES:3}
+    review:
+      # Game reviews: time and depth per position, the depth below which a move is left unrated,
+      # the longest game, reviews running at once and waiting, how long a review is kept, and after
+      # how long without being asked about a running review is cancelled.
+      movetime: ${CHESS_REVIEW_MOVETIME:250ms}
+      depth: ${CHESS_REVIEW_DEPTH:16}
+      min-depth: ${CHESS_REVIEW_MIN_DEPTH:8}
+      max-plies: ${CHESS_REVIEW_MAX_PLIES:300}
+      concurrent: ${CHESS_REVIEW_CONCURRENT:1}
+      queue: ${CHESS_REVIEW_QUEUE:4}
+      kept-for: ${CHESS_REVIEW_KEPT_FOR:30m}
+      abandoned-after: ${CHESS_REVIEW_ABANDONED_AFTER:1m}
+    cache:
+      # Engine results kept in memory for reuse (keyed by engine version, settings and position).
+      max-entries: ${CHESS_ANALYSIS_CACHE_ENTRIES:5000}
+      ttl: ${CHESS_ANALYSIS_CACHE_TTL:6h}
   tcg:
     # Packs one player may open per day (UTC). 0 means no limit.
     daily-pack-limit: ${TCG_DAILY_PACK_LIMIT:10}

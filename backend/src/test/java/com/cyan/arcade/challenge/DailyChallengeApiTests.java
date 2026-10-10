@@ -308,9 +308,10 @@ class DailyChallengeApiTests {
 	// --- Generating ------------------------------------------------------------------------------
 
 	@Test
-	void generatingADayGivesEveryGameAndEveryActivityOneChallengeAndIsSafeToRepeat() {
+	void generatingADayGivesEveryScoredGameAndEveryActivityOneChallengeAndIsSafeToRepeat() {
 		LocalDate day = LocalDate.of(2031, 3, 14);
-		int activeGames = this.jdbc.queryForObject("SELECT count(*) FROM games WHERE active", Integer.class);
+		// An unscored game (Chess) gets none: its challenge could never be met by a scored run.
+		int activeGames = this.jdbc.queryForObject("SELECT count(*) FROM games WHERE active AND scored", Integer.class);
 		int activities = new ChallengeTemplates().activities().size();
 
 		assertThat(this.generator.generateFor(day)).isEqualTo(activeGames + activities);

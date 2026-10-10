@@ -189,6 +189,66 @@ class ArchitectureTests {
 		.resideInAnyPackage("com.cyan.arcade.sudoku.ai..", "com.cyan.arcade.sudoku.daily..");
 
 	/**
+	 * Chess is played on the server too (the server judges every move), so it is a module of its own:
+	 * nothing outside it knows it exists.
+	 */
+	@ArchTest
+	static final ArchRule nothingDependsOnTheChessModule = noClasses().that()
+		.resideOutsideOfPackage("com.cyan.arcade.chess..")
+		.should()
+		.dependOnClassesThat()
+		.resideInAPackage("com.cyan.arcade.chess..");
+
+	/**
+	 * Its games are not scored, so of the platform it uses only the shared infrastructure: no game
+	 * sessions, scores, rewards, leaderboards, coins or accounts.
+	 */
+	@ArchTest
+	static final ArchRule theChessModuleUsesOnlyCommon = noClasses().that()
+		.resideInAPackage("com.cyan.arcade.chess..")
+		.should()
+		.dependOnClassesThat(resideInAPackage("com.cyan.arcade..").and(not(resideInAPackage("com.cyan.arcade.chess..")))
+			.and(not(resideInAPackage("com.cyan.arcade.common.."))));
+
+	/** Its rules are plain Java, testable on their own, and know nothing of Stockfish or of analysis. */
+	@ArchTest
+	static final ArchRule theChessRulesArePlainJava = noClasses().that()
+		.resideInAPackage("com.cyan.arcade.chess.engine..")
+		.should()
+		.dependOnClassesThat()
+		.resideInAnyPackage("org.springframework..", "jakarta..", "com.cyan.arcade.common..",
+				"com.cyan.arcade.score..", "com.cyan.arcade.chess.stockfish..", "com.cyan.arcade.chess.analysis..")
+		.orShould()
+		.dependOnClassesThat()
+		.resideInAPackage("com.cyan.arcade.chess");
+
+	/**
+	 * The Stockfish adapter speaks UCI and runs processes, and that is all: no Spring, no web, no
+	 * database, and nothing of chess rules, matches or players. Engine communication stays in it.
+	 */
+	@ArchTest
+	static final ArchRule theStockfishAdapterStandsAlone = noClasses().that()
+		.resideInAPackage("com.cyan.arcade.chess.stockfish..")
+		.should()
+		.dependOnClassesThat()
+		.resideInAnyPackage("org.springframework..", "jakarta..", "com.cyan.arcade.common..",
+				"com.cyan.arcade.chess.engine..", "com.cyan.arcade.chess.analysis..")
+		.orShould()
+		.dependOnClassesThat()
+		.resideInAPackage("com.cyan.arcade.chess");
+
+	/** The analysis policies (evaluations, move labels, difficulties) are plain Java too. */
+	@ArchTest
+	static final ArchRule theChessAnalysisIsPlainJava = noClasses().that()
+		.resideInAPackage("com.cyan.arcade.chess.analysis..")
+		.should()
+		.dependOnClassesThat()
+		.resideInAnyPackage("org.springframework..", "jakarta..", "com.cyan.arcade.common..")
+		.orShould()
+		.dependOnClassesThat()
+		.resideInAPackage("com.cyan.arcade.chess");
+
+	/**
 	 * And the platform knows no particular game: it finds a game's rules by its slug, so adding a
 	 * game changes nothing outside {@code gamerules} and the catalogs.
 	 */

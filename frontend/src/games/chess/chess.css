@@ -1,0 +1,51 @@
+/*
+ * Chess's board. Colours come from the worn skin (inline styles); sizes follow the board's own
+ * width (container query units), so coordinates stay legible from a 320px phone to a desktop.
+ * Motion is a small lift for the selected piece and a pulse on a king in check; nothing moves for
+ * players who prefer less motion.
+ */
+
+.chess-board {
+  container-type: inline-size;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.chess-coord {
+  font-size: max(0.55rem, 2.7cqi);
+  pointer-events: none;
+}
+
+.chess-piece {
+  pointer-events: none;
+  transition: transform 140ms ease;
+}
+
+.chess-piece-lifted {
+  transform: translateY(-4%) scale(1.06);
+}
+
+@keyframes chess-check-pulse {
+  0%,
+  100% {
+    opacity: 0.75;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.chess-check {
+  animation: chess-check-pulse 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chess-piece {
+    transition: none;
+  }
+  .chess-piece-lifted {
+    transform: none;
+  }
+  .chess-check {
+    animation: none;
+  }
+}

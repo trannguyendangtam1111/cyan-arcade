@@ -40,7 +40,10 @@ const periodFromParam = (param: string | null): LeaderboardPeriod =>
 export function LeaderboardPage() {
   useDocumentTitle('Leaderboard')
   const [params, setParams] = useSearchParams()
-  const { games, isPending, isError, refetch } = useGameCatalog()
+  const catalog = useGameCatalog()
+  const { isPending, isError, refetch } = catalog
+  // Only scored games have boards.
+  const games = catalog.games?.filter((game) => game.scored)
 
   const selected = games?.find((game) => game.slug === params.get('game')) ?? games?.[0]
   const period = periodFromParam(params.get('period'))

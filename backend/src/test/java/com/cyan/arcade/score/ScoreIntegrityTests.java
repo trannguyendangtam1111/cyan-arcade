@@ -25,12 +25,10 @@ import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -172,11 +170,15 @@ class ScoreIntegrityTests {
 
 		// A hundred apples take at least a hundred moves of 70 ms: seven seconds, not one.
 		playedFor(run, Duration.ofSeconds(1));
-		finish(run, 100, snake(100), player, null).andExpect(status().isBadRequest())
+		String refusal = finish(run, 100, snake(100), player, null).andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.code").value("SCORE_REJECTED"))
 			// The player is told no, and nothing about why or where the line is.
 			.andExpect(jsonPath("$.detail").value("Score submission rejected."))
-			.andExpect(content().string(not(containsString("70"))));
+			.andReturn()
+			.getResponse()
+			.getContentAsString();
+		// The session id and the timestamp may hold a "70" by chance; nothing else may.
+		assertThat(refusal.replaceAll("\"(instance|timestamp)\":\"[^\"]*\"", "")).doesNotContain("70");
 		assertThat(scoreCount(run)).isZero();
 
 		// The run stays open, and once it really could have been played it is accepted.

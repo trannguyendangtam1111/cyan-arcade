@@ -25,6 +25,7 @@ const minesweeper: GameResponse = {
   thumbnailUrl: '/thumbnails/minesweeper.svg',
   accentColor: '#e11d48',
   featured: false,
+  scored: true,
 }
 const games = [...catalogFixture, minesweeper]
 

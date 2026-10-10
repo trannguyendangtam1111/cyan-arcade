@@ -19,6 +19,7 @@ const brickBreaker: GameResponse = {
   thumbnailUrl: '/thumbnails/brick-breaker.svg',
   accentColor: '#f97316',
   featured: false,
+  scored: true,
 }
 const games = [...catalogFixture, brickBreaker]
 

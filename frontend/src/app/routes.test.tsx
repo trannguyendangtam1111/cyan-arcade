@@ -19,6 +19,7 @@ const unreleasedGame: GameResponse = {
   thumbnailUrl: '/thumbnails/memory.svg',
   accentColor: '#0d9488',
   featured: false,
+  scored: true,
 }
 
 describe('home page', () => {

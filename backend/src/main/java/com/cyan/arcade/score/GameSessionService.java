@@ -42,6 +42,8 @@ public class GameSessionService {
 
 	static final String SESSION_EXPIRED = "SESSION_EXPIRED";
 
+	static final String GAME_NOT_SCORED = "GAME_NOT_SCORED";
+
 	private static final Logger log = LoggerFactory.getLogger(GameSessionService.class);
 
 	private final GameSessionRepository sessions;
@@ -77,6 +79,10 @@ public class GameSessionService {
 	@Transactional
 	public GameSessionResponse start(String gameSlug, Long userId, UUID playerId) {
 		GameInfo game = this.games.requireActiveGame(gameSlug);
+		// No session, no score: an unscored game's results never reach leaderboards or rewards.
+		if (!game.scored()) {
+			throw new ConflictException(GAME_NOT_SCORED, game.name() + " is not scored");
+		}
 		// A run has one owner. With an account there is no reason to also keep which browser it came from.
 		UUID guestId = (userId == null) ? playerId : null;
 		GameSession session = this.sessions.save(GameSession.start(game.id(), userId, guestId, this.clock.instant()));

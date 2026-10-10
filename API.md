@@ -134,9 +134,17 @@ Platform codes: `VALIDATION_FAILED`, `BAD_REQUEST`, `UNAUTHORIZED`, `FORBIDDEN`,
 | `GET` | `/api/sudoku/today`, `/api/sudoku/stats` | public (a guest's own with `X-Player-Id`) |
 | `POST` | `/api/sudoku/daily/runs`, `/api/sudoku/practice/runs` | public; a guest needs `X-Player-Id` |
 | `POST` | `/api/sudoku/runs/{id}/session`, `/moves`, `/hints`, `/pause`, `/resume` | public; only the run's own player |
+| `POST` | `/api/chess/matches` | public; a guest needs `X-Player-Id` |
+| `GET` | `/api/chess/matches/current` | public (a guest's own with `X-Player-Id`) |
+| `GET` | `/api/chess/matches/{id}` | public; only the match's own player |
+| `POST` | `/api/chess/matches/{id}/moves`, `/undo`, `/redo`, `/resign`, `/draw` | public; only the match's own player |
+| `POST` | `/api/chess/matches/{id}/hint` | signed in; only the match's own player; a player 3 per match, an admin no limit |
 | `GET` | `/api/ai/access` | admin |
 | `POST`, `GET` | `/api/ai/wordle/solve`, `/api/ai/wordle/benchmark` | admin |
 | `POST` | `/api/ai/sudoku/solve` | admin |
+| `GET` | `/api/ai/chess/engine` | admin |
+| `POST` | `/api/ai/chess/matches`, `/api/ai/chess/matches/{id}/engine-move`, `/evaluation` | admin; only the admin's own match |
+| `POST`, `GET`, `DELETE` | `/api/ai/chess/matches/{id}/review` | admin; only the admin's own match |
 | `GET` | `/actuator/health`, `/actuator/info` | public (through nginx, only `/actuator/health`) |
 
 ### Accounts
@@ -524,7 +532,8 @@ Returns every active game in display order.
     "category": "ARCADE",
     "thumbnailUrl": "/thumbnails/snake.svg",
     "accentColor": "#22c55e",
-    "featured": true
+    "featured": true,
+    "scored": true
   }
 ]
 ```
@@ -539,6 +548,7 @@ Returns every active game in display order.
 | `thumbnailUrl` | string | Path or URL of the card artwork. |
 | `accentColor`  | string | The game's identity color as `#rrggbb`. |
 | `featured`     | boolean | Whether the hub puts the game in the spotlight on its home page. |
+| `scored`       | boolean | Whether the platform keeps the game's scores. `false` (Chess): no score sessions, no leaderboard, no rewards, no daily challenge. |
 
 #### `GET /api/games/{slug}`
 
@@ -583,6 +593,7 @@ Responds `201 Created` with a `Location` header:
 | ----- | ---- |
 | `400 VALIDATION_FAILED` | `gameSlug` is missing or blank |
 | `404 NOT_FOUND` | No active game has that slug |
+| `409 GAME_NOT_SCORED` | The game is not scored (`scored: false` in the catalog), so it has no score sessions |
 
 #### `POST /api/game-sessions/{id}/finish`
 
@@ -663,7 +674,7 @@ The time is the server's, from opening the session to finishing it, with 2 secon
 
 #### `GET /api/leaderboards/{gameSlug}`
 
-One page of a game's leaderboard for a period. Public and read-only: there is no endpoint that writes to a leaderboard, and every entry is read from scores recorded through game sessions.
+One page of a game's leaderboard for a period. Public and read-only: there is no endpoint that writes to a leaderboard, and every entry is read from scores recorded through game sessions. An unscored game has no leaderboard (`404 NOT_FOUND`), and `/api/users/me/ranks` leaves it out.
 
 | Query parameter | Default | Notes |
 | --------------- | ------- | ----- |
@@ -934,6 +945,203 @@ At most 7,500. The browser submits exactly `result.score` and `result.details` w
 #### AI mode (admins)
 
 `POST /api/ai/sudoku/solve` with `{ "strategy": "TEACHING", "date": "2026-10-01" }` (a day's daily puzzle; today when left out) or `{ "strategy": "FAST", "difficulty": "EXPERT", "seed": 7 }` (a practice puzzle; a new seed when left out). Strategies: `STEP_BY_STEP`, `FAST`, `TEACHING`. Answers with the puzzle (`givens`, `solution`, `difficulty`, `seed`, `date`, `puzzleNumber`), the `moves` (each with `kind` `PLACE`/`ELIMINATE`/`GUESS`/`BACKTRACK`, `cell`, `digit`, `eliminations`, `cleared`, `technique`, `text`, `lesson`, `highlight`), `guesses`, `backtracks`, the `techniques` used, `searched` (cells logic could not place), `trimmed` and `millis`. The same puzzle and strategy always give the same moves. Nothing is saved or scored. A player gets `403`, a guest `401`.
+
+### Chess
+
+Two players on one device (or, for admins, one against Stockfish), played on the server: every action is judged against the position the match's recorded moves make. Chess is unscored, so none of this touches game sessions, scores or rewards. A guest is recognised by `X-Player-Id` (required to start a match); someone else's match answers `404`. Every change sends the match's `revision` it was chosen in.
+
+#### `POST /api/chess/matches`
+
+`{ "mode": "LOCAL" }` (a game against Stockfish starts from the AI endpoints below; any other mode here is `400 MODE_NOT_ALLOWED`). Starts a match from the starting position and abandons the caller's match in progress, if any. `201 Created` with the match.
+
+#### `GET /api/chess/matches/current`
+
+The caller's match in progress, else their last finished one, for picking a game up after a reload. `204 No Content` when there is none (or the caller is an unknown guest).
+
+#### `GET /api/chess/matches/{id}`
+
+One match. Every endpoint answers with this shape:
+
+```json
+{
+  "id": "4b6f…",
+  "mode": "LOCAL",
+  "status": "ACTIVE",
+  "revision": 1,
+  "fen": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1",
+  "turn": "BLACK",
+  "fullmoveNumber": 1,
+  "halfmoveClock": 0,
+  "check": false,
+  "checkedKing": null,
+  "legalMoves": [
+    { "from": "e7", "to": "e5", "promotion": null, "uci": "e7e5", "san": "e5", "capture": false, "castling": false, "enPassant": false }
+  ],
+  "lastMove": { "ply": 1, "color": "WHITE", "from": "e2", "to": "e4", "uci": "e2e4", "san": "e4" },
+  "history": [{ "ply": 1, "color": "WHITE", "from": "e2", "to": "e4", "uci": "e2e4", "san": "e4" }],
+  "captured": { "WHITE": [], "BLACK": [] },
+  "material": { "WHITE": 39, "BLACK": 39 },
+  "drawOffer": null,
+  "claimableDraw": null,
+  "repetitions": 1,
+  "canUndo": true,
+  "canRedo": false,
+  "result": null,
+  "createdAt": "2026-10-10T08:00:00Z",
+  "updatedAt": "2026-10-10T08:00:03Z"
+}
+```
+
+| Field | Notes |
+| ----- | ----- |
+| `status` | `ACTIVE`, `FINISHED` (with a `result`) or `ABANDONED` (left for a new match) |
+| `legalMoves` | Every legal move of the side to move, with its SAN; empty once the match is over. A promoting pawn has one entry per piece (`q`, `r`, `b`, `n`) |
+| `captured` | By side, the pieces it has taken (`p n b r q`) |
+| `material` | By side, pawn 1, knight and bishop 3, rook 5, queen 9 on the board |
+| `claimableDraw` | `THREEFOLD_REPETITION` or `FIFTY_MOVE_RULE` when the side to move may claim a draw, else `null` |
+| `result` | `{ "winner": "WHITE" \| "BLACK" \| null, "termination": …, "score": "1-0" \| "0-1" \| "1/2-1/2" }`. Terminations: `CHECKMATE`, `RESIGNATION` (with a winner); `STALEMATE`, `INSUFFICIENT_MATERIAL`, `FIVEFOLD_REPETITION`, `SEVENTY_FIVE_MOVE_RULE` (automatic draws); `THREEFOLD_REPETITION`, `FIFTY_MOVE_RULE` (claimed); `AGREEMENT` |
+
+#### `POST /api/chess/matches/{id}/moves`
+
+`{ "revision": 1, "move": "e7e5" }`, the move in UCI (`e7e8q` for a promotion, which must name its piece; castling is the king's move, `e1g1`).
+
+#### `POST /api/chess/matches/{id}/undo`, `POST /api/chess/matches/{id}/redo`
+
+`{ "revision": 2 }`. Takes the last move back, or replays the move taken back last (judged again like any move). Local matches only; a new move clears what redo could replay.
+
+#### `POST /api/chess/matches/{id}/resign`
+
+`{ "revision": 2, "side": "WHITE" }`: that side resigns and loses.
+
+#### `POST /api/chess/matches/{id}/draw`
+
+`{ "revision": 2, "action": "OFFER", "side": "WHITE" }`. `OFFER` (offering back when the other side has offered agrees), `ACCEPT` and `DECLINE` (by the side the offer was made to; an offer also lapses when that side moves), `CLAIM` (the side to move, while `claimableDraw` is set).
+
+| Error | When |
+| ----- | ---- |
+| `400 PLAYER_ID_REQUIRED` | Neither signed in nor `X-Player-Id` |
+| `400 VALIDATION_FAILED` | A field is missing or not of its form (`move` must look like UCI) |
+| `400 ILLEGAL_MOVE` | The move is not legal in the position, including a promotion without its piece |
+| `404 NOT_FOUND` | No such match, or not the caller's |
+| `409 STALE_REVISION` | `revision` is not the match's: it changed since (another tab, a repeated request). Reload it |
+| `409 MATCH_OVER` | The match is finished or abandoned |
+| `409 NOTHING_TO_UNDO`, `409 NOTHING_TO_REDO` | No move to take back or replay |
+| `409 NO_DRAW_OFFER`, `409 DRAW_ALREADY_OFFERED` | There is no offer to answer, or the side has offered already |
+| `409 DRAW_NOT_CLAIMABLE`, `409 NOT_YOUR_TURN` | No draw can be claimed now, or the claim is not by the side to move |
+
+Every match also carries `engine` (for a game against Stockfish: `{ "side": "WHITE", "difficulty": "CLUB", "label": "Club", "setting": "Elo setting 1600" }`, else `null`) and the caller's `hints`: `{ "allowed": true, "used": 1, "limit": 3, "remaining": 2 }` for a player, `limit` and `remaining` `null` (no limit) for an admin, `allowed: false` for a guest.
+
+#### `POST /api/chess/matches/{id}/hint`
+
+Signed-in players only (`401` for a guest). `{ "revision": 4 }`. Stockfish's best move for the current position, for the side to move (in a game against Stockfish, only on the player's turn). It changes nothing on the board and does not change the revision.
+
+```json
+{
+  "revision": 4,
+  "move": { "from": "g1", "to": "f3", "promotion": null, "uci": "g1f3", "san": "Nf3" },
+  "line": ["Nf3", "Nc6", "Bb5"],
+  "depth": 18,
+  "engine": "Stockfish 19",
+  "hints": { "allowed": true, "used": 1, "limit": 3, "remaining": 2 }
+}
+```
+
+A player has `app.chess.hints-per-game` (3) per match, counted on the server; an admin has no limit. A hint is counted only once it has been given: a refusal, an engine failure or a timeout costs nothing. Simultaneous requests are judged one after the other.
+
+| Error | When |
+| ----- | ---- |
+| `401 UNAUTHORIZED` | Not signed in |
+| `403 NOT_YOUR_SIDE` | Against Stockfish, it is the engine's turn |
+| `404 NOT_FOUND` | Not the caller's match |
+| `409 STALE_REVISION`, `409 MATCH_OVER` | As for moves |
+| `409 HINT_LIMIT_REACHED` | No hints left in this match |
+| `429 TOO_MANY_ENGINE_REQUESTS` | More than `app.chess.requests-per-minute` engine requests from the account in a minute |
+| `503 ENGINE_UNAVAILABLE` | Stockfish is not installed or does not start |
+| `503 ENGINE_BUSY` | Every engine is busy and the short wait ran out |
+| `503 ENGINE_FAILED` | The engine crashed, timed out or answered with something unusable; nothing changed |
+
+### Chess AI mode (admins)
+
+Everything under `/api/ai/chess/**` is for admins: a player gets `403`, a guest `401`. Requests name a match the caller owns; the server replays its moves itself, and no endpoint takes a position, a score or UCI. The engine errors above apply to every one that searches.
+
+#### `GET /api/ai/chess/engine`
+
+Whether the engine runs (an engine is started if none is running yet), what it offers and the limits:
+
+```json
+{
+  "available": true,
+  "engine": "Stockfish 19",
+  "difficulties": [{ "id": "CLUB", "label": "Club", "setting": "Elo setting 1600", "movetimeMs": 300 }],
+  "defaultDepth": 16,
+  "maxDepth": 22,
+  "maxLines": 3,
+  "hintsPerGame": 3
+}
+```
+
+Difficulties: `BEGINNER` (`Skill Level` 0), `CASUAL` (`Skill Level` 6), `CLUB` (`UCI_Elo` 1600), `ADVANCED` (`UCI_Elo` 2200), `MAXIMUM` (full strength). The Elo values are engine settings, not guaranteed human-equivalent ratings.
+
+#### `POST /api/ai/chess/matches`
+
+`{ "playerSide": "BLACK", "difficulty": "CLUB" }`. A game against Stockfish, which plays the other side; the caller's match in progress, if any, is left. `201` with the match (`mode: "AI"`). The player moves, resigns and claims draws through the ordinary match endpoints, for their own side only (`403 NOT_YOUR_SIDE` otherwise); takebacks (`409 UNDO_NOT_ALLOWED`) and draw offers (`409 DRAW_OFFER_NOT_SUPPORTED`) are refused.
+
+#### `POST /api/ai/chess/matches/{id}/engine-move`
+
+`{ "revision": 0 }`. Stockfish plays its move: searched with the difficulty's settings, checked by the rules and played like a player's move. Answers with the match. `409 NOT_ENGINE_TURN` when it is the player's turn, `409 NOT_AN_ENGINE_GAME` for a local match, `409 STALE_REVISION`/`MATCH_OVER` as for moves. A failure changes nothing; send it again to retry.
+
+#### `POST /api/ai/chess/matches/{id}/evaluation`
+
+`{ "revision": 3, "depth": 16, "lines": 2 }` (depth up to `maxDepth`, lines up to `maxLines`; `400 ANALYSIS_NOT_ALLOWED` beyond them, and `400 VALIDATION_FAILED` for a depth outside 1 to 40 or lines outside 1 to 5, which no configuration allows). Read only. Every evaluation is from White's side, and a mate is never given as centipawns:
+
+```json
+{
+  "revision": 3,
+  "sideToMove": "BLACK",
+  "evaluation": { "kind": "MATE", "centipawns": 0, "mateIn": 1, "matingSide": "BLACK", "display": "#-1",
+                  "whiteWinPercent": 0.0, "favoured": "BLACK", "exact": true },
+  "bestMove": { "from": "d8", "to": "h4", "promotion": null, "uci": "d8h4", "san": "Qh4#" },
+  "lines": [{ "rank": 1, "evaluation": { "…": "…" }, "san": ["Qh4#"], "uci": ["d8h4"], "depth": 16 }],
+  "depth": 16,
+  "requestedDepth": 16,
+  "complete": true,
+  "finished": false,
+  "engine": "Stockfish 19"
+}
+```
+
+`kind` is `CENTIPAWNS` (with `centipawns`, positive for White) or `MATE` (`mateIn` moves, `matingSide`; `mateIn: 0` is mate on the board). `display` is `+0.34`, `-1.20`, `#3`, `#-2`, `1-0` or `0-1`. `whiteWinPercent` (0 to 100) is for an evaluation bar. `complete: false` means the search was cut short or reported only a bound: the numbers are provisional. For a finished game, `finished: true` and the evaluation is the result, without a search.
+
+#### `POST /api/ai/chess/matches/{id}/review`, `GET …/review`, `DELETE …/review`
+
+A review of a finished game (`409 REVIEW_NEEDS_FINISHED_GAME` otherwise; `400 REVIEW_TOO_LONG` beyond `max-plies`; `503 REVIEW_QUEUE_FULL` when too many are waiting). `POST` starts it (`202`), or returns the one running or done; `GET` gives its progress (`404` when there is none) and keeps it alive (one nobody asks about for a minute is cancelled); `DELETE` cancels it.
+
+```json
+{
+  "matchId": "4b6f…",
+  "status": "RUNNING",
+  "analyzed": 3,
+  "total": 5,
+  "moves": [
+    {
+      "ply": 1, "color": "WHITE", "uci": "f2f3", "san": "f3", "from": "f2", "to": "f3",
+      "fenBefore": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", "fenAfter": "…",
+      "best": { "from": "e2", "to": "e4", "promotion": null, "uci": "e2e4", "san": "e4" },
+      "bestLine": ["e4", "e5", "Nf3"],
+      "before": { "…": "evaluation before the move, White's side" },
+      "after": { "…": "evaluation after the move" },
+      "classification": "INACCURACY",
+      "loss": 7.4,
+      "depth": 14
+    }
+  ],
+  "engine": "Stockfish 19",
+  "settings": { "movetimeMs": 250, "depth": 16, "minDepth": 8 },
+  "error": null
+}
+```
+
+`status`: `QUEUED`, `RUNNING`, `DONE`, `CANCELLED`, `FAILED`. A move appears once both positions around it are analysed. `classification`: `BEST`, `EXCELLENT`, `GOOD`, `INACCURACY`, `MISTAKE`, `BLUNDER`, `FORCED` (the only legal move) or `UNRATED` (the analysis was too shallow to judge); `loss` is the mover's lost winning chances in percentage points (see ARCHITECTURE.md, Move labels). Reviewing changes nothing in the match.
 
 ### Health
 

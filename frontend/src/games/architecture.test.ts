@@ -42,7 +42,7 @@ const pureFiles = gameFolders.flatMap((game) =>
 
 describe('game engines and AIs', () => {
   it('exist for every game', () => {
-    expect(gameFolders.sort()).toEqual(['2048', 'brick-breaker', 'dino-run', 'flappy-bird', 'minesweeper', 'snake', 'sudoku', 'tetris', 'wordle'])
+    expect(gameFolders.sort()).toEqual(['2048', 'brick-breaker', 'chess', 'dino-run', 'flappy-bird', 'minesweeper', 'snake', 'sudoku', 'tetris', 'wordle'])
     expect(pureFiles.length).toBeGreaterThan(10)
   })
 
@@ -88,9 +88,10 @@ describe('game modules', () => {
 
   it('never call the API themselves: the platform submits scores', () => {
     for (const path of sourceFiles(join(SRC, 'games'))) {
-      // Word Guess and Sudoku are played on the server, which keeps the hidden word or the solution,
-      // so they may use the shared transport (and its error type) for their own endpoints. See the next rule.
-      const transport = (specifier: string) => /^games\/(wordle|sudoku)\//.test(name(path)) && specifier === '@/api/client'
+      // Word Guess, Sudoku and Chess are played on the server, which keeps the hidden word or the
+      // solution, or judges every move, so they may use the shared transport (and its error type) for
+      // their own endpoints. See the next rule.
+      const transport = (specifier: string) => /^games\/(wordle|sudoku|chess)\//.test(name(path)) && specifier === '@/api/client'
       expect(imports(path).filter((specifier) => specifier.startsWith('@/api/') && !transport(specifier) && !path.endsWith('registry.ts') && !path.endsWith('types.ts')), name(path)).toEqual([])
       expect(code(path), name(path)).not.toMatch(/\bfetch\s*\(/)
     }
@@ -99,6 +100,7 @@ describe('game modules', () => {
   it.each([
     ['Word Guess', 'wordle'],
     ['Sudoku', 'sudoku'],
+    ['Chess', 'chess'],
   ])('%s calls its own endpoints from one file, and none of the platform\'s', (_, game) => {
     const callers = sourceFiles(join(SRC, 'games', game)).filter((path) => /\bapiFetch\b/.test(code(path)))
     expect(callers.map(name)).toEqual([`games/${game}/api/${game}Api.ts`])
@@ -109,7 +111,7 @@ describe('game modules', () => {
 
   it('no other game calls the API', () => {
     const callers = sourceFiles(join(SRC, 'games')).filter((path) => /\bapiFetch\b/.test(code(path)))
-    expect(callers.map(name).sort()).toEqual(['games/sudoku/api/sudokuApi.ts', 'games/wordle/api/wordleApi.ts'])
+    expect(callers.map(name).sort()).toEqual(['games/chess/api/chessApi.ts', 'games/sudoku/api/sudokuApi.ts', 'games/wordle/api/wordleApi.ts'])
   })
 })
 
@@ -122,7 +124,7 @@ describe('AI mode', () => {
   const gamesWithAi = gameFolders.filter((game) => statSync(join(SRC, 'games', game, 'ai'), { throwIfNoEntry: false })?.isDirectory())
 
   it('are the games that have one', () => {
-    expect(gamesWithAi.sort()).toEqual(['2048', 'brick-breaker', 'dino-run', 'flappy-bird', 'snake', 'sudoku', 'tetris', 'wordle'])
+    expect(gamesWithAi.sort()).toEqual(['2048', 'brick-breaker', 'chess', 'dino-run', 'flappy-bird', 'snake', 'sudoku', 'tetris', 'wordle'])
     expect(code(join(SRC, 'games', 'minesweeper', 'index.ts'))).not.toMatch(/loadAi/)
   })
 

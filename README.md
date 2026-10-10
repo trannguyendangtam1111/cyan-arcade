@@ -1,6 +1,6 @@
 # Cyan Arcade
 
-**Cyan Arcade is a modular full-stack game platform built with React and Spring Boot.** It is a cute, colorful browser arcade: Snake, 2048, Tetris, Minesweeper, Flappy Bird, Brick Breaker, Word Guess, Sudoku and Dino Run, with AI players for all but Minesweeper and shop skins for Flappy Bird, Brick Breaker, Word Guess, Sudoku and Dino Run, leaderboards, accounts with XP and achievements, daily challenges, and booster packs of real **Pokémon** and **One Piece** trading cards, opened on the server.
+**Cyan Arcade is a modular full-stack game platform built with React and Spring Boot.** It is a cute, colorful browser arcade: Snake, 2048, Tetris, Minesweeper, Flappy Bird, Brick Breaker, Word Guess, Sudoku, Dino Run and Chess (two players on one device, or against the real **Stockfish** engine), with AI players for all but Minesweeper and shop skins for Flappy Bird, Brick Breaker, Word Guess, Sudoku, Dino Run and Chess, leaderboards, accounts with XP and achievements, daily challenges, and booster packs of real **Pokémon** and **One Piece** trading cards, opened on the server.
 
 It is a portfolio project. The goal is a polished, extensible platform where **adding a game means adding a module**: the platform is not rewritten and existing games are not touched.
 
@@ -37,6 +37,8 @@ Everything listed below works end to end, in Docker, with 431 backend and 594 fr
 - **Word Guess**, an original five-letter word game in a cute minimal style (rounded tiles that turn over, a shake for an unknown word, confetti for a solve; all CSS, no image assets). One **Daily Word** per UTC day, the same for everyone and fixed by the date alone, plus unlimited practice words. It is played on the server, which keeps the word and judges every guess (letters are counted, so duplicates are marked right), so the word never reaches the browser early and every score is checked against the run the server recorded. Fewer guesses score more, solving days in a row adds a streak bonus, and three hints (reveal a letter, check a letter, remove letters) cost part of the score. Daily statistics and streaks, six achievements, five daily challenges, tile sets and keyboards in the shop, and an admin-only AI that solves on the server by candidate elimination with four strategies (Balanced, Information Hunter, Conservative, Speed Solver), played back at 0.25x to 8x.
 - **Sudoku**, in a cute minimal style (the grid is the centrepiece; colours and CSS only). Puzzles are generated from a seed with exactly one solution (proved by search) and graded by the techniques logic needs, not by clue count: Easy (full houses, hidden singles), Medium (naked singles), Hard (locked candidates, pairs, triples), Expert (X-Wing, Y-Wing, Swordfish, hidden triples). One **Daily Sudoku** per UTC day for everyone (difficulty by weekday, stored once made), and practice games of every difficulty, ranked or relaxed. It is played on the server like Word Guess: the solution stays there, every digit is judged (a wrong one is a mistake, three end a ranked game), the clock is the server's (pauses left out), and the score is checked against the recorded run. Selection with row, column, box and same-digit highlighting, conflict marking, notes with auto-removal, undo and redo, an eraser, a fill mode, three hints (reveal a cell, find a solvable cell, explain the next step) that cost score, statistics and streaks, settings, full keyboard control and a touch number pad. Eight achievements, five daily challenges, board and number-pad skins, and an admin-only server-side AI with three genuinely different strategies (step by step, a fast propagation-and-search solver, teaching), played back at 0.25x to 8x or one move at a time.
 - **Dino Run**, an original endless runner: Pip, a chubby pixel dino, runs through the eight pixel worlds Brick Breaker's levels are drawn in (shared art, scrolled as a mirrored landscape), jumping mounds and pillars and ducking under bats while the world speeds up. A deterministic fixed-step engine (120 steps a second, seeded obstacles) whose collision follows the drawn pixels row by row, a generator that never leaves a gap shorter than a full jump plus reaction time, a documented speed curve the server replays to check every score against the run's time, five achievements, four daily challenges, runner and obstacle skins (the world is not a skin: every run, the AI's too, goes through the worlds in turn, a new one every 500 points), and an admin-only AI (a predictive runner that plays candidate moves forward through the engine) with three strategies: Safe Runner, Balanced Runner and Fast Reaction.
+- **Chess** for two players on one device, with the complete rules enforced on the server: every legal move (pins, checks, castling with all its conditions, en passant, promotion to any piece), checkmate, stalemate, insufficient material, threefold repetition and the fifty-move rule (claimed by the side to move; fivefold repetition and the 75-move rule end the game by themselves), resignation and draw offers. The server keeps each match as its moves and rebuilds the position on every request, so the browser only shows what it is told: legal squares as dots and capture rings, the last move, check, the moves in standard algebraic notation, captured pieces and material, a promotion picker, board flipping, takebacks (local games only) and keyboard control. Original cartoon pieces, and board and piece skins in the shop. Local games are not scored: one person can play both sides, so they have no leaderboard and earn nothing. The rules engine is checked with the standard perft positions. There is no online play; see [Chess](ARCHITECTURE.md#chess).
+- **Stockfish in Chess**, the official open-source engine (version 19, pinned and checksum-verified, run on the server over UCI; no paid service, no language model): signed-in players get **three move hints a game**, counted on the server so neither a reload nor a crafted request gives them back, shown as highlighted squares and SAN and never played for them. Admins also get **games against Stockfish** at five difficulties built on the engine's own `Skill Level` and `UCI_Elo` settings, **position evaluation** (an evaluation bar, mate scores kept apart from centipawns, up to three principal variations, the depth reached, provisional results marked), and **game review**: every position of a finished game analysed in the background, every move labelled Best, Excellent, Good, Inaccuracy, Mistake, Blunder or Forced by a published rule on lost winning chances (or left unrated when the analysis is too shallow), with the engine's preferred move and navigation through the game. A bounded pool of engine processes, time limits, cancellation, a per-account rate limit and an analysis cache keep it to a small server. See [Chess engine](#chess-engine-stockfish).
 - **An AI mode for each, for admins**, written as classic algorithms that run in the browser (no AI service): a Hamiltonian-cycle Snake that fills the board, an expectimax 2048 player, and a Tetris player that searches every placement with one piece of lookahead. Word Guess's and Sudoku's solvers are the exceptions: they run on the server, because only the server may know the word or the solution. Speed control (0.25x to 8x), pause and restart.
 - Pure, deterministic game engines shared by the human player, the AI and the tests.
 
@@ -54,7 +56,7 @@ Everything listed below works end to end, in Docker, with 431 backend and 594 fr
 - **Game hub**: the home page puts your coins, level and daily reward first, then today's challenges, recently played games, featured games, card packs, the top scores of each game, your latest achievements and categories.
 - **Admin dashboard**: users, active users, games, packs, cards and coins in circulation (all time and today), and audited coin grants.
 - **Two roles**: every account is a **USER** (a player) or an **ADMIN**. Admins also get AI mode and card packs without a daily allowance. The server enforces both; see [Roles](#roles-players-and-admins).
-- Guests can play every game; an account is only needed to earn things.
+- Guests can play every game; an account is only needed to earn things. A game can be marked **unscored** in the catalog (Chess): it is played like any other but opens no score session, so it has no leaderboard, rewards or daily challenge.
 
 **Card packs (TCG)**
 - **Real card data**: the **Pokémon TCG** (25 sets, 4,621 cards, from TCGdex) and the **One Piece Card Game** (20 sets, 3,023 cards with alternate arts, from OPTCG API), with their real names, numbers, rarities and card images.
@@ -157,6 +159,7 @@ It plays through the public API: five demo players, games on every leaderboard, 
 
 ```bash
 docker compose up -d postgres                  # PostgreSQL on localhost:5433
+sh tools/stockfish/install.sh                  # Stockfish 19 for chess hints and analysis (once; Windows: toolsstockfishinstall.ps1)
 cd backend && ./mvnw spring-boot:run           # API on http://localhost:8080 (Windows: mvnw.cmd)
 cd frontend && npm install && npm run dev      # app on http://localhost:5173
 ```
@@ -173,7 +176,7 @@ Vite proxies `/api` and `/actuator` to the backend, so the browser talks to one 
 
 ### Database
 
-- The schema is created and upgraded by **Flyway** when the backend starts (`backend/src/main/resources/db/migration`, `V1` to `V17`). There is no manual step.
+- The schema is created and upgraded by **Flyway** when the backend starts (`backend/src/main/resources/db/migration`, `V1` to `V25`). There is no manual step.
 - The **admin account** is created at the first start (see [Roles](#roles-players-and-admins)).
 - The game catalog comes from migrations; the card catalog comes from the card game import (see [Card games](#card-games)).
 - To start over with an empty database: `docker compose down -v`, then `docker compose up -d`.
@@ -193,6 +196,9 @@ Compose reads these from a `.env` file next to `docker-compose.yml`; [.env.examp
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | Origins allowed to call the API directly from a browser, comma-separated |
 | `TCG_DAILY_PACK_LIMIT` | `10` | Card packs a player may open per day (UTC); `0` means no limit. Admins have none |
 | `ADMIN_USERNAME`, `ADMIN_PASSWORD` | `admin`, `11112002` | The admin account created at first start. **Development defaults: change them** for anything reachable by others |
+| `STOCKFISH_POOL_SIZE`, `STOCKFISH_THREADS`, `STOCKFISH_HASH_MB` | `2`, `1`, `32` | Stockfish processes at most, and search threads and hash memory (MB) each. See [Chess engine](#chess-engine-stockfish) |
+| `CHESS_HINTS_PER_GAME` | `3` | Move hints a player gets per chess game (admins: no limit; guests: none) |
+| `CHESS_ENGINE_REQUESTS_PER_MINUTE` | `30` | Engine requests (hints, engine moves, evaluations, reviews) one account may make per minute |
 
 The backend reads further settings from environment variables when run natively (or when added to the `backend` service in Compose):
 
@@ -232,6 +238,8 @@ Every account has exactly one role. Signing up always makes a **USER**; the only
 | Collect cards, opening history | ✅ | ✅ |
 | Card packs | 10 a day (`TCG_DAILY_PACK_LIMIT`) | **No daily limit** |
 | **AI mode** (Snake, 2048, Tetris play themselves) | ❌ | ✅ |
+| Chess move hints from Stockfish (guests: none) | 3 a game, counted on the server | **No limit** (within the rate limit) |
+| Chess against Stockfish, evaluations, game reviews | ❌ | ✅ |
 | Admin page (`/admin`) | ❌ | ✅ |
 
 **Development admin account**
@@ -248,6 +256,15 @@ These are **demo and development credentials only**. Set `ADMIN_USERNAME` and `A
 - **Packs**: the daily allowance is checked in one place, the pack opening itself, which skips it for ROLE_ADMIN. Admins open packs through exactly the same code otherwise, so collections and histories work the same.
 - **The UI follows the role** (an Admin button in the header, the AI switch, "Unlimited packs · Admin"), but only as a convenience: the server decides.
 - A role is read when the player signs in, so a role change takes effect at their next sign-in.
+
+## Chess engine (Stockfish)
+
+Chess uses [Stockfish 19](https://stockfishchess.org/), the free and open-source engine (GPL-3.0), as its only source of moves and evaluations. It runs on the backend server as separate, unmodified processes, spoken to over UCI; there is no paid service, no API key and no language model, and the engine never explains moves in words: hints, evaluations and labels are numbers and moves.
+
+- **Installation**: the Docker image downloads the pinned official release at build time and checks its SHA-256; for a natively run backend, `tools/stockfish/install.sh` (or `install.ps1`) does the same once. Nothing is downloaded at startup and no binary is committed. Version, checksums and troubleshooting: [tools/stockfish/README.md](tools/stockfish/README.md); licence and source availability: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+- **Without the engine** the arcade runs as usual; the backend logs a warning at startup and every engine request answers `503 ENGINE_UNAVAILABLE`. Moves are never invented in its place.
+- **Who gets what**: players get 3 hints per game (a new game brings new ones; refused requests and engine failures cost nothing); admins get unlimited hints, games against Stockfish, evaluations and reviews. The server decides from the session's role; hiding buttons is only a convenience.
+- **Resource limits** (all configurable, see `application.yml`, `app.chess.*`): 2 engine processes of 1 thread and 32 MB hash each; at most 4 requests waiting for an engine, each for 3 s; hints 600 ms, evaluations up to depth 22 and 3 s, review positions 250 ms each; one review running at a time with 4 waiting; 30 engine requests per account per minute; an analysis cache of 5,000 results for 6 hours, keyed by the engine's version, its settings and the position. To give it more room, raise `STOCKFISH_POOL_SIZE` (processes) before `STOCKFISH_THREADS` (threads each), and keep pool size × threads within the server's cores.
 
 ## Economy: coins, rewards and the shop
 
@@ -332,9 +349,10 @@ npm run build
 │       │   ├── progression/  challenge/             # XP, levels, achievements, daily challenges
 │       │   ├── economy/  dailylogin/  shop/          # coins and their ledger, the daily login reward, the shop
 │       │   ├── admin/        # admin dashboard, coin grants, AI access
+│       │   ├── chess/  sudoku/  wordle/              # games played on the server, each a module of its own
 │       │   └── tcg/          # the card game module: game, set, card, pack, opening, collection, dataimport
 │       └── resources/
-│           ├── db/migration/     # Flyway migrations V1 to V17
+│           ├── db/migration/     # Flyway migrations V1 to V24
 │           └── tcg/sources/      # which sets to import, rarities and pack layouts, per card game
 ├── frontend/                 # React + Vite SPA, served by nginx in Docker
 │   ├── nginx/                # nginx configuration and security headers
@@ -344,7 +362,8 @@ npm run build
 │       ├── games/            # shared/ plus snake/, 2048/, tetris/: engine, ai, hooks, components
 │       └── tcg/              # the card game module: api, pages, pack opening, components
 ├── tools/
-│   └── demo/                 # demo data and screenshots
+│   ├── demo/                 # demo data and screenshots
+│   └── stockfish/            # pinned Stockfish install scripts, version, checksums, licence notes
 └── docs/screenshots/
 ```
 
@@ -371,6 +390,8 @@ npm run build
 19. ✅ **Word Guess**: a server-played word game with a deterministic Daily Word, streaks, hints that cost score, server-side run checks against the recorded run, an admin-only server-side solver with four strategies, and tile and keyboard skins
 20. ✅ **Sudoku**: a seeded generator with proved-unique puzzles graded by technique, a server-played game with solution-based mistakes, server-timed scores, hints, notes, undo and redo, a stored Daily Sudoku with streaks and statistics, an admin-only server-side AI with three strategies, and board and pad skins
 21. ✅ **Dino Run**: an endless runner on the shared pixel worlds, with a fixed-step seeded engine, pixel-exact collision, a fair obstacle generator, server checks against the speed curve, an admin-only predictive AI with three strategies, and runner and obstacle skins
-22. **Next**: deployment to a host with HTTPS, login sessions that survive a restart (Spring Session), password reset, more games (Memory) and multiplayer (Chess, Connect Four)
+22. ✅ **Chess**: two players on one device, the full rules (castling, en passant, promotion, checkmate, stalemate and every draw) enforced by a perft-tested engine on the server, stale and simultaneous moves refused, takebacks, draw offers and claims, resignation, SAN move history, board and piece skins; unscored, through a new generic `scored` flag in the catalog
+23. ✅ **Stockfish in Chess**: the official engine, pinned and verified, behind a bounded UCI process pool; move hints with a server-enforced allowance for players; admin games against Stockfish at five difficulties, position evaluation and game review with move labels, an analysis cache, rate and resource limits
+24. **Next**: deployment to a host with HTTPS, login sessions that survive a restart (Spring Session), password reset, more games (Memory), online Chess between accounts (see [Chess](ARCHITECTURE.md#chess)), Connect Four
 
 Known limits, on purpose for now: no email or password reset; scores made as a guest are not moved to an account created later; scores and the numbers games report about a run are validated for range but not replayed, so they are not cheat-proof (Word Guess and Sudoku are the exceptions: they are played on the server, though a script could still play them for someone, and Sudoku trusts the browser to hide the board while paused); login throttling is kept in memory per backend instance; card images depend on the sources' image hosts being up; the admin account is fixed by configuration (there is no page to manage roles); coins can be farmed only as fast as scores can, since scores are not replayed (finishing a game pays coins for the first 40 games a day only).

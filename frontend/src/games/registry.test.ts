@@ -29,6 +29,7 @@ describe('toGameDefinition', () => {
       accentColor: '#22c55e',
       thumbnail: '/thumbnails/snake.svg',
       featured: true,
+      scored: true,
       module: gameModules.find((module) => module.slug === 'snake'),
     })
   })

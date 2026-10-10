@@ -21,6 +21,7 @@ const wordle: GameResponse = {
   thumbnailUrl: '/thumbnails/wordle.svg',
   accentColor: '#ec4899',
   featured: false,
+  scored: true,
 }
 const games = [...catalogFixture, wordle]
 

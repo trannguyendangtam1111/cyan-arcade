@@ -1,6 +1,7 @@
 import type { GameCategory, GameResponse } from '@/api/games'
 import { game2048Module } from './2048'
 import { brickBreakerModule } from './brick-breaker'
+import { chessModule } from './chess'
 import { dinoRunModule } from './dino-run'
 import { flappyBirdModule } from './flappy-bird'
 import { minesweeperModule } from './minesweeper'
@@ -26,6 +27,7 @@ export const gameModules: readonly GameModule[] = [
   wordleModule,
   sudokuModule,
   dinoRunModule,
+  chessModule,
 ]
 
 export function findGameModule(slug: string): GameModule | undefined {
@@ -42,6 +44,7 @@ export function toGameDefinition(game: GameResponse): GameDefinition {
     accentColor: game.accentColor,
     thumbnail: game.thumbnailUrl,
     featured: game.featured,
+    scored: game.scored,
     module: findGameModule(game.slug),
   }
 }

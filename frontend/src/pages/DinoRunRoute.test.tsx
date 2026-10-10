@@ -20,6 +20,7 @@ const dino: GameResponse = {
   thumbnailUrl: '/thumbnails/dino-run.svg',
   accentColor: '#14b8a6',
   featured: false,
+  scored: true,
 }
 const games = [...catalogFixture, dino]
 

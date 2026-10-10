@@ -39,6 +39,7 @@ export const catalogFixture: GameResponse[] = [
     thumbnailUrl: '/thumbnails/snake.svg',
     accentColor: '#22c55e',
     featured: true,
+    scored: true,
   },
   {
     id: 2,
@@ -49,6 +50,7 @@ export const catalogFixture: GameResponse[] = [
     thumbnailUrl: '/thumbnails/2048.svg',
     accentColor: '#f59e0b',
     featured: true,
+    scored: true,
   },
   {
     id: 3,
@@ -59,6 +61,7 @@ export const catalogFixture: GameResponse[] = [
     thumbnailUrl: '/thumbnails/tetris.svg',
     accentColor: '#8b5cf6',
     featured: true,
+    scored: true,
   },
 ]
 
@@ -424,7 +427,7 @@ export function mockApi({
   }
   /** Like the server: an admin wears every Brick Breaker, Word Guess, Sudoku and Dino Run skin without buying it. */
   const freeToWear = (item: ShopItem) =>
-    currentUser?.role === 'ADMIN' && item.type === 'GAME_SKIN' && ['brick-breaker', 'wordle', 'sudoku', 'dino-run'].includes(item.gameSlug ?? '')
+    currentUser?.role === 'ADMIN' && item.type === 'GAME_SKIN' && ['brick-breaker', 'wordle', 'sudoku', 'dino-run', 'chess'].includes(item.gameSlug ?? '')
   /** An item as the signed-in player sees it in the shop. */
   const playerItem = (item: ShopItem): ShopItem => {
     const count = owned.get(item.id) ?? 0

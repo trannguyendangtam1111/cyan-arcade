@@ -59,7 +59,7 @@ public class LeaderboardService {
 	 */
 	public LeaderboardResponse leaderboard(String gameSlug, LeaderboardPeriod period, int page, int size, Long userId,
 			UUID playerId) {
-		GameInfo game = this.games.requireActiveGame(gameSlug);
+		GameInfo game = this.games.requireScoredGame(gameSlug);
 		Window window = period.windowAt(this.clock.instant());
 		Page<RankedScore> top = this.scores.ranking(game.id(), window.start(), window.end(), page, size);
 
@@ -76,12 +76,12 @@ public class LeaderboardService {
 	}
 
 	/**
-	 * Where a signed-in player stands on every active game's boards, for their profile: one small
+	 * Where a signed-in player stands on every scored game's boards, for their profile: one small
 	 * ranking query per game and period.
 	 */
 	public PlayerRanks ranksOf(Long userId) {
 		Instant now = this.clock.instant();
-		List<GameRanks> perGame = this.games.listActiveGames()
+		List<GameRanks> perGame = this.games.listScoredGames()
 			.stream()
 			.map((game) -> new GameRanks(new PlayerRanks.Game(game.slug(), game.name()),
 					standing(game, LeaderboardPeriod.DAILY, now, userId),

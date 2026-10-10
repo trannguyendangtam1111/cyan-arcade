@@ -21,6 +21,7 @@ const sudoku: GameResponse = {
   thumbnailUrl: '/thumbnails/sudoku.svg',
   accentColor: '#06b6d4',
   featured: false,
+  scored: true,
 }
 const games = [...catalogFixture, sudoku]
 

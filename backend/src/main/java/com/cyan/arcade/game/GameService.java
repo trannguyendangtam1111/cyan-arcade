@@ -26,6 +26,11 @@ public class GameService {
 		return this.games.findByActiveTrueOrderByDisplayOrderAscNameAsc().stream().map(GameResponse::from).toList();
 	}
 
+	/** The active games whose scores the platform keeps: the ones with leaderboards and daily challenges. */
+	public List<GameResponse> listScoredGames() {
+		return listActiveGames().stream().filter(GameResponse::scored).toList();
+	}
+
 	public GameResponse getActiveGame(String slug) {
 		return this.games.findBySlugAndActiveTrue(slug)
 			.map(GameResponse::from)
@@ -37,6 +42,18 @@ public class GameService {
 		return this.games.findBySlugAndActiveTrue(slug)
 			.map(GameInfo::from)
 			.orElseThrow(() -> new NotFoundException("Game", slug));
+	}
+
+	/**
+	 * An active game whose scores the platform keeps, for its leaderboard. A game that is not scored
+	 * has none, so it is not found here.
+	 */
+	public GameInfo requireScoredGame(String slug) {
+		GameInfo game = requireActiveGame(slug);
+		if (!game.scored()) {
+			throw new NotFoundException("Scored game", slug);
+		}
+		return game;
 	}
 
 	/** Looks several games up at once, keyed by id, active or not. */

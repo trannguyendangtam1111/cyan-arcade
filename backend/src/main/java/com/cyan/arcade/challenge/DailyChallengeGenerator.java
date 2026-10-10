@@ -11,7 +11,10 @@ import com.cyan.arcade.game.GameService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** Creates the challenges of a day: one for every game in the catalog, and one for every activity. */
+/**
+ * Creates the challenges of a day: one for every scored game in the catalog (a game's challenge is
+ * met by a scored run, so an unscored game could never complete one), and one for every activity.
+ */
 @Service
 class DailyChallengeGenerator {
 
@@ -38,7 +41,7 @@ class DailyChallengeGenerator {
 	 */
 	@Transactional
 	public int generateFor(LocalDate date) {
-		List<GameResponse> catalog = this.games.listActiveGames();
+		List<GameResponse> catalog = this.games.listScoredGames();
 		int created = 0;
 		for (int position = 0; position < catalog.size(); position++) {
 			GameResponse game = catalog.get(position);

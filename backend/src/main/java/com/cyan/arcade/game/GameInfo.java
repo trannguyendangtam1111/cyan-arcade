@@ -5,11 +5,12 @@ package com.cyan.arcade.game;
  * the entity itself.
  *
  * @param maxScore highest plausible score, or {@code null} when the game has no practical maximum
+ * @param scored whether the platform keeps its scores (sessions, leaderboards, rewards, challenges)
  */
-public record GameInfo(Long id, String slug, String name, Integer maxScore) {
+public record GameInfo(Long id, String slug, String name, Integer maxScore, boolean scored) {
 
 	static GameInfo from(Game game) {
-		return new GameInfo(game.getId(), game.getSlug(), game.getName(), game.getMaxScore());
+		return new GameInfo(game.getId(), game.getSlug(), game.getName(), game.getMaxScore(), game.isScored());
 	}
 
 	/** Whether a submitted score is within what this game can actually produce. */

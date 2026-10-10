@@ -61,8 +61,8 @@ export function HomePage() {
   const { user } = useSession()
   const { games } = useGameCatalog()
   const recentGames = useRecentGames()
-  // Boards only make sense for games that can be played.
-  const boards = games ? featuredGames(games).filter((game) => game.module).slice(0, PREVIEW_BOARDS) : []
+  // Boards only make sense for games that can be played and are scored.
+  const boards = games ? featuredGames(games).filter((game) => game.module && game.scored).slice(0, PREVIEW_BOARDS) : []
 
   return (
     <div className="flex flex-col gap-section">

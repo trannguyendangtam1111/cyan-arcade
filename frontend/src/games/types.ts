@@ -17,6 +17,8 @@ export interface GameDefinition {
   thumbnail: string
   /** Whether the hub puts this game in the spotlight on the home page. */
   featured: boolean
+  /** Whether its runs are scored: an unscored game has no leaderboard and earns nothing. */
+  scored: boolean
   /** The playable implementation, or `undefined` while the game is still "coming soon". */
   module?: GameModule
 }

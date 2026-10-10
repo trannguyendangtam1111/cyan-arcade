@@ -98,6 +98,14 @@ class SecurityConfig {
 						"/api/sudoku/runs/*/session", "/api/sudoku/runs/*/moves", "/api/sudoku/runs/*/hints",
 						"/api/sudoku/runs/*/pause", "/api/sudoku/runs/*/resume")
 				.permitAll()
+				// Chess too: the server judges every move. Move hints (/api/chess/matches/*/hint) need a
+				// signed-in player (below); games against Stockfish and analysis are under /api/ai.
+				.requestMatchers(HttpMethod.GET, "/api/chess/matches/current", "/api/chess/matches/*")
+				.permitAll()
+				.requestMatchers(HttpMethod.POST, "/api/chess/matches", "/api/chess/matches/*/moves",
+						"/api/chess/matches/*/undo", "/api/chess/matches/*/redo", "/api/chess/matches/*/resign",
+						"/api/chess/matches/*/draw")
+				.permitAll()
 				// Administration and the games' AI mode: admins only.
 				.requestMatchers("/api/admin/**", "/api/ai/**")
 				.hasRole(Role.ADMIN.name())

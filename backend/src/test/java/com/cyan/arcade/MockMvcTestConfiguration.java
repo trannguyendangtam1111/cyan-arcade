@@ -1,9 +1,13 @@
 package com.cyan.arcade;
 
+import com.cyan.arcade.chess.FakeStockfish;
+import com.cyan.arcade.chess.stockfish.StockfishEngineAdapter;
+
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.MockMvcBuilderCustomizer;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
@@ -25,6 +29,19 @@ public class MockMvcTestConfiguration {
 	@Bean
 	InitializingBean honestRunsUseTheDatabase(JdbcTemplate jdbc) {
 		return () -> HonestRuns.useDatabase(jdbc);
+	}
+
+
+	/** The chess engine the tests play against: a scripted UCI engine, never a real one (see FakeStockfish). */
+	@Bean
+	FakeStockfish fakeStockfish() {
+		return new FakeStockfish();
+	}
+
+	@Bean
+	@Primary
+	StockfishEngineAdapter.Launcher fakeStockfishLauncher(FakeStockfish fake) {
+		return fake.launcher();
 	}
 
 }

@@ -146,8 +146,9 @@ function GameStage({ game, gameModule }: { game: GameDefinition; gameModule: Gam
   const handleGameStart = useCallback(() => {
     // Remembered on this device, for the hub's "Jump back in" row.
     recordRecentGame(game.slug)
-    onGameStart()
-  }, [game.slug, onGameStart])
+    // An unscored game opens no score session: there is nothing to submit.
+    if (game.scored) onGameStart()
+  }, [game.slug, game.scored, onGameStart])
 
   return (
     <Card padding="none" className="overflow-hidden border-t-8 border-(--accent)">
@@ -155,7 +156,7 @@ function GameStage({ game, gameModule }: { game: GameDefinition; gameModule: Gam
         {/* The module pairs the component with its own AI (defineGameModule), so this is that AI. */}
         <gameModule.Component
           onGameStart={handleGameStart}
-          onGameOver={onGameOver}
+          onGameOver={game.scored ? onGameOver : ignoreResult}
           currentSession={currentSession}
           ai={ai as (() => never) | undefined}
           cosmetics={cosmetics}
@@ -171,6 +172,9 @@ interface ScoreStatusProps {
   onRetry: () => void
   gameSlug: string
 }
+
+/** What an unscored game's results go to: nowhere. */
+function ignoreResult() {}
 
 /** Tells the player what happened to the score of the run that just ended. */
 function ScoreStatus({ submission, onRetry, gameSlug }: ScoreStatusProps) {

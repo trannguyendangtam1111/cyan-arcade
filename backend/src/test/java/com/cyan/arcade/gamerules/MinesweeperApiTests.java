@@ -61,8 +61,8 @@ class MinesweeperApiTests {
 	}
 
 	@Test
-	void everyGameInTheCatalogHasItsRules() {
-		List<String> catalog = this.jdbc.queryForList("SELECT slug FROM games WHERE active ORDER BY slug", String.class);
+	void everyScoredGameInTheCatalogHasItsRules() {
+		List<String> catalog = this.jdbc.queryForList("SELECT slug FROM games WHERE active AND scored ORDER BY slug", String.class);
 		assertThat(this.rules.stream().map(RunRules::gameSlug).sorted().toList()).containsAll(catalog);
 	}
 

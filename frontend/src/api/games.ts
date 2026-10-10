@@ -14,6 +14,11 @@ export interface GameResponse {
   accentColor: string
   /** Whether the hub puts this game in the spotlight. */
   featured: boolean
+  /**
+   * Whether the platform keeps its scores. An unscored game (one two people play on one device, say)
+   * has no score sessions, leaderboard, rewards or daily challenge.
+   */
+  scored: boolean
 }
 
 export const gameKeys = {
