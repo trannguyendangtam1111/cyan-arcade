@@ -202,7 +202,7 @@ export default function SudokuGame(props: GameProps<SudokuAiPlayer>) {
           role="status"
           className={cn(
             'pointer-events-none absolute top-24 left-1/2 z-30 max-w-[90%] -translate-x-1/2 rounded-full px-4 py-1.5 text-center font-display text-sm font-semibold shadow-lift motion-safe:animate-pop-in',
-            game.message.tone === 'error' ? 'bg-danger text-white' : 'bg-ink text-white',
+            game.message.tone === 'error' ? 'bg-danger text-white' : 'bg-night text-white',
           )}
         >
           {game.message.text}

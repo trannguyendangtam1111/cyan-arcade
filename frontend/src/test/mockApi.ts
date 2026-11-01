@@ -266,10 +266,12 @@ export interface MockRequest {
   body: Record<string, unknown> | undefined
   /** Who is signed in at the moment of the request. */
   user: SessionUser | null
+  /** The request's abort signal, for a handler that answers later. */
+  signal?: AbortSignal
 }
 
 /** Answers requests the built-in fake does not know, such as a module's own endpoints. */
-export type MockHandler = (request: MockRequest) => Response | undefined
+export type MockHandler = (request: MockRequest) => Response | Promise<Response> | undefined
 
 export const mockJson = json
 export const mockProblem = problem
@@ -479,7 +481,7 @@ export function mockApi({
     const body = sentBody ?? {}
 
     for (const handler of handlers) {
-      const response = handler({ path, method, url, body: sentBody, user: currentUser })
+      const response = handler({ path, method, url, body: sentBody, user: currentUser, signal: init?.signal ?? undefined })
       if (response) return response
     }
 

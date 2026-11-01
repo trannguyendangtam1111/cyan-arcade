@@ -24,6 +24,48 @@
   transform: translateY(-4%) scale(1.06);
 }
 
+/* The piece under a dragging pointer, centred on it and a little larger than the others. */
+.chess-drag {
+  transform: translate(-50%, -50%) scale(1.12);
+  filter: drop-shadow(0 6px 6px rgb(0 0 0 / 0.25));
+}
+
+/* A move's quality, in the corner of the square it landed on. */
+.chess-badge {
+  width: max(1.05rem, 4.6cqi);
+  height: max(1.05rem, 4.6cqi);
+  font-size: max(0.6rem, 2.5cqi);
+  box-shadow: 0 0 0 2px rgb(255 255 255 / 0.85);
+}
+
+/* A notice over the top of the board: it appears gently and never moves the board. */
+.chess-toast {
+  animation: chess-toast-in 160ms ease-out;
+}
+
+@keyframes chess-toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -6px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+/* No evaluation for this position: an empty, hatched bar rather than an equal one. */
+.chess-eval-unknown {
+  background: repeating-linear-gradient(135deg, var(--color-surface-muted) 0 6px, var(--color-surface) 6px 12px);
+}
+
+/* The evaluation bar's fill follows the evaluation smoothly, never in jumps. */
+.chess-eval-fill {
+  transition:
+    height 400ms ease,
+    width 400ms ease;
+}
+
 @keyframes chess-check-pulse {
   0%,
   100% {
@@ -46,6 +88,12 @@
     transform: none;
   }
   .chess-check {
+    animation: none;
+  }
+  .chess-eval-fill {
+    transition: none;
+  }
+  .chess-toast {
     animation: none;
   }
 }

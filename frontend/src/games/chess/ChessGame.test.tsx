@@ -256,7 +256,7 @@ describe('Chess', () => {
     await screen.findByRole('grid', { name: /Chess board/ })
     await play('e2e4')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Restart' }))
+    fireEvent.click(screen.getByRole('button', { name: 'New game' }))
     const dialog = await screen.findByRole('dialog', { name: 'Start a new game?' })
     fireEvent.click(within(dialog).getByRole('button', { name: 'New game' }))
 

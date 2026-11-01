@@ -61,7 +61,7 @@ export default function MinesweeperGame(props: GameProps) {
         <div className="relative w-full max-w-[30rem] rounded-2xl">
           <MinesweeperBoard state={state} onAct={game.act} onFlag={game.flag} />
           {state.status === 'ready' && (
-            <p className="pointer-events-none absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-ink px-4 py-1 font-display text-sm font-semibold whitespace-nowrap text-white shadow-soft">
+            <p className="pointer-events-none absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-night px-4 py-1 font-display text-sm font-semibold whitespace-nowrap text-white shadow-soft">
               Pick any square to start
             </p>
           )}

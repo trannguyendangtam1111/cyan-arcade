@@ -163,13 +163,13 @@ export default function BrickBreakerGame(props: GameProps<BrickAI>) {
               {status === 'over' ? `Game over. You scored ${score}.` : bonus ? `Level ${bonus.level} clear. Bonus ${bonus.total}.` : ''}
             </p>
             {status === 'ready' && (
-              <p className="pointer-events-none absolute inset-x-0 bottom-[22%] mx-auto flex w-max max-w-[90%] flex-col items-center gap-1 border-4 border-white/85 bg-ink/90 px-4 py-2 text-center font-display text-sm font-semibold text-white shadow-[4px_4px_0_0_rgba(15,10,30,0.6)] motion-safe:animate-pop-in">
+              <p className="pointer-events-none absolute inset-x-0 bottom-[22%] mx-auto flex w-max max-w-[90%] flex-col items-center gap-1 border-4 border-white/85 bg-night/90 px-4 py-2 text-center font-display text-sm font-semibold text-white shadow-[4px_4px_0_0_rgba(15,10,30,0.6)] motion-safe:animate-pop-in">
                 <span>Tap, click or press Space to launch</span>
                 <span className="text-xs font-normal text-white/80">Level 1 · {game.levelName}</span>
               </p>
             )}
             {bonus && (
-              <div className="pointer-events-none absolute inset-x-6 top-1/4 flex flex-col items-center gap-1 border-4 border-white/85 bg-ink/90 px-4 py-4 text-center font-display text-white shadow-[6px_6px_0_0_rgba(15,10,30,0.6)] motion-safe:animate-pop-in">
+              <div className="pointer-events-none absolute inset-x-6 top-1/4 flex flex-col items-center gap-1 border-4 border-white/85 bg-night/90 px-4 py-4 text-center font-display text-white shadow-[6px_6px_0_0_rgba(15,10,30,0.6)] motion-safe:animate-pop-in">
                 <p className="text-2xl font-bold text-amber-300">LEVEL CLEAR!</p>
                 {bonus.perfect > 0 && <p className="text-lg font-bold text-pink-300">✨ PERFECT CLEAR ✨</p>}
                 <dl className="mt-1 grid w-full max-w-56 grid-cols-2 gap-x-4 text-sm">

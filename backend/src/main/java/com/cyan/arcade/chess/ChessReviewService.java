@@ -17,20 +17,14 @@ import java.util.concurrent.atomic.AtomicReferenceArray;
 
 import com.cyan.arcade.chess.ChessMatch.Owner;
 import com.cyan.arcade.chess.ChessMatch.Status;
-import com.cyan.arcade.chess.ChessViews.EvaluationView;
 import com.cyan.arcade.chess.ChessViews.ReviewResponse;
 import com.cyan.arcade.chess.ChessViews.ReviewSettings;
 import com.cyan.arcade.chess.ChessViews.ReviewedMove;
-import com.cyan.arcade.chess.ChessViews.SuggestedMove;
+import com.cyan.arcade.chess.MoveJudgements.PositionAnalysis;
 import com.cyan.arcade.chess.analysis.EnginePositions;
-import com.cyan.arcade.chess.analysis.Evaluation;
 import com.cyan.arcade.chess.analysis.MoveClassifier;
 import com.cyan.arcade.chess.engine.ChessGame;
-import com.cyan.arcade.chess.engine.Color;
-import com.cyan.arcade.chess.engine.Move;
 import com.cyan.arcade.chess.engine.Position;
-import com.cyan.arcade.chess.engine.San;
-import com.cyan.arcade.chess.engine.Square;
 import com.cyan.arcade.chess.engine.Termination;
 import com.cyan.arcade.chess.stockfish.EngineException;
 import com.cyan.arcade.chess.stockfish.SearchRequest;
@@ -85,6 +79,8 @@ class ChessReviewService {
 
 	private final ChessAiProperties.Review settings;
 
+	private final MoveClassifier.Thresholds limits;
+
 	private final Clock clock;
 
 	private final ThreadPoolExecutor executor;
@@ -98,6 +94,7 @@ class ChessReviewService {
 		this.cache = cache;
 		this.limiter = limiter;
 		this.settings = properties.review();
+		this.limits = properties.classification().thresholds();
 		this.clock = clock;
 		AtomicInteger threads = new AtomicInteger();
 		this.executor = new ThreadPoolExecutor(this.settings.concurrent(), this.settings.concurrent(), 60, TimeUnit.SECONDS,
@@ -107,11 +104,6 @@ class ChessReviewService {
 					return thread;
 				});
 		this.executor.allowCoreThreadTimeOut(true);
-	}
-
-	/** What one position's analysis found, from White's side. */
-	private record PositionAnalysis(Evaluation evaluation, String bestMove, List<String> pv, int depth, boolean exact,
-			boolean finished) {
 	}
 
 	enum State {
@@ -284,11 +276,10 @@ class ChessReviewService {
 	private PositionAnalysis analyse(Job job, int ply) {
 		ChessGame game = job.game;
 		Position position = game.positions().get(ply);
-		boolean last = ply == game.moves().size();
-		if (last && job.termination != null && job.termination.automatic()) {
-			// Mate, stalemate and the automatic draws need no search.
-			Color winner = (job.termination == Termination.CHECKMATE) ? position.turn().opposite() : null;
-			return new PositionAnalysis(Evaluation.finished(winner), null, List.of(), Integer.MAX_VALUE, true, true);
+		// Mate, stalemate and the automatic draws need no search.
+		PositionAnalysis finished = MoveJudgements.finishedAt(game, ply, job.termination);
+		if (finished != null) {
+			return finished;
 		}
 		SearchRequest request = EnginePositions.request(game, ply,
 				new SearchRequest.Limits(this.settings.depth(), (int) this.settings.movetime().toMillis(), null), 1,
@@ -297,14 +288,12 @@ class ChessReviewService {
 		SearchResult result = this.cache.get(key);
 		if (result == null) {
 			result = searchWhenFree(job, request);
+			// Checked before it is kept: an unusable answer is never served again from the cache.
+			PositionAnalysis analysis = MoveJudgements.of(result, position);
 			this.cache.put(key, result);
+			return analysis;
 		}
-		SearchResult.Line best = result.best();
-		if (best == null) {
-			throw new EngineException(EngineException.Kind.PROTOCOL, "No line for a position of the game");
-		}
-		return new PositionAnalysis(Evaluation.fromEngine(best.score(), position.turn()), result.bestMove(), best.pv(),
-				result.depth(), best.score().isExact(), false);
+		return MoveJudgements.of(result, position);
 	}
 
 	/** Searches, waiting politely while every engine is busy with players' requests. */
@@ -353,27 +342,11 @@ class ChessReviewService {
 		}
 		return new ReviewResponse(job.matchId, state.name(), analysed, job.results.length(), moves, job.engineName,
 				new ReviewSettings(this.settings.movetime().toMillis(), this.settings.depth(), this.settings.minDepth()),
-				job.error);
+				MoveJudgements.summary(moves), job.error);
 	}
 
 	private ReviewedMove reviewed(ChessGame game, int ply, PositionAnalysis before, PositionAnalysis after) {
-		Position position = game.positions().get(ply);
-		Move played = game.moves().get(ply);
-		Color mover = position.turn();
-		Move best = EnginePositions.legal(position, before.bestMove());
-		boolean sufficient = before.exact() && before.depth() >= this.settings.minDepth()
-				&& (after.finished() || (after.exact() && after.depth() >= this.settings.minDepth()));
-		MoveClassifier.Judgement judgement = MoveClassifier.classify(mover, position.legalMoves().size() == 1,
-				played.equals(best), before.evaluation(), after.evaluation(), sufficient);
-		SuggestedMove bestMove = (best != null) ? EngineViews.suggested(position, best) : null;
-		List<String> bestLine = EnginePositions.sanLine(position, before.pv(), 6);
-		EvaluationView beforeView = EngineViews.evaluation(before.evaluation());
-		EvaluationView afterView = EngineViews.evaluation(after.evaluation());
-		Double loss = (judgement.loss() != null) ? Math.round(judgement.loss() * 10) / 10.0 : null;
-		int depth = Math.min(before.depth(), after.depth());
-		return new ReviewedMove(ply + 1, mover, played.uci(), San.of(position, played), Square.name(played.from()),
-				Square.name(played.to()), position.toFen(), game.positions().get(ply + 1).toFen(), bestMove, bestLine,
-				beforeView, afterView, judgement.label(), loss, depth);
+		return MoveJudgements.judge(game, ply, before, after, this.settings.minDepth(), this.limits);
 	}
 
 }

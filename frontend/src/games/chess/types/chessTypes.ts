@@ -48,6 +48,8 @@ export interface PlayedMove {
   to: string
   uci: string
   san: string
+  /** The position after the move, from the server. */
+  fen: string
 }
 
 export interface MatchResult {
@@ -61,12 +63,17 @@ export interface MatchResult {
 /** A match, from `/api/chess/matches`. */
 export interface MatchView {
   id: string
-  /** Two players on one device, or one player against Stockfish (admins). */
-  mode: 'LOCAL' | 'AI'
+  /**
+   * Two players on one device, one player against Stockfish (admins), or a variation: a position of a
+   * game continued as a separate match, which never changes the game.
+   */
+  mode: 'LOCAL' | 'AI' | 'ANALYSIS'
   status: 'ACTIVE' | 'FINISHED' | 'ABANDONED'
   /** Goes up with every change; every action sends the revision it was chosen in. */
   revision: number
   fen: string
+  /** The position the match started from. */
+  startFen: string
   turn: Side
   fullmoveNumber: number
   halfmoveClock: number
@@ -93,6 +100,15 @@ export interface MatchView {
   result: MatchResult | null
   createdAt: string
   updatedAt: string
+  /** For a variation, the game and position it starts from; `null` for a game. */
+  source: VariationSource | null
+}
+
+export interface VariationSource {
+  /** The game it was started from (`null` once that game is forgotten). */
+  matchId: string | null
+  /** The ply of that game the variation starts at. */
+  ply: number
 }
 
 export type Difficulty = 'BEGINNER' | 'CASUAL' | 'CLUB' | 'ADVANCED' | 'MAXIMUM'
@@ -132,6 +148,10 @@ export interface HintResponse {
   depth: number
   engine: string
   hints: HintAllowance
+  /** Stockfish's evaluation with the hinted move played, from White's side (`null` without a score). */
+  evaluation: Evaluation | null
+  /** What the move does, as the rules and the engine's score show it; empty for a quiet move. */
+  ideas: string[]
 }
 
 /** An evaluation, always from White's side. Mates are kept apart from centipawns. */
@@ -153,11 +173,15 @@ export interface AnalysisLine {
   evaluation: Evaluation
   san: string[]
   uci: string[]
+  /** The position after each move of the line, from the server. */
+  fens: string[]
   depth: number
 }
 
 export interface EvaluationResponse {
   revision: number
+  /** The position evaluated: after this many moves. */
+  ply: number
   sideToMove: Side
   evaluation: Evaluation
   bestMove: SuggestedMove | null
@@ -168,6 +192,8 @@ export interface EvaluationResponse {
   complete: boolean
   /** The game is over: the evaluation is its result, not a search. */
   finished: boolean
+  /** For a finished game, how it ended (a won game is shown as mate on the board either way); `null` otherwise. */
+  termination: Termination | null
   engine: string | null
 }
 
@@ -203,7 +229,25 @@ export interface ReviewResponse {
   moves: ReviewedMove[]
   engine: string | null
   settings: { movetimeMs: number; depth: number; minDepth: number }
+  /** Each side's accuracy and labels over the moves reviewed so far (final once `DONE`). */
+  summary: { white: SideSummary; black: SideSummary }
   error: string | null
+}
+
+export interface SideSummary {
+  /** Average move accuracy in percent over the rated moves; `null` without any. */
+  accuracy: number | null
+  /** Moves counted in the accuracy: all but forced and unrated ones. */
+  rated: number
+  counts: Partial<Record<MoveClass, number>>
+}
+
+/** Coach Mode's judgement of one move, as a review would give it (from a shorter analysis). */
+export interface CoachResponse {
+  matchId: string
+  ply: number
+  move: ReviewedMove
+  engine: string | null
 }
 
 export interface DifficultyOption {

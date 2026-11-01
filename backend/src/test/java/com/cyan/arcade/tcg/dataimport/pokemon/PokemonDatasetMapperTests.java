@@ -126,6 +126,45 @@ class PokemonDatasetMapperTests {
 		assertThat(dataset.sets().get(0).cards()).extracting(Card::externalId).containsExactly("sv01-001");
 	}
 
+	@Test
+	void theThirtiethCelebrationHasItsPikachuRaresAndAPikachuInEveryPack() {
+		// As TCGdex lists them (set "30th", 158 cards): one card of each of its rarities.
+		TcgdexSet celebration = new TcgdexSet("30th", "30th Celebration", "2026-09-16", null,
+				new TcgdexSet.Serie("me", "Mega Evolution"));
+		TcgDataset dataset = map(new FetchedSet(new SetChoice("30th", "celebration", null), celebration,
+				List.of(card("30th", "001", "Exeggcute", "Common", "Pokemon", 50), card("30th", "012", "Ho-Oh", "Rare", "Pokemon", 130),
+						card("30th", "023", "Pikachu", "Pikachu Rare", "Pokemon", 60),
+						card("30th", "053", "Pikachu ex", "Double rare", "Pokemon", 200),
+						card("30th", "129", "Alolan Exeggutor", "Illustration rare", "Pokemon", 160),
+						card("30th", "149", "Pikachu ex", "Special illustration rare", "Pokemon", 200),
+						card("30th", "157", "Mewtwo ex", "Futuristic Rare", "Pokemon", 230))));
+
+		TcgDataset.CardSet set = dataset.sets().get(0);
+		assertThat(set.code()).isEqualTo("30th");
+		assertThat(set.cards()).extracting(Card::rarity).containsExactly("common", "rare", "pikachu-rare", "double-rare",
+				"illustration-rare", "special-illustration-rare", "futuristic-rare");
+		TcgDataset.Pack pack = set.packs().get(0);
+		// Five cards, as the real packs' five foils: a Pikachu Rare first, always.
+		assertThat(pack.slots()).extracting(Slot::count).containsExactly(1, 3, 1);
+		assertThat(pack.slots().get(0).odds()).isEqualTo(Map.of("pikachu-rare", 1));
+		assertThat(pack.slots().get(2).odds()).containsOnlyKeys("rare", "double-rare", "illustration-rare",
+				"special-illustration-rare", "futuristic-rare");
+		assertThat(pack.oddsNote()).contains("game-balance setting", "not an official pull rate");
+	}
+
+	@Test
+	void aSetWithoutAnyImagesIsLeftOutRatherThanShownWithout() {
+		// TCGdex lists the 30th Classic Collection's 30 reprints without images (or a rarity).
+		TcgdexSet classic = new TcgdexSet("30th-c", "30th Classic Collection", "2026-09-16", null,
+				new TcgdexSet.Serie("me", "Mega Evolution"));
+		TcgDataset dataset = map(new FetchedSet(modern("sv01"), SCARLET_VIOLET, List.of(pineco())),
+				new FetchedSet(new SetChoice("30th-c", "celebration", null), classic,
+						List.of(new TcgdexCard("30th-c-001", "001", "Charizard", "None", null, "Pokemon", 120, List.of(), null,
+								null, new TcgdexCard.SetId("30th-c")))));
+
+		assertThat(dataset.sets()).extracting(TcgDataset.CardSet::externalId).containsExactly("sv01");
+	}
+
 	private static TcgDataset map(FetchedSet... sets) {
 		return PokemonDatasetMapper.map(CONFIG, List.of(sets));
 	}

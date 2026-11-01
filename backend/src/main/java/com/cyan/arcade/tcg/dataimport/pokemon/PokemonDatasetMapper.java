@@ -18,6 +18,8 @@ import com.cyan.arcade.tcg.dataimport.TcgDataset.CardSet;
 import com.cyan.arcade.tcg.dataimport.TcgSourceException;
 import com.cyan.arcade.tcg.dataimport.pokemon.TcgdexClient.TcgdexCard;
 import com.cyan.arcade.tcg.dataimport.pokemon.TcgdexClient.TcgdexSet;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Turns what TCGdex says about the configured sets into a dataset. Pure: no requests, no database,
@@ -33,6 +35,8 @@ import com.cyan.arcade.tcg.dataimport.pokemon.TcgdexClient.TcgdexSet;
  */
 final class PokemonDatasetMapper {
 
+	private static final Logger log = LoggerFactory.getLogger(PokemonDatasetMapper.class);
+
 	/** One set as fetched: the configuration's choice and what TCGdex said about it. */
 	record FetchedSet(SetChoice choice, TcgdexSet set, List<TcgdexCard> cards) {
 	}
@@ -47,8 +51,11 @@ final class PokemonDatasetMapper {
 
 		for (FetchedSet each : fetched) {
 			List<Card> cards = new ArrayList<>();
+			int withoutImage = 0;
 			for (TcgdexCard card : inPrintedOrder(each.cards())) {
 				if (card.image() == null) {
+					// No picture is invented for a card: without TCGdex's own, it is not imported.
+					withoutImage++;
 					continue;
 				}
 				String rarity = config.rarityCode(card.rarity()).orElse(null);
@@ -63,7 +70,13 @@ final class PokemonDatasetMapper {
 					gameImage = mapped.imageUrl();
 				}
 			}
+			if (withoutImage > 0) {
+				log.warn("Pokémon set {}: {} of {} cards skipped, TCGdex has no image for them", each.choice().id(),
+						withoutImage, each.cards().size());
+			}
 			if (cards.isEmpty()) {
+				log.warn("Pokémon set {} skipped: none of its {} cards can be imported", each.choice().id(),
+						each.cards().size());
 				continue;
 			}
 			String name = Objects.requireNonNullElse(each.choice().name(), each.set().name());

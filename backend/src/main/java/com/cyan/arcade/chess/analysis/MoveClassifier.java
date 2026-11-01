@@ -18,10 +18,15 @@ import com.cyan.arcade.chess.engine.Color;
  * Nothing is claimed about the move.
  * <li><b>Best</b>: the engine's own first choice.
  * <li>Otherwise by the loss: <b>Excellent</b> up to 2 points, <b>Good</b> up to 5, <b>Inaccuracy</b>
- * up to 10, <b>Mistake</b> up to 20, <b>Blunder</b> beyond.
+ * up to 10, <b>Mistake</b> up to 20, <b>Blunder</b> beyond. These are the defaults; the limits are
+ * configurable ({@link Thresholds}, {@code app.chess.classification}).
  * </ol>
  * A move that is not the engine's choice but loses nothing (the later, deeper analysis can even think
  * it better) is Excellent, not a mistake.
+ *
+ * <p>There is no Book label (no opening book is installed) and no Brilliant or Great label: telling a
+ * sound sacrifice or the one saving move apart needs more than a loss in winning chances, so this
+ * policy does not claim it.
  */
 public final class MoveClassifier {
 
@@ -39,6 +44,23 @@ public final class MoveClassifier {
 
 	public static final double MISTAKE = 20;
 
+	/**
+	 * The most winning chances (percentage points) a move may give away and still be Excellent, Good,
+	 * an Inaccuracy or a Mistake; beyond the last it is a Blunder.
+	 */
+	public record Thresholds(double excellent, double good, double inaccuracy, double mistake) {
+
+		public static final Thresholds DEFAULT = new Thresholds(EXCELLENT, GOOD, INACCURACY, MISTAKE);
+
+		public Thresholds {
+			if (excellent < 0 || good < excellent || inaccuracy < good || mistake < inaccuracy || mistake > 100) {
+				throw new IllegalArgumentException(
+						"Classification limits must rise: 0 <= excellent <= good <= inaccuracy <= mistake <= 100");
+			}
+		}
+
+	}
+
 	private MoveClassifier() {
 	}
 
@@ -52,6 +74,12 @@ public final class MoveClassifier {
 	 */
 	public static Judgement classify(Color mover, boolean onlyMove, boolean playedBest, Evaluation best,
 			Evaluation after, boolean sufficient) {
+		return classify(mover, onlyMove, playedBest, best, after, sufficient, Thresholds.DEFAULT);
+	}
+
+	/** As {@link #classify(Color, boolean, boolean, Evaluation, Evaluation, boolean)}, with given limits. */
+	public static Judgement classify(Color mover, boolean onlyMove, boolean playedBest, Evaluation best,
+			Evaluation after, boolean sufficient, Thresholds limits) {
 		Double loss = (best != null && after != null)
 				? Math.max(0, best.winPercentFor(mover) - after.winPercentFor(mover)) : null;
 		if (onlyMove) {
@@ -64,16 +92,16 @@ public final class MoveClassifier {
 			return new Judgement(MoveClass.BEST, loss);
 		}
 		MoveClass label;
-		if (loss <= EXCELLENT) {
+		if (loss <= limits.excellent()) {
 			label = MoveClass.EXCELLENT;
 		}
-		else if (loss <= GOOD) {
+		else if (loss <= limits.good()) {
 			label = MoveClass.GOOD;
 		}
-		else if (loss <= INACCURACY) {
+		else if (loss <= limits.inaccuracy()) {
 			label = MoveClass.INACCURACY;
 		}
-		else if (loss <= MISTAKE) {
+		else if (loss <= limits.mistake()) {
 			label = MoveClass.MISTAKE;
 		}
 		else {

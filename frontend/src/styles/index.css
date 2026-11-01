@@ -1,6 +1,7 @@
 @import '@fontsource-variable/fredoka';
 @import '@fontsource-variable/nunito';
 @import 'tailwindcss';
+@import './theme-dark.css';
 
 /*
  * Design tokens for the "Playful Cartoon Arcade" theme.
@@ -31,6 +32,7 @@
   --color-brand-700: var(--color-cyan-700);
   --color-brand-800: var(--color-cyan-800);
   --color-brand-900: var(--color-cyan-900);
+  --color-brand-950: var(--color-cyan-950);
 
   /* Background, surfaces, text, borders */
   --color-canvas: #f1fbfd;
@@ -39,6 +41,8 @@
   --color-ink: #16323f;
   --color-ink-soft: #4b6776;
   --color-line: #cfeef5;
+  /* Dark panels over a game board (toasts, banners), white text on them: the same in both themes. */
+  --color-night: #16323f;
 
   /* Trading cards: purple and pink, with gold for the rarest. Used by the card game module only. */
   --color-tcg-purple: var(--color-purple-600);
@@ -241,10 +245,31 @@
     -webkit-tap-highlight-color: transparent;
   }
 
+  /*
+   * The dark theme: the same tokens with dark values, so every component that uses them follows.
+   * Chosen by the player (lib/theme.ts), else the system's preference; public/theme-init.js sets it
+   * before the first paint. Palette classes follow through theme-dark.css. Game skins and a game's
+   * own colours are not touched.
+   */
+  html[data-theme='dark'] {
+    color-scheme: dark;
+    --color-canvas: #0a1820;
+    --color-surface: #11242d;
+    --color-surface-muted: #173340;
+    --color-ink: #e4f5fa;
+    --color-ink-soft: #a3c2cd;
+    --color-line: #27505f;
+    --shadow-soft: 0 2px 0 0 rgb(0 0 0 / 0.25), 0 10px 30px -12px rgb(0 0 0 / 0.6);
+    --shadow-lift: 0 2px 0 0 rgb(0 0 0 / 0.3), 0 18px 40px -14px rgb(0 0 0 / 0.7);
+    /* Ink on the bright accent stays dark in both themes. */
+    --accent-ink: #083344;
+  }
+
   body {
     @apply bg-canvas font-sans text-ink antialiased;
     /* Subtle arcade-floor dot pattern. */
     background-image: radial-gradient(rgb(6 182 212 / 0.1) 1.2px, transparent 1.2px);
+    transition: background-color 160ms ease;
     background-size: 22px 22px;
   }
 

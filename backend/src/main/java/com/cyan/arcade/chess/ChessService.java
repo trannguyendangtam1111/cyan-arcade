@@ -24,6 +24,7 @@ import com.cyan.arcade.chess.ChessViews.LegalMove;
 import com.cyan.arcade.chess.ChessViews.MatchResponse;
 import com.cyan.arcade.chess.ChessViews.PlayedMove;
 import com.cyan.arcade.chess.ChessViews.ResultView;
+import com.cyan.arcade.chess.ChessViews.VariationSource;
 import com.cyan.arcade.chess.analysis.Difficulty;
 import com.cyan.arcade.chess.engine.ChessGame;
 import com.cyan.arcade.chess.engine.ChessGame.RuleException;
@@ -53,8 +54,11 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>A local match is two players at one device, both sides the owner's; taking moves back and
  * replaying them is allowed there because both players see it happen at the same screen. In a game
  * against Stockfish (started by {@link ChessAiService}, admins only) the owner plays one side and the
- * engine's moves come only from the server. No match is scored (the catalog marks Chess as
- * unscored), so no game session, leaderboard or reward is involved.
+ * engine's moves come only from the server; a takeback there returns to the player's previous turn
+ * (their move and the engine's reply), and redo plays both again. A variation ({@link Mode#ANALYSIS})
+ * starts from a position of a game and is played like a local match; it never changes the game, has
+ * no result to resign or agree, and is never the player's current game. No match is scored (the
+ * catalog marks Chess as unscored), so no game session, leaderboard or reward is involved.
  */
 @Service
 class ChessService {
@@ -73,11 +77,13 @@ class ChessService {
 
 	static final String NOTHING_TO_REDO = "NOTHING_TO_REDO";
 
-	static final String UNDO_NOT_ALLOWED = "UNDO_NOT_ALLOWED";
-
 	static final String MODE_NOT_ALLOWED = "MODE_NOT_ALLOWED";
 
 	static final String DRAW_OFFER_NOT_SUPPORTED = "DRAW_OFFER_NOT_SUPPORTED";
+
+	static final String NOT_IN_ANALYSIS = "NOT_IN_ANALYSIS";
+
+	static final String NO_SUCH_POSITION = "NO_SUCH_POSITION";
 
 	/** Matches nobody has touched for this long are forgotten. */
 	static final Duration KEPT_FOR = Duration.ofDays(30);
@@ -110,11 +116,34 @@ class ChessService {
 		return insert(owner, ChessMatch.againstEngine(owner, engineSide, difficulty, this.clock.instant()));
 	}
 
+	/**
+	 * Starts a variation of one of the caller's matches from its position after {@code ply} moves: a
+	 * new analysis match with those moves, played from there by the caller (both sides). The match it
+	 * comes from is only read. Their previous variation, if still open, is left for this one.
+	 */
+	@Transactional
+	public MatchResponse variation(Owner owner, UUID matchId, int ply) {
+		ChessMatch source = owned(owner, matchId);
+		if (ply < 0 || ply > source.moves().size()) {
+			throw new ApiException(HttpStatus.BAD_REQUEST, NO_SUCH_POSITION, "That game has no such position");
+		}
+		ChessMatch variation = ChessMatch.variation(owner, source, ply, this.clock.instant());
+		// The game's own moves up to there, so they replay; whether the rules end it there is the question.
+		if (ChessGame.replay(Position.initial(), variation.moves()).isOver()) {
+			throw new ConflictException(MATCH_OVER, "The game is over in that position: there is nothing to play");
+		}
+		return insert(owner, variation);
+	}
+
 	private MatchResponse insert(Owner owner, ChessMatch match) {
 		Instant now = match.createdAt();
 		this.store.deleteUntouchedSince(now.minus(KEPT_FOR));
-		this.store.abandonActive(owner, now);
+		boolean analysis = match.mode() == Mode.ANALYSIS;
+		this.store.abandonActive(owner, analysis, now);
 		if (!this.store.insert(match)) {
+			if (analysis) {
+				throw new ConflictException(STALE_REVISION, "Another variation was started at the same moment");
+			}
 			// Another request started one at the same moment: that one is the player's match.
 			return this.store.findCurrent(owner)
 				.map((current) -> view(current, owner))
@@ -165,42 +194,77 @@ class ChessService {
 		return played;
 	}
 
-	/** Takes the last move back (local matches only); redo can play it again. */
+	/**
+	 * Takes moves back; redo can play them again. In a local match or a variation, the last move.
+	 * Against Stockfish, back to the player's previous turn: their last move and, when the engine has
+	 * answered it, the engine's reply. Moves the engine played before the player's first move stay.
+	 */
 	@Transactional
 	public MatchResponse undo(Owner owner, UUID matchId, int revision) {
 		return act(owner, matchId, revision, (match) -> {
-			requireLocal(match);
 			ChessGame game = match.game();
-			if (game.moves().isEmpty()) {
-				throw new ConflictException(NOTHING_TO_UNDO, "There is no move to take back");
+			int count = movesToTakeBack(match, game);
+			if (count == 0) {
+				throw new ConflictException(NOTHING_TO_UNDO, (match.mode() == Mode.AI)
+						? "There is no move of yours to take back" : "There is no move to take back");
 			}
-			Move last = game.moves().get(game.moves().size() - 1);
-			ChessGame back = judged(game::takeBack);
 			List<Move> undone = new ArrayList<>(match.undone());
-			undone.add(last);
+			ChessGame back = game;
+			for (int taken = 0; taken < count; taken++) {
+				undone.add(back.moves().get(back.moves().size() - 1));
+				back = judged(back::takeBack);
+			}
 			return match.after(back, undone, this.clock.instant());
 		});
 	}
 
-	/** Plays the move taken back last again, by the rules like any move (local matches only). */
+	/**
+	 * Plays again what was taken back last, by the rules like any move. Against Stockfish, the
+	 * player's move and the engine's reply that followed it, so it is the player's turn again.
+	 */
 	@Transactional
 	public MatchResponse redo(Owner owner, UUID matchId, int revision) {
 		return act(owner, matchId, revision, (match) -> {
-			requireLocal(match);
 			if (match.undone().isEmpty()) {
 				throw new ConflictException(NOTHING_TO_REDO, "There is no move to replay");
 			}
 			List<Move> undone = new ArrayList<>(match.undone());
-			Move again = undone.remove(undone.size() - 1);
-			ChessGame game = match.game();
-			ChessGame next = judged(() -> game.play(again));
+			ChessGame next = match.game();
+			do {
+				Move again = undone.remove(undone.size() - 1);
+				ChessGame before = next;
+				next = judged(() -> before.play(again));
+			}
+			while (match.mode() == Mode.AI && !undone.isEmpty() && next.position().turn() == match.engineSide()
+					&& !next.isOver());
 			return match.after(next, undone, this.clock.instant());
 		});
+	}
+
+	/**
+	 * How many moves an undo takes back: none when there is nothing of the player's to take back;
+	 * against Stockfish, back to before the player's last move.
+	 */
+	private static int movesToTakeBack(ChessMatch match, ChessGame game) {
+		int played = game.moves().size();
+		if (match.mode() != Mode.AI) {
+			return Math.min(played, 1);
+		}
+		// The side that played each ply: the first move is White's.
+		Color player = match.engineSide().opposite();
+		for (int ply = played; ply >= 1; ply--) {
+			Color mover = (ply % 2 == 1) ? Color.WHITE : Color.BLACK;
+			if (mover == player) {
+				return played - ply + 1;
+			}
+		}
+		return 0;
 	}
 
 	@Transactional
 	public MatchResponse resign(Owner owner, UUID matchId, int revision, Color side) {
 		return act(owner, matchId, revision, (match) -> {
+			requireGame(match);
 			requireSide(match, owner, side);
 			ChessGame game = match.game();
 			return match.after(judged(() -> game.resign(side)), match.undone(), this.clock.instant());
@@ -214,6 +278,7 @@ class ChessService {
 	@Transactional
 	public MatchResponse draw(Owner owner, UUID matchId, int revision, DrawAction action, Color side) {
 		return act(owner, matchId, revision, (match) -> {
+			requireGame(match);
 			requireSide(match, owner, side);
 			if (match.mode() == Mode.AI && action != DrawAction.CLAIM) {
 				throw new ConflictException(DRAW_OFFER_NOT_SUPPORTED, "Stockfish does not answer draw offers");
@@ -273,7 +338,7 @@ class ChessService {
 			return EnumSet.noneOf(Color.class);
 		}
 		return switch (match.mode()) {
-			case LOCAL -> EnumSet.allOf(Color.class);
+			case LOCAL, ANALYSIS -> EnumSet.allOf(Color.class);
 			case AI -> EnumSet.of(match.engineSide().opposite());
 		};
 	}
@@ -284,9 +349,10 @@ class ChessService {
 		}
 	}
 
-	private static void requireLocal(ChessMatch match) {
-		if (match.mode() != Mode.LOCAL) {
-			throw new ConflictException(UNDO_NOT_ALLOWED, "Moves can only be taken back in a local match");
+	/** Resigning and draws are for games: a variation has no result to give up or agree. */
+	private static void requireGame(ChessMatch match) {
+		if (match.mode() == Mode.ANALYSIS) {
+			throw new ConflictException(NOT_IN_ANALYSIS, "A variation has no result to resign or agree");
 		}
 	}
 
@@ -319,6 +385,10 @@ class ChessService {
 		if (owner.isAdmin()) {
 			return new HintAllowance(true, match.hintsUsed(), null, null);
 		}
+		if (match.mode() == Mode.ANALYSIS) {
+			// A player's hints are a game's: a variation, which anyone can start again, gives none.
+			return new HintAllowance(true, match.hintsUsed(), 0, 0);
+		}
 		int limit = this.properties.hintsPerGame();
 		return new HintAllowance(true, match.hintsUsed(), limit, Math.max(0, limit - match.hintsUsed()));
 	}
@@ -341,7 +411,7 @@ class ChessService {
 			Position before = game.positions().get(index);
 			Move move = game.moves().get(index);
 			history.add(new PlayedMove(index + 1, before.turn(), Square.name(move.from()), Square.name(move.to()),
-					move.uci(), game.sans().get(index)));
+					move.uci(), game.sans().get(index), game.positions().get(index + 1).toFen()));
 			Piece taken = before.capturedBy(move);
 			if (taken != null) {
 				captured.get(before.turn()).add(String.valueOf(taken.type().letter()));
@@ -361,16 +431,17 @@ class ChessService {
 		ResultView result = game.result()
 			.map((outcome) -> new ResultView(outcome.winner(), outcome.termination(), outcome.score()))
 			.orElse(null);
-		boolean local = match.mode() == Mode.LOCAL;
 		EngineView engine = (match.mode() == Mode.AI) ? new EngineView(match.engineSide(), match.difficulty(),
 				match.difficulty().label(), match.difficulty().setting()) : null;
 		return new MatchResponse(match.id(), match.mode(), match.status(), match.revision(), position.toFen(),
-				position.turn(), position.fullmoveNumber(), position.halfmoveClock(), position.inCheck(),
+				game.positions().get(0).toFen(), position.turn(), position.fullmoveNumber(), position.halfmoveClock(),
+				position.inCheck(),
 				position.inCheck() ? Square.name(position.kingSquare(position.turn())) : null, legal,
 				history.isEmpty() ? null : history.get(history.size() - 1), history, captured, material,
 				on ? game.drawOffer() : null, on ? game.claimableDraw().orElse(null) : null, game.repetitions(),
-				on && local && !game.moves().isEmpty(), on && local && !match.undone().isEmpty(), engine,
-				hintsOf(match, owner), result, match.createdAt(), match.updatedAt());
+				on && movesToTakeBack(match, game) > 0, on && !match.undone().isEmpty(), engine,
+				hintsOf(match, owner), result, match.createdAt(), match.updatedAt(),
+				(match.mode() == Mode.ANALYSIS) ? new VariationSource(match.sourceMatchId(), match.sourcePly()) : null);
 	}
 
 	private static LegalMove legalMove(Position position, Move move) {

@@ -44,7 +44,7 @@ class TcgDatasetImportTests {
 	void importsAGameWithItsSetsCardsPacksPoolsAndOdds() {
 		ImportReport report = this.importer.importDataset(game("import-basic", "Basic"), "test");
 
-		assertThat(report).isEqualTo(new ImportReport("import-basic", 2, 1, 3, 3, 1));
+		assertThat(report).isEqualTo(new ImportReport("import-basic", 2, 1, 3, 3, 0, 0, 1));
 		assertThat(count("tcg_sets s JOIN tcg_games g ON g.id = s.game_id WHERE g.slug = 'import-basic'")).isEqualTo(1);
 		assertThat(this.jdbc.queryForList("""
 				SELECT c.card_number || ':' || r.code || ':' || (c.metadata ->> 'power')
@@ -71,6 +71,8 @@ class TcgDatasetImportTests {
 
 		assertThat(second.cards()).isEqualTo(3);
 		assertThat(second.newCards()).isZero();
+		assertThat(second.updatedCards()).isZero();
+		assertThat(second.unchangedCards()).isEqualTo(3);
 		assertThat(cardRows("import-twice")).isEqualTo(cardsBefore);
 		assertThat(packId("import-twice")).isEqualTo(packBefore);
 		assertThat(count("tcg_games WHERE slug = 'import-twice'")).isEqualTo(1);
@@ -208,6 +210,9 @@ class TcgDatasetImportTests {
 				RARITIES, List.of(firstWithoutB, secondWithB)), "test");
 
 		assertThat(report.newCards()).isZero();
+		// card-b moved and changed; the other two are as they were.
+		assertThat(report.updatedCards()).isEqualTo(1);
+		assertThat(report.unchangedCards()).isEqualTo(2);
 		assertThat(this.jdbc.queryForMap("""
 				SELECT c.id, s.code, c.card_number, r.code AS rarity
 				FROM tcg_cards c JOIN tcg_sets s ON s.id = c.set_id JOIN tcg_rarities r ON r.id = c.rarity_id

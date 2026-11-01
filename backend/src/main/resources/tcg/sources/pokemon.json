@@ -2,7 +2,7 @@
   "game": {
     "slug": "pokemon",
     "name": "Pokémon TCG",
-    "description": "Booster packs from real Pokémon Trading Card Game sets: Mega Evolution, Scarlet & Violet and the classic Base Set era.",
+    "description": "Booster packs from real Pokémon Trading Card Game sets: Mega Evolution, the 30th Celebration, Scarlet & Violet and the classic Base Set era.",
     "accentColor": "#ffcb05",
     "attribution": "Card data and images: TCGdex (tcgdex.net), a community-run open database. Pokémon and its trademarks are © Nintendo, Creatures, GAME FREAK and The Pokémon Company. Cyan Arcade is a fan project, not affiliated with or endorsed by them.",
     "coverCard": "base1-58"
@@ -20,7 +20,9 @@
     { "code": "special-illustration-rare", "name": "Special Illustration Rare", "tier": 5, "source": ["Special illustration rare"] },
     { "code": "hyper-rare", "name": "Hyper Rare", "tier": 5, "source": ["Hyper rare"] },
     { "code": "black-white-rare", "name": "Black White Rare", "tier": 5, "source": ["Black White Rare"] },
-    { "code": "mega-hyper-rare", "name": "Mega Hyper Rare", "tier": 5, "source": ["Mega Hyper Rare"] }
+    { "code": "mega-hyper-rare", "name": "Mega Hyper Rare", "tier": 5, "source": ["Mega Hyper Rare"] },
+    { "code": "pikachu-rare", "name": "Pikachu Rare", "tier": 3, "source": ["Pikachu Rare"] },
+    { "code": "futuristic-rare", "name": "Futuristic Rare", "tier": 5, "source": ["Futuristic Rare"] }
   ],
   "packProfiles": {
     "modern": {
@@ -49,9 +51,23 @@
         { "count": 3, "odds": { "uncommon": 1 } },
         { "count": 1, "odds": { "rare": 1 } }
       ]
+    },
+    "celebration": {
+      "code": "booster",
+      "name": "{set} Booster Pack",
+      "description": "5 foil cards: one of the 30 Pikachu Rares in every pack, three commons or rares and a rare-or-better slot. The Basic Energy of the real packs is not part of the card data.",
+      "oddsNote": "Simulator probabilities. A Pikachu Rare in every pack follows the published pack contents; every other weight is this arcade's game-balance setting, not an official pull rate (The Pokémon Company does not publish them).",
+      "slots": [
+        { "count": 1, "odds": { "pikachu-rare": 1 } },
+        { "count": 3, "odds": { "common": 80, "rare": 20 } },
+        { "count": 1, "odds": {
+            "rare": 600, "double-rare": 250, "illustration-rare": 110, "special-illustration-rare": 35,
+            "futuristic-rare": 5 } }
+      ]
     }
   },
   "sets": [
+    { "id": "30th", "profile": "celebration" },
     { "id": "me05", "profile": "modern" },
     { "id": "me04", "profile": "modern" },
     { "id": "me03", "profile": "modern" },

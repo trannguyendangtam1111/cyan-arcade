@@ -23,7 +23,7 @@ export function CardTile({ card, quantity, onSelect }: CardTileProps) {
     >
       <CardFace card={card} missing={missing} size="thumb" className="w-full" />
       {quantity !== undefined && quantity > 1 && (
-        <span className="absolute -top-2 -right-2 rounded-full bg-ink px-2 py-0.5 text-xs font-bold text-white shadow-soft ring-2 ring-surface">
+        <span className="absolute -top-2 -right-2 rounded-full bg-ink px-2 py-0.5 text-xs font-bold text-canvas shadow-soft ring-2 ring-surface">
           ×{quantity}
         </span>
       )}

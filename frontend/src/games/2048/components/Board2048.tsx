@@ -20,7 +20,7 @@ const TILE_COLORS: Record<number, string> = {
   1024: 'bg-amber-600 text-white',
   2048: 'bg-amber-700 text-white ring-4 ring-yellow-300',
 }
-const BEYOND_2048 = 'bg-ink text-white ring-4 ring-yellow-300'
+const BEYOND_2048 = 'bg-night text-white ring-4 ring-yellow-300'
 
 /** Font size relative to the board width, so numbers fit their tile at any screen size. */
 function fontSize(value: number): string {

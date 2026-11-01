@@ -100,7 +100,7 @@ export default function WordleGame(props: GameProps<WordleAiPlayer>) {
           role="status"
           className={cn(
             'pointer-events-none absolute top-12 left-1/2 z-30 -translate-x-1/2 rounded-full px-4 py-1.5 font-display text-sm font-semibold whitespace-nowrap shadow-lift motion-safe:animate-pop-in',
-            game.message.tone === 'error' ? 'bg-danger text-white' : game.message.tone === 'success' ? 'bg-(--accent) text-(--accent-ink)' : 'bg-ink text-white',
+            game.message.tone === 'error' ? 'bg-danger text-white' : game.message.tone === 'success' ? 'bg-(--accent) text-(--accent-ink)' : 'bg-night text-white',
           )}
         >
           {game.message.text}

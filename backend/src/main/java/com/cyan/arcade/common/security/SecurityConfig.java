@@ -104,7 +104,7 @@ class SecurityConfig {
 				.permitAll()
 				.requestMatchers(HttpMethod.POST, "/api/chess/matches", "/api/chess/matches/*/moves",
 						"/api/chess/matches/*/undo", "/api/chess/matches/*/redo", "/api/chess/matches/*/resign",
-						"/api/chess/matches/*/draw")
+						"/api/chess/matches/*/draw", "/api/chess/matches/*/variations")
 				.permitAll()
 				// Administration and the games' AI mode: admins only.
 				.requestMatchers("/api/admin/**", "/api/ai/**")

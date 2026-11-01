@@ -9,7 +9,9 @@ import type {
   MatchView,
   MoveClass,
   PieceKind,
+  ReviewedMove,
   ReviewResponse,
+  SideSummary,
   Side,
   Termination,
 } from '@/games/chess/types/chessTypes'
@@ -143,6 +145,22 @@ export interface ChessServerOptions {
   evaluation?: Partial<Evaluation>
   /** Labels the review gives the moves, in order (Best for the engine's own choice, Good for the rest). */
   classifications?: MoveClass[]
+  /** Labels the coach gives the moves by ply (else as the review would). */
+  coachLabels?: Record<number, MoveClass>
+}
+
+/** The accuracy curve the server publishes (see the backend's Accuracy). */
+const moveAccuracy = (loss: number) => Math.max(0, Math.min(100, 103.1668 * Math.exp(-0.04354 * Math.max(0, loss)) - 3.1669))
+
+function sideSummary(moves: readonly ReviewedMove[], side: Side): SideSummary {
+  const counts: SideSummary['counts'] = {}
+  const losses: number[] = []
+  for (const move of moves.filter((item) => item.color === side)) {
+    counts[move.classification] = (counts[move.classification] ?? 0) + 1
+    if (move.classification !== 'FORCED' && move.classification !== 'UNRATED' && move.loss !== null) losses.push(move.loss)
+  }
+  const accuracy = losses.length ? Math.round((losses.reduce((sum, loss) => sum + moveAccuracy(loss), 0) / losses.length) * 10) / 10 : null
+  return { accuracy, rated: losses.length, counts }
 }
 
 export const DIFFICULTIES: DifficultyOption[] = [
@@ -175,6 +193,8 @@ type FakeMatch = {
   claimableDraw: Termination | null
   engine: { side: Side; difficulty: Difficulty } | null
   hintsUsed: number
+  /** For a variation ("continue from here"), the game and ply it starts from. */
+  source: { matchId: string; ply: number } | null
 }
 
 export function chessServer({
@@ -185,16 +205,31 @@ export function chessServer({
   hintsPerGame = 3,
   evaluation = {},
   classifications = [],
+  coachLabels = {},
 }: ChessServerOptions = {}) {
   const calls: { method: string; path: string; body: Record<string, unknown> | undefined }[] = []
   let matchCount = 0
+  /** The player's current game (never a variation), as the server's "current" match. */
   let match: FakeMatch | null = null
+  /** Every match by id: the games and the variations started from them. */
+  const matches = new Map<string, FakeMatch>()
   let review: ReviewResponse | null = null
 
   const fresh = (moves: string[] = [], engine: FakeMatch['engine'] = null) => {
     matchCount++
     review = null
-    match = { id: `match-${matchCount}`, moves, undone: [], revision: moves.length, status: 'ACTIVE', drawOffer: null, result: null, claimableDraw: claimableDraw ?? null, engine, hintsUsed: 0 }
+    match = { id: `match-${matchCount}`, moves, undone: [], revision: moves.length, status: 'ACTIVE', drawOffer: null, result: null, claimableDraw: claimableDraw ?? null, engine, hintsUsed: 0, source: null }
+    matches.set(match.id, match)
+  }
+
+  /** How many moves an undo takes back: one; against Stockfish, back to before the player's last move. */
+  const undoCount = (m: FakeMatch) => {
+    if (!m.engine) return Math.min(1, m.moves.length)
+    for (let ply = m.moves.length; ply >= 1; ply--) {
+      const mover: Side = ply % 2 === 1 ? 'WHITE' : 'BLACK'
+      if (mover !== m.engine.side) return m.moves.length - ply + 1
+    }
+    return 0
   }
 
   if (current) {
@@ -205,15 +240,16 @@ export function chessServer({
 
   const state = (moves: string[]) => script[moves.join(' ')]
 
-  const allowance = (user: SessionUser | null): HintAllowance => {
-    const used = match?.hintsUsed ?? 0
+  const allowance = (user: SessionUser | null, m: FakeMatch | null = match): HintAllowance => {
+    const used = m?.hintsUsed ?? 0
     if (!user) return { allowed: false, used, limit: 0, remaining: 0 }
     if (user.role === 'ADMIN') return { allowed: true, used, limit: null, remaining: null }
+    // A variation gives a player no hints: the limit is the game's.
+    if (m?.source) return { allowed: true, used, limit: 0, remaining: 0 }
     return { allowed: true, used, limit: hintsPerGame, remaining: Math.max(0, hintsPerGame - used) }
   }
 
-  const view = (user: SessionUser | null): MatchView => {
-    const m = match!
+  const view = (user: SessionUser | null, m: FakeMatch = match!): MatchView => {
     const spec = state(m.moves)
     const result = m.result ?? spec.result ?? null
     const turn: Side = spec.fen.split(' ')[1] === 'w' ? 'WHITE' : 'BLACK'
@@ -227,14 +263,16 @@ export function chessServer({
       to: uci.slice(2, 4),
       uci,
       san: state(m.moves.slice(0, index + 1)).san ?? uci,
+      fen: state(m.moves.slice(0, index + 1)).fen,
     }))
     const difficulty = m.engine ? DIFFICULTIES.find((option) => option.id === m.engine!.difficulty)! : null
     return {
       id: m.id,
-      mode: local ? 'LOCAL' : 'AI',
+      mode: m.source ? 'ANALYSIS' : local ? 'LOCAL' : 'AI',
       status,
       revision: m.revision,
       fen: spec.fen,
+      startFen: state([]).fen,
       turn,
       fullmoveNumber: Number(spec.fen.split(' ')[5]),
       halfmoveClock: Number(spec.fen.split(' ')[4]),
@@ -248,13 +286,14 @@ export function chessServer({
       drawOffer: on ? m.drawOffer : null,
       claimableDraw: on ? (m.claimableDraw ?? spec.claimableDraw ?? null) : null,
       repetitions: 1,
-      canUndo: on && local && m.moves.length > 0,
-      canRedo: on && local && m.undone.length > 0,
+      canUndo: on && undoCount(m) > 0,
+      canRedo: on && m.undone.length > 0,
       engine: m.engine && difficulty ? { side: m.engine.side, difficulty: m.engine.difficulty, label: difficulty.label, setting: difficulty.setting } : null,
-      hints: allowance(user),
+      hints: allowance(user, m),
       result,
       createdAt: '2026-10-10T08:00:00Z',
       updatedAt: '2026-10-10T08:00:00Z',
+      source: m.source,
     }
   }
 
@@ -263,34 +302,82 @@ export function chessServer({
   /** The engine's choice: the first legal move the script continues with. */
   const engineChoice = (moves: string[]) => state(moves).legal.find((move) => state([...moves, move.uci])) ?? null
 
+  /** A move judged as the server judges it, from the script: Best for the engine's own choice. */
+  const judged = (moves: string[], index: number, label?: MoveClass): ReviewedMove => {
+    const uci = moves[index]
+    const before = state(moves.slice(0, index))
+    const best = engineChoice(moves.slice(0, index)) ?? before.legal[0]
+    const classification: MoveClass = label ?? (best.uci === uci ? 'BEST' : 'GOOD')
+    const bad = classification === 'MISTAKE' || classification === 'BLUNDER' || classification === 'INACCURACY'
+    return {
+      ply: index + 1,
+      color: (index % 2 === 0 ? 'WHITE' : 'BLACK') as Side,
+      uci,
+      san: state(moves.slice(0, index + 1)).san ?? uci,
+      from: uci.slice(0, 2),
+      to: uci.slice(2, 4),
+      fenBefore: before.fen,
+      fenAfter: state(moves.slice(0, index + 1)).fen,
+      best: suggestion(best),
+      bestLine: [best.san, 'Nf6'],
+      before: { ...SLIGHT_EDGE },
+      after: bad
+        ? { ...SLIGHT_EDGE, centipawns: -250, display: '-2.50', whiteWinPercent: 28.5, favoured: 'BLACK' as Side }
+        : { ...SLIGHT_EDGE, centipawns: -40, display: '-0.40', whiteWinPercent: 46.3, favoured: 'BLACK' as Side },
+      classification,
+      loss: classification === 'BEST' ? 0 : bad ? 24.6 : 6.8,
+      depth: 14,
+    }
+  }
+
   const reviewed = (): ReviewResponse => {
     const m = match!
-    const moves = m.moves.map((uci, index) => {
-      const before = state(m.moves.slice(0, index))
-      const best = engineChoice(m.moves.slice(0, index)) ?? before.legal[0]
-      return {
-        ply: index + 1,
-        color: (index % 2 === 0 ? 'WHITE' : 'BLACK') as Side,
-        uci,
-        san: state(m.moves.slice(0, index + 1)).san ?? uci,
-        from: uci.slice(0, 2),
-        to: uci.slice(2, 4),
-        fenBefore: before.fen,
-        fenAfter: state(m.moves.slice(0, index + 1)).fen,
-        best: suggestion(best),
-        bestLine: [best.san, 'Nf6'],
-        before: { ...SLIGHT_EDGE },
-        after: { ...SLIGHT_EDGE, centipawns: -40, display: '-0.40', whiteWinPercent: 46.3, favoured: 'BLACK' as Side },
-        classification: classifications[index] ?? (best.uci === uci ? 'BEST' : 'GOOD'),
-        loss: best.uci === uci ? 0 : 6.8,
-        depth: 14,
-      }
-    })
-    return { matchId: m.id, status: 'DONE', analyzed: m.moves.length + 1, total: m.moves.length + 1, moves, engine: 'Stockfish 19', settings: { movetimeMs: 250, depth: 16, minDepth: 8 }, error: null }
+    const moves = m.moves.map((_, index) => judged(m.moves, index, classifications[index]))
+    return {
+      matchId: m.id,
+      status: 'DONE',
+      analyzed: m.moves.length + 1,
+      total: m.moves.length + 1,
+      moves,
+      engine: 'Stockfish 19',
+      settings: { movetimeMs: 250, depth: 16, minDepth: 8 },
+      summary: { white: sideSummary(moves, 'WHITE'), black: sideSummary(moves, 'BLACK') },
+      error: null,
+    }
   }
+
+
+  /** Coach answers held back until `releaseCoach` (to see a judgement pending, or arriving late). */
+  let held: (() => void)[] = []
+  let heldEngine: (() => void)[] = []
+  let heldEvaluations: { ply: number; release: () => void }[] = []
 
   const server = {
     calls,
+    /** Holds every coach answer until `releaseCoach()`. */
+    holdCoach: false,
+    /** Holds Stockfish's moves until `releaseEngine()`: it is thinking meanwhile. */
+    holdEngine: false,
+    releaseEngine() {
+      const waiting = heldEngine
+      heldEngine = []
+      waiting.forEach((release) => release())
+    },
+    /** Holds every evaluation until `releaseEvaluation`; held ones answer even if their caller gave up, as a late reply would. */
+    holdEvaluation: false,
+    /** Answers the held evaluations, those of one ply alone if it is given. */
+    releaseEvaluation(ply?: number) {
+      const waiting = heldEvaluations.filter((entry) => ply === undefined || entry.ply === ply)
+      heldEvaluations = heldEvaluations.filter((entry) => !waiting.includes(entry))
+      waiting.forEach((entry) => entry.release())
+    },
+    /** The engine's evaluation of particular plies, over the default one. */
+    evaluationByPly: {} as Record<number, Partial<Evaluation>>,
+    releaseCoach() {
+      const waiting = held
+      held = []
+      waiting.forEach((release) => release())
+    },
     /** Makes the next request fail as if the network were down. */
     failNext: failFirst,
     /** Makes the next engine requests (hints, engine moves, evaluations) fail with `engineFailureCode`. */
@@ -305,7 +392,11 @@ export function chessServer({
     get match() {
       return match
     },
-    handler: (({ path, method, body, user }) => {
+    /** A match by id: a game or a variation. */
+    find(id: string) {
+      return matches.get(id) ?? null
+    },
+    handler: (({ path, method, body, user, signal }) => {
       if (!path.startsWith('/api/chess/') && !path.startsWith('/api/ai/chess/')) return undefined
       calls.push({ method, path, body })
       if (server.failNext) {
@@ -332,9 +423,10 @@ export function chessServer({
           return mockJson(view(user), 201)
         }
         const ai = path.match(/^\/api\/ai\/chess\/matches\/([^/]+)\/(engine-move|evaluation|review)$/)
-        if (!ai || !match || decodeURIComponent(ai[1]) !== match.id) return mockProblem(404, 'NOT_FOUND', 'Chess match was not found')
-        const m: FakeMatch = match
-        const shown = view(user)
+        const target = ai ? matches.get(decodeURIComponent(ai[1])) : undefined
+        if (!ai || !target) return mockProblem(404, 'NOT_FOUND', 'Chess match was not found')
+        const m: FakeMatch = target
+        const shown = view(user, m)
         if (ai[2] === 'engine-move') {
           if (shown.status !== 'ACTIVE') return mockProblem(409, 'MATCH_OVER', 'This match is over')
           if (body?.revision !== m.revision) return mockProblem(409, 'STALE_REVISION', 'The match has changed since')
@@ -343,34 +435,59 @@ export function chessServer({
           if (failure) return failure
           const choice = engineChoice(m.moves)
           if (!choice) return mockProblem(503, 'ENGINE_FAILED', 'No scripted engine move')
-          m.moves = [...m.moves, choice.uci]
-          m.revision++
-          return mockJson(view(user))
+          const play = () => {
+            m.moves = [...m.moves, choice.uci]
+            m.revision++
+            return mockJson(view(user, m))
+          }
+          if (!server.holdEngine) return play()
+          // Stockfish thinking for as long as the test likes: its move lands on release.
+          return new Promise<Response>((resolve) => heldEngine.push(() => resolve(play())))
         }
         if (ai[2] === 'evaluation') {
           if (body?.revision !== m.revision) return mockProblem(409, 'STALE_REVISION', 'The match has changed since')
           const failure = engineFailure()
           if (failure) return failure
           const depth = Number(body?.depth)
-          if (shown.result) {
+          const ply = body?.ply === undefined ? m.moves.length : Number(body.ply)
+          if (ply > m.moves.length) return mockProblem(400, 'ANALYSIS_NOT_ALLOWED', 'No such position')
+          const at = m.moves.slice(0, ply)
+          const sideAt: Side = state(at).fen.split(' ')[1] === 'w' ? 'WHITE' : 'BLACK'
+          if (shown.result && ply === m.moves.length) {
             const winner = shown.result.winner
             const finished: Evaluation = { kind: 'MATE', centipawns: 0, mateIn: 0, matingSide: winner, display: shown.result.score, whiteWinPercent: winner === 'WHITE' ? 100 : 0, favoured: winner, exact: true }
-            return mockJson({ revision: m.revision, sideToMove: shown.turn, evaluation: finished, bestMove: null, lines: [], depth: 0, requestedDepth: depth, complete: true, finished: true, engine: 'Stockfish 19' })
+            return mockJson({ revision: m.revision, ply, sideToMove: shown.turn, evaluation: finished, bestMove: null, lines: [], depth: 0, requestedDepth: depth, complete: true, finished: true, termination: shown.result.termination, engine: 'Stockfish 19' })
           }
-          const shownEvaluation = { ...SLIGHT_EDGE, ...evaluation }
-          const lines = state(m.moves).legal.slice(0, Number(body?.lines ?? 1))
-          return mockJson({
+          const shownEvaluation = { ...SLIGHT_EDGE, ...evaluation, ...server.evaluationByPly[ply] }
+          const lines = state(at).legal.slice(0, Number(body?.lines ?? 1))
+          /** A line: the move, then the script's reply if it has one; each with its board. */
+          const lineOf = (move: LegalMove) => {
+            const first = [...at, move.uci]
+            const reply = state(first) ? engineChoice(first) : null
+            const steps = reply && state([...first, reply.uci]) ? [move, reply] : [move]
+            return {
+              san: steps.map((step) => step.san),
+              uci: steps.map((step) => step.uci),
+              fens: steps.map((_, index) => state([...at, ...steps.slice(0, index + 1).map((step) => step.uci)])?.fen ?? state(at).fen),
+            }
+          }
+          const answer = () => mockJson({
             revision: m.revision,
-            sideToMove: shown.turn,
+            ply,
+            sideToMove: sideAt,
             evaluation: shownEvaluation,
             bestMove: lines[0] ? suggestion(lines[0]) : null,
-            lines: lines.map((move, index) => ({ rank: index + 1, evaluation: index === 0 ? shownEvaluation : { ...SLIGHT_EDGE, centipawns: 10, display: '+0.10' }, san: [move.san, 'Nf6'], uci: [move.uci, 'g8f6'], depth })),
+            lines: lines.map((move, index) => ({ rank: index + 1, evaluation: index === 0 ? shownEvaluation : { ...SLIGHT_EDGE, centipawns: 10, display: '+0.10' }, ...lineOf(move), depth })),
             depth,
             requestedDepth: depth,
             complete: true,
             finished: false,
+            termination: null,
             engine: 'Stockfish 19',
           })
+          if (!server.holdEvaluation) return answer()
+          const reply = answer()
+          return new Promise<Response>((resolve) => heldEvaluations.push({ ply, release: () => resolve(reply) }))
         }
         // The review.
         if (method === 'POST') {
@@ -395,11 +512,44 @@ export function chessServer({
         fresh()
         return mockJson(view(user), 201)
       }
-      const route = path.match(/^\/api\/chess\/matches\/([^/]+)(?:\/(moves|undo|redo|resign|draw|hint))?$/)
-      if (!route || !match || decodeURIComponent(route[1]) !== match.id) return mockProblem(404, 'NOT_FOUND', 'Chess match was not found')
-      if (method === 'GET' && !route[2]) return mockJson(view(user))
-      const m: FakeMatch = match
-      const shown = view(user)
+      const coach = path.match(/^\/api\/chess\/matches\/([^/]+)\/coach$/)
+      if (coach && method === 'POST') {
+        if (!user) return mockProblem(401, 'UNAUTHORIZED', 'Authentication is required')
+        const target = matches.get(decodeURIComponent(coach[1]))
+        if (!target) return mockProblem(404, 'NOT_FOUND', 'Chess match was not found')
+        const m: FakeMatch = target
+        const ply = Number(body?.ply)
+        if (!(ply >= 1 && ply <= m.moves.length) || m.moves[ply - 1] !== body?.uci) return mockProblem(409, 'COACH_MOVE_GONE', 'That move is no longer in the game')
+        const mover: Side = ply % 2 === 1 ? 'WHITE' : 'BLACK'
+        if (m.engine && m.engine.side === mover) return mockProblem(403, 'NOT_YOUR_SIDE', 'You do not play ' + mover)
+        const failure = engineFailure()
+        const answer = failure ?? mockJson({ matchId: m.id, ply, move: judged(m.moves, ply - 1, coachLabels[ply]), engine: 'Stockfish 19' })
+        if (!server.holdCoach) return answer
+        // Held back like a slow server, and given up like a real request when its caller aborts it.
+        return new Promise<Response>((resolve, reject) => {
+          held.push(() => resolve(answer))
+          signal?.addEventListener('abort', () => reject(new DOMException('The operation was aborted.', 'AbortError')))
+        })
+      }
+      const route = path.match(/^\/api\/chess\/matches\/([^/]+)(?:\/(moves|undo|redo|resign|draw|hint|variations))?$/)
+      const target = route ? matches.get(decodeURIComponent(route[1])) : undefined
+      if (!route || !target) return mockProblem(404, 'NOT_FOUND', 'Chess match was not found')
+      if (method === 'GET' && !route[2]) return mockJson(view(user, target))
+      const m: FakeMatch = target
+      const shown = view(user, m)
+      if (route[2] === 'variations') {
+        // "Continue from here": a separate match with the game's moves up to that ply; the game is untouched.
+        const ply = Number(body?.ply)
+        if (!(ply >= 0 && ply <= m.moves.length)) return mockProblem(400, 'NO_SUCH_POSITION', 'That game has no such position')
+        const prefix = m.moves.slice(0, ply)
+        if (state(prefix)?.result) return mockProblem(409, 'MATCH_OVER', 'The game is over in that position: there is nothing to play')
+        for (const other of matches.values()) if (other.source && other.status === 'ACTIVE') other.status = 'ABANDONED'
+        matchCount++
+        const source = m.source ? { matchId: m.source.matchId, ply: Math.min(ply, m.source.ply) } : { matchId: m.id, ply }
+        const variation: FakeMatch = { id: `match-${matchCount}`, moves: prefix, undone: [], revision: 0, status: 'ACTIVE', drawOffer: null, result: null, claimableDraw: null, engine: null, hintsUsed: 0, source }
+        matches.set(variation.id, variation)
+        return mockJson(view(user, variation), 201)
+      }
       if (route[2] === 'hint' && !user) return mockProblem(401, 'UNAUTHORIZED', 'Authentication is required')
       if (shown.status !== 'ACTIVE') return mockProblem(409, 'MATCH_OVER', 'This match is over')
       if (body?.revision !== m.revision) return mockProblem(409, 'STALE_REVISION', 'The match has changed since; showing it as it is now')
@@ -414,7 +564,13 @@ export function chessServer({
           if (failure) return failure
           const best = engineChoice(m.moves) ?? shown.legalMoves[0]
           m.hintsUsed++
-          return mockJson({ revision: m.revision, move: suggestion(best), line: [best.san, 'e5', 'Nf3'], depth: 18, engine: 'Stockfish 19', hints: allowance(user) })
+          // What the move does, as the server says it: here from the script's notation alone.
+          const ideas = [
+            ...(best.san.endsWith('#') ? ['It is checkmate.'] : []),
+            ...(best.capture ? ['It captures a piece.'] : []),
+            ...(best.san.endsWith('+') ? ['It gives check.'] : []),
+          ]
+          return mockJson({ revision: m.revision, move: suggestion(best), line: [best.san, 'e5', 'Nf3'], depth: 18, engine: 'Stockfish 19', hints: allowance(user, m), evaluation: { ...SLIGHT_EDGE, ...evaluation }, ideas })
         }
         case 'moves': {
           const uci = String(body?.move)
@@ -427,19 +583,26 @@ export function chessServer({
           m.undone = []
           break
         }
-        case 'undo':
-          if (m.engine) return mockProblem(409, 'UNDO_NOT_ALLOWED', 'Moves can only be taken back in a local match')
-          if (m.moves.length === 0) return mockProblem(409, 'NOTHING_TO_UNDO', 'There is no move to take back')
-          m.undone = [...m.undone, m.moves[m.moves.length - 1]]
-          m.moves = m.moves.slice(0, -1)
+        case 'undo': {
+          // Against Stockfish, back to the player's previous turn: their move and the engine's reply.
+          const count = undoCount(m)
+          if (count === 0) return mockProblem(409, 'NOTHING_TO_UNDO', m.engine ? 'There is no move of yours to take back' : 'There is no move to take back')
+          for (let taken = 0; taken < count; taken++) {
+            m.undone = [...m.undone, m.moves[m.moves.length - 1]]
+            m.moves = m.moves.slice(0, -1)
+          }
           m.drawOffer = null
           break
+        }
         case 'redo':
           if (m.undone.length === 0) return mockProblem(409, 'NOTHING_TO_REDO', 'There is no move to replay')
-          m.moves = [...m.moves, m.undone[m.undone.length - 1]]
-          m.undone = m.undone.slice(0, -1)
+          do {
+            m.moves = [...m.moves, m.undone[m.undone.length - 1]]
+            m.undone = m.undone.slice(0, -1)
+          } while (m.engine && m.undone.length > 0 && view(user, m).turn === m.engine.side)
           break
         case 'resign': {
+          if (m.source) return mockProblem(409, 'NOT_IN_ANALYSIS', 'A variation has no result to resign or agree')
           const side = body?.side as Side
           if (!yours(side)) return mockProblem(403, 'NOT_YOUR_SIDE', 'You do not play ' + side)
           m.result = { winner: side === 'WHITE' ? 'BLACK' : 'WHITE', termination: 'RESIGNATION', score: side === 'WHITE' ? '0-1' : '1-0' }
@@ -460,7 +623,7 @@ export function chessServer({
         }
       }
       m.revision++
-      return mockJson(view(user))
+      return mockJson(view(user, m))
     }) as MockHandler,
   }
   return server

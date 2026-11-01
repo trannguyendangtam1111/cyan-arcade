@@ -32,7 +32,7 @@ class ChessMatchStore {
 
 	private static final String COLUMNS = """
 			id, mode, status, moves, undone, draw_offer, winner, termination, revision, user_id, player_id, created_at,
-			updated_at, finished_at, engine_side, engine_difficulty, hints_used""";
+			updated_at, finished_at, engine_side, engine_difficulty, hints_used, source_match_id, source_ply""";
 
 	private final JdbcClient jdbc;
 
@@ -40,12 +40,16 @@ class ChessMatchStore {
 		this.jdbc = jdbc;
 	}
 
-	/** @return {@code false} when the player has a match in progress already (the unique index decides) */
+	/**
+	 * @return {@code false} when the player has a game in progress already, or an analysis for an
+	 * analysis (the unique indexes decide)
+	 */
 	boolean insert(ChessMatch match) {
 		return this.jdbc.sql("""
 				INSERT INTO chess_matches (%s)
 				VALUES (:id, :mode, :status, :moves, :undone, :drawOffer, :winner, :termination, :revision, :userId,
-				        :playerId, :createdAt, :updatedAt, :finishedAt, :engineSide, :difficulty, :hintsUsed)
+				        :playerId, :createdAt, :updatedAt, :finishedAt, :engineSide, :difficulty, :hintsUsed,
+				        :sourceMatchId, :sourcePly)
 				ON CONFLICT DO NOTHING
 				""".formatted(COLUMNS))
 			.param("id", match.id())
@@ -65,6 +69,8 @@ class ChessMatchStore {
 			.param("engineSide", name(match.engineSide()))
 			.param("difficulty", name(match.difficulty()))
 			.param("hintsUsed", match.hintsUsed())
+			.param("sourceMatchId", match.sourceMatchId())
+			.param("sourcePly", match.sourcePly())
 			.update() == 1;
 	}
 
@@ -83,22 +89,29 @@ class ChessMatchStore {
 			.optional();
 	}
 
-	/** The player's latest match that was not left for another: the one in progress, or the last one finished. */
+	/**
+	 * The player's latest game that was not left for another: the one in progress, or the last one
+	 * finished. A variation is never the current game.
+	 */
 	Optional<ChessMatch> findCurrent(Owner owner) {
-		return this.jdbc.sql("SELECT " + COLUMNS + " FROM chess_matches WHERE status <> 'ABANDONED' AND "
+		return this.jdbc.sql("SELECT " + COLUMNS + " FROM chess_matches WHERE status <> 'ABANDONED' AND mode <> 'ANALYSIS' AND "
 				+ ownerCondition(owner) + " ORDER BY (status = 'ACTIVE') DESC, updated_at DESC LIMIT 1")
 			.params(ownerParams(owner))
 			.query(ChessMatchStore::map)
 			.optional();
 	}
 
-	/** Leaves the player's match in progress, if any, for a new one. */
-	int abandonActive(Owner owner, Instant now) {
+	/**
+	 * Leaves the player's game in progress, if any, for a new one; or, for {@code analysis}, their open
+	 * variation for a new one. The one never touches the other.
+	 */
+	int abandonActive(Owner owner, boolean analysis, Instant now) {
 		return this.jdbc.sql("""
 				UPDATE chess_matches SET status = 'ABANDONED', draw_offer = NULL, undone = '', revision = revision + 1,
 				                         updated_at = :now, finished_at = :now
-				WHERE status = 'ACTIVE' AND""" + " " + ownerCondition(owner))
+				WHERE status = 'ACTIVE' AND (mode = 'ANALYSIS') = :analysis AND""" + " " + ownerCondition(owner))
 			.param("now", timestamp(now))
+			.param("analysis", analysis)
 			.params(ownerParams(owner))
 			.update();
 	}
@@ -161,7 +174,8 @@ class ChessMatchStore {
 				row.getObject("user_id", Long.class), row.getObject("player_id", UUID.class),
 				instant(row, "created_at"), instant(row, "updated_at"), instant(row, "finished_at"),
 				(engineSide != null) ? Color.valueOf(engineSide) : null,
-				(difficulty != null) ? Difficulty.valueOf(difficulty) : null, row.getInt("hints_used"));
+				(difficulty != null) ? Difficulty.valueOf(difficulty) : null, row.getInt("hints_used"),
+				row.getObject("source_match_id", UUID.class), row.getObject("source_ply", Integer.class));
 	}
 
 	static String encode(List<Move> moves) {

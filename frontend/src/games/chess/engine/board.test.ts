@@ -6,9 +6,11 @@ import { displayOrder, isLightSquare, materialLead, matchStatus, movePairs, move
 const match = (overrides: Partial<MatchView>): MatchView => ({
   id: 'm',
   mode: 'LOCAL',
+  source: null,
   status: 'ACTIVE',
   revision: 0,
   fen: INITIAL_FEN,
+  startFen: INITIAL_FEN,
   turn: 'WHITE',
   fullmoveNumber: 1,
   halfmoveClock: 0,
@@ -88,7 +90,7 @@ describe('legal moves, as the server lists them', () => {
 })
 
 describe('the score sheet', () => {
-  const move = (ply: number, san: string): PlayedMove => ({ ply, color: ply % 2 ? 'WHITE' : 'BLACK', from: 'a1', to: 'a2', uci: 'a1a2', san })
+  const move = (ply: number, san: string): PlayedMove => ({ ply, color: ply % 2 ? 'WHITE' : 'BLACK', from: 'a1', to: 'a2', uci: 'a1a2', san, fen: INITIAL_FEN })
 
   it('numbers moves in pairs', () => {
     expect(movePairs([move(1, 'e4'), move(2, 'e5'), move(3, 'Nf3')])).toEqual([

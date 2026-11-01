@@ -23,6 +23,7 @@ export function CardFace({ card, missing = false, size = 'full', className }: Ca
   const src = size === 'thumb' ? (card.thumbnailUrl ?? card.imageUrl) : card.imageUrl
   return (
     <span
+      data-theme-keep
       className={cn(
         'relative block aspect-5/7 overflow-hidden rounded-[6%/4.3%] bg-surface',
         missing ? 'ring-1 ring-ink/10' : tierStyle(tier).frame,
@@ -52,6 +53,7 @@ export function CardFace({ card, missing = false, size = 'full', className }: Ca
 export function CardBack({ imageUrl, className }: { imageUrl?: string | null; className?: string }) {
   return (
     <span
+      data-theme-keep
       className={cn(
         'relative grid aspect-5/7 place-items-center overflow-hidden rounded-[6%/4.3%] bg-(--accent) ring-2 ring-white/70',
         className,

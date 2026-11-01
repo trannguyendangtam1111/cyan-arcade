@@ -76,6 +76,12 @@ export function parsePlacement(fen: string): (BoardPiece | null)[] {
   return squares
 }
 
+/** The square of a side's king in a placement, or `null` if it has none. */
+export function kingSquare(placement: readonly (BoardPiece | null)[], side: Side): string | null {
+  const index = placement.findIndex((piece) => piece?.kind === 'k' && piece.side === side)
+  return index >= 0 ? squareName(index) : null
+}
+
 /**
  * The squares in the order the screen shows them, row by row from the top left: White's view has
  * a8 there, Black's view h1.

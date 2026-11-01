@@ -16,6 +16,7 @@ interface SetBannerProps {
 export function SetBanner({ name, logoUrl, coverImageUrl, className }: SetBannerProps) {
   return (
     <span
+      data-theme-keep
       aria-hidden
       className={cn(
         'relative flex items-center overflow-hidden bg-[color-mix(in_srgb,var(--accent)_22%,white)] [container-type:inline-size]',

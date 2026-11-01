@@ -183,4 +183,56 @@ class AnalysisTests {
 		}
 	}
 
+	@Test
+	void accuracyFallsWithTheWinningChancesAMoveGaveAway() {
+		assertThat(Accuracy.ofMove(0)).isCloseTo(100, within(0.01));
+		assertThat(Accuracy.ofMove(5)).isCloseTo(79.8, within(0.1));
+		assertThat(Accuracy.ofMove(20)).isCloseTo(40.0, within(0.1));
+		assertThat(Accuracy.ofMove(100)).isZero();
+		// A negative loss (a deeper look liked the move better) counts as none.
+		assertThat(Accuracy.ofMove(-3)).isEqualTo(Accuracy.ofMove(0));
+		for (int loss = 1; loss <= 60; loss++) {
+			assertThat(Accuracy.ofMove(loss)).isLessThan(Accuracy.ofMove(loss - 1));
+		}
+	}
+
+	@Test
+	void aSidesAccuracyIsTheAverageOfItsJudgedMoves() {
+		assertThat(Accuracy.ofMoves(List.of())).isNull();
+		assertThat(Accuracy.ofMoves(List.of(0.0, 0.0))).isCloseTo(100, within(0.01));
+		assertThat(Accuracy.ofMoves(List.of(0.0, 20.0))).isCloseTo((100 + 40.0) / 2, within(0.1));
+	}
+
+	@Test
+	void theLabelLimitsAreConfigurable() {
+		Evaluation best = Evaluation.centipawns(0, true);
+		Evaluation after = Evaluation.centipawns(-40, true);
+		double loss = best.winPercentFor(Color.WHITE) - after.winPercentFor(Color.WHITE);
+		assertThat(loss).isCloseTo(3.7, within(0.1));
+		assertThat(MoveClassifier.classify(Color.WHITE, false, false, best, after, true).label()).isEqualTo(MoveClass.GOOD);
+		MoveClassifier.Thresholds strict = new MoveClassifier.Thresholds(0.5, 1, 2, 3);
+		assertThat(MoveClassifier.classify(Color.WHITE, false, false, best, after, true, strict).label())
+			.isEqualTo(MoveClass.BLUNDER);
+		MoveClassifier.Thresholds lenient = new MoveClassifier.Thresholds(5, 10, 20, 40);
+		assertThat(MoveClassifier.classify(Color.WHITE, false, false, best, after, true, lenient).label())
+			.isEqualTo(MoveClass.EXCELLENT);
+		// The limits must rise.
+		org.assertj.core.api.Assertions.assertThatIllegalArgumentException()
+			.isThrownBy(() -> new MoveClassifier.Thresholds(5, 2, 10, 20));
+		org.assertj.core.api.Assertions.assertThatIllegalArgumentException()
+			.isThrownBy(() -> new MoveClassifier.Thresholds(-1, 2, 10, 20));
+	}
+
+	@Test
+	void theSameLossIsJudgedTheSameForEitherSide() {
+		// Black gives away as much as White did above, seen from White's side the other way round.
+		Evaluation best = Evaluation.centipawns(0, true);
+		Evaluation after = Evaluation.centipawns(40, true);
+		MoveClassifier.Judgement black = MoveClassifier.classify(Color.BLACK, false, false, best, after, true);
+		MoveClassifier.Judgement white = MoveClassifier.classify(Color.WHITE, false, false, best,
+				Evaluation.centipawns(-40, true), true);
+		assertThat(black.label()).isEqualTo(white.label());
+		assertThat(black.loss()).isCloseTo(white.loss(), within(1e-9));
+	}
+
 }

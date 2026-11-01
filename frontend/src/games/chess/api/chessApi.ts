@@ -1,6 +1,6 @@
 import { apiFetch } from '@/api/client'
 import { playerHeaders } from '@/lib/playerId'
-import type { Difficulty, DrawAction, EngineStatus, EvaluationResponse, HintResponse, MatchView, ReviewResponse, Side } from '../types/chessTypes'
+import type { CoachResponse, Difficulty, DrawAction, EngineStatus, EvaluationResponse, HintResponse, MatchView, ReviewResponse, Side } from '../types/chessTypes'
 
 /**
  * Chess's own endpoints. Chess is played on the server, which judges every move; a match is not
@@ -28,6 +28,14 @@ export function fetchMatch(id: string, signal?: AbortSignal): Promise<MatchView>
 /** A new two-player match on this device. The match in progress, if any, is left. */
 export function startMatch(): Promise<MatchView> {
   return apiFetch<MatchView>('/api/chess/matches', { method: 'POST', body: { mode: 'LOCAL' }, headers: playerHeaders() })
+}
+
+/**
+ * "Continue from here": a variation of a match from its position after `ply` moves, as a separate
+ * analysis match. The match itself is not changed.
+ */
+export function startVariation(id: string, ply: number): Promise<MatchView> {
+  return apiFetch<MatchView>(matchPath(id, 'variations'), { method: 'POST', body: { ply }, headers: playerHeaders() })
 }
 
 /** A move in UCI: `e2e4`, `e7e8q`. */
@@ -67,6 +75,17 @@ export function requestHint(id: string, revision: number, signal?: AbortSignal):
   return apiFetch<HintResponse>(matchPath(id, 'hint'), { method: 'POST', body: { revision }, headers: playerHeaders(), signal })
 }
 
+export const COACH_MOVE_GONE = 'COACH_MOVE_GONE'
+
+/**
+ * Coach Mode: Stockfish's judgement of a move the player made, named by its ply and UCI as the match
+ * recorded it (a move taken back since is refused). Signed-in players, their own moves only; it
+ * changes nothing.
+ */
+export function requestCoach(id: string, ply: number, uci: string, signal?: AbortSignal): Promise<CoachResponse> {
+  return apiFetch<CoachResponse>(matchPath(id, 'coach'), { method: 'POST', body: { ply, uci }, headers: playerHeaders(), signal })
+}
+
 /**
  * Admins only from here on: the server answers anyone else with 401 or 403. The engine's moves,
  * evaluations and reviews are worked out on the server from the match it keeps; nothing here sends
@@ -88,8 +107,9 @@ export function requestEngineMove(id: string, revision: number): Promise<MatchVi
   return apiFetch<MatchView>(aiPath(id, 'engine-move'), { method: 'POST', body: { revision } })
 }
 
-export function evaluatePosition(id: string, revision: number, depth: number, lines: number, signal?: AbortSignal): Promise<EvaluationResponse> {
-  return apiFetch<EvaluationResponse>(aiPath(id, 'evaluation'), { method: 'POST', body: { revision, depth, lines }, signal })
+/** An evaluation of the position after `ply` moves of the match, as it stands at `revision`. */
+export function evaluatePosition(id: string, revision: number, depth: number, lines: number, ply: number, signal?: AbortSignal): Promise<EvaluationResponse> {
+  return apiFetch<EvaluationResponse>(aiPath(id, 'evaluation'), { method: 'POST', body: { revision, depth, lines, ply }, signal })
 }
 
 export function startReview(id: string): Promise<ReviewResponse> {

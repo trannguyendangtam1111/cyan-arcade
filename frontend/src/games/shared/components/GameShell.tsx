@@ -53,7 +53,8 @@ export function GameShell({
 
   return (
     <div className="grid gap-6 p-4 sm:p-6 lg:grid-cols-[minmax(0,1fr)_19rem] lg:items-start">
-      <div className="flex min-w-0 flex-col items-center gap-5">
+      {/* The playfield keeps the game's own colours in either theme (styles/theme-dark.css). */}
+      <div data-theme-keep className="flex min-w-0 flex-col items-center gap-5">
         {board}
         {!isAi && touchControls}
       </div>

@@ -2,7 +2,7 @@ import { cn } from '@/lib/cn'
 
 const MEDALS: Record<number, string> = {
   1: 'bg-amber-400 text-amber-950',
-  2: 'bg-slate-300 text-slate-800',
+  2: 'bg-slate-300 text-slate-950',
   3: 'bg-orange-300 text-orange-950',
 }
 

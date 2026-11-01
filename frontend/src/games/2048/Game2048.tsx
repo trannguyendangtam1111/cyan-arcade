@@ -83,7 +83,7 @@ export default function Game2048(props: GameProps<Game2048AI>) {
         <div {...(isAi ? {} : swipe)} className="relative aspect-square w-full max-w-[30rem] touch-none">
           <Board2048 state={state} slideMs={game.slideMs} />
           {state.won && status === 'playing' && (
-            <p className="pointer-events-none absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-ink px-4 py-1 font-display text-sm font-semibold whitespace-nowrap text-white shadow-soft motion-safe:animate-pop-in">
+            <p className="pointer-events-none absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-night px-4 py-1 font-display text-sm font-semibold whitespace-nowrap text-white shadow-soft motion-safe:animate-pop-in">
               2048 reached!
             </p>
           )}

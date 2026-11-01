@@ -42,6 +42,9 @@ public class FakeStockfish {
 	/** The score reported for a quiet move, in centipawns for the side to move. */
 	public volatile int score = 20;
 
+	/** How long each search takes, to hold an engine busy (0: at once). */
+	public volatile long searchMillis = 0;
+
 	/** Searches answered so far. */
 	public final AtomicInteger searches = new AtomicInteger();
 
@@ -58,6 +61,7 @@ public class FakeStockfish {
 	public void reset() {
 		this.behaviour = Behaviour.NORMAL;
 		this.score = 20;
+		this.searchMillis = 0;
 	}
 
 	public StockfishEngineAdapter.Launcher launcher() {
@@ -110,6 +114,14 @@ public class FakeStockfish {
 				return;
 			}
 			FakeStockfish.this.searches.incrementAndGet();
+			if (FakeStockfish.this.searchMillis > 0) {
+				try {
+					Thread.sleep(FakeStockfish.this.searchMillis);
+				}
+				catch (InterruptedException ex) {
+					Thread.currentThread().interrupt();
+				}
+			}
 			List<Move> legal = this.position.legalMoves();
 			if (legal.isEmpty()) {
 				this.output.add(this.position.inCheck() ? "info depth 0 score mate 0" : "info depth 0 score cp 0");

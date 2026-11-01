@@ -25,6 +25,7 @@ export function PackArt({ pack, className, label }: PackArtProps) {
 
   return (
     <span
+      data-theme-keep
       {...a11y}
       style={gameAccent(pack.accentColor)}
       className={cn(

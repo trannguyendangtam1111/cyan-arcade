@@ -8,9 +8,11 @@ interface LogoProps {
    * the header also has to fit the full navigation, the coins and the signed-in player.
    */
   compactOnTablet?: boolean
+  /** Show only the emblem on phones, where the header is full (a signed-in player's coins and account). */
+  compactOnPhone?: boolean
 }
 
-export function Logo({ compactOnTablet = false }: LogoProps) {
+export function Logo({ compactOnTablet = false, compactOnPhone = false }: LogoProps) {
   return (
     <Link to="/" className="group inline-flex items-center gap-2.5 rounded-2xl" aria-label="Cyan Arcade home">
       <span className="grid size-10 place-items-center rounded-xl bg-brand-500 text-brand-950 shadow-[0_3px_0_0_var(--color-brand-700)] transition-transform duration-200 group-hover:-rotate-6 group-hover:scale-105">
@@ -20,6 +22,7 @@ export function Logo({ compactOnTablet = false }: LogoProps) {
         className={cn(
           'font-display text-xl font-bold tracking-tight whitespace-nowrap',
           compactOnTablet && 'lg:max-xl:hidden',
+          compactOnPhone && 'max-sm:hidden',
         )}
       >
         <span className="text-brand-600">Cyan</span> Arcade

@@ -112,8 +112,9 @@ class TcgDatasetImportRunner implements ApplicationRunner {
 	}
 
 	private static void report(ImportReport report, String source) {
-		log.info("Imported card game '{}' from {}: {} sets, {} cards ({} new), {} packs", report.gameSlug(), source,
-				report.sets(), report.cards(), report.newCards(), report.packs());
+		log.info("Imported card game '{}' from {}: {} sets, {} cards ({} new, {} updated, {} unchanged), {} packs",
+				report.gameSlug(), source, report.sets(), report.cards(), report.newCards(), report.updatedCards(),
+				report.unchangedCards(), report.packs());
 	}
 
 }

@@ -23,10 +23,14 @@ import com.cyan.arcade.common.security.Role;
  * @param engineSide for a game against Stockfish, the side the engine plays; {@code null} otherwise
  * @param difficulty for a game against Stockfish, how strongly it plays; {@code null} otherwise
  * @param hintsUsed move hints given in this match
+ * @param sourceMatchId for a variation, the game it was started from ({@code null} once that game is
+ * forgotten, or for a game)
+ * @param sourcePly for a variation, the ply of that game it starts at; {@code null} for a game
  */
 record ChessMatch(UUID id, Mode mode, Status status, List<Move> moves, List<Move> undone, Color drawOffer,
 		Color winner, Termination termination, int revision, Long userId, UUID playerId, Instant createdAt,
-		Instant updatedAt, Instant finishedAt, Color engineSide, Difficulty difficulty, int hintsUsed) {
+		Instant updatedAt, Instant finishedAt, Color engineSide, Difficulty difficulty, int hintsUsed,
+		UUID sourceMatchId, Integer sourcePly) {
 
 	/** How the match is played. */
 	enum Mode {
@@ -34,7 +38,12 @@ record ChessMatch(UUID id, Mode mode, Status status, List<Move> moves, List<Move
 		/** Two players on one device. */
 		LOCAL,
 		/** One player against Stockfish (admins only). */
-		AI
+		AI,
+		/**
+		 * A variation: the moves of a game up to one of its positions, then whatever the owner plays from
+		 * there, both sides. It never changes the game it came from and is never the player's current game.
+		 */
+		ANALYSIS
 
 	}
 
@@ -76,13 +85,25 @@ record ChessMatch(UUID id, Mode mode, Status status, List<Move> moves, List<Move
 
 	static ChessMatch start(Owner owner, Mode mode, Instant now) {
 		return new ChessMatch(UUID.randomUUID(), mode, Status.ACTIVE, List.of(), List.of(), null, null, null, 0,
-				owner.userId(), owner.playerId(), now, now, null, null, null, 0);
+				owner.userId(), owner.playerId(), now, now, null, null, null, 0, null, null);
 	}
 
 	/** A new game against Stockfish, which plays {@code engineSide}. */
 	static ChessMatch againstEngine(Owner owner, Color engineSide, Difficulty difficulty, Instant now) {
 		return new ChessMatch(UUID.randomUUID(), Mode.AI, Status.ACTIVE, List.of(), List.of(), null, null, null, 0,
-				owner.userId(), owner.playerId(), now, now, null, engineSide, difficulty, 0);
+				owner.userId(), owner.playerId(), now, now, null, engineSide, difficulty, 0, null, null);
+	}
+
+	/**
+	 * A variation of {@code source} from its position after {@code ply} moves: those moves, then the
+	 * owner's. Of a variation, it is a variation of the same game, starting where the two part.
+	 */
+	static ChessMatch variation(Owner owner, ChessMatch source, int ply, Instant now) {
+		boolean nested = source.mode() == Mode.ANALYSIS;
+		UUID game = nested ? source.sourceMatchId() : source.id();
+		int startsAt = nested ? Math.min(ply, source.sourcePly()) : ply;
+		return new ChessMatch(UUID.randomUUID(), Mode.ANALYSIS, Status.ACTIVE, source.moves().subList(0, ply), List.of(),
+				null, null, null, 0, owner.userId(), owner.playerId(), now, now, null, null, null, 0, game, startsAt);
 	}
 
 	boolean belongsTo(Owner owner) {
@@ -112,7 +133,16 @@ record ChessMatch(UUID id, Mode mode, Status status, List<Move> moves, List<Move
 		return new ChessMatch(this.id, this.mode, status, game.moves(), (result != null) ? List.of() : undone,
 				game.drawOffer(), (result != null) ? result.winner() : null,
 				(result != null) ? result.termination() : null, this.revision + 1, this.userId, this.playerId,
-				this.createdAt, now, (result != null) ? now : null, this.engineSide, this.difficulty, this.hintsUsed);
+				this.createdAt, now, (result != null) ? now : null, this.engineSide, this.difficulty, this.hintsUsed,
+				this.sourceMatchId, this.sourcePly);
+	}
+
+	/** The same match with one more hint given (the board, and so the revision, unchanged). */
+	ChessMatch withHintCounted() {
+		return new ChessMatch(this.id, this.mode, this.status, this.moves, this.undone, this.drawOffer, this.winner,
+				this.termination, this.revision, this.userId, this.playerId, this.createdAt, this.updatedAt,
+				this.finishedAt, this.engineSide, this.difficulty, this.hintsUsed + 1, this.sourceMatchId,
+				this.sourcePly);
 	}
 
 }

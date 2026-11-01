@@ -64,6 +64,8 @@ public class TcgDatasetImporter {
 
 		int cards = 0;
 		int newCards = 0;
+		int updatedCards = 0;
+		int unchangedCards = 0;
 		int packs = 0;
 		for (int order = 0; order < dataset.sets().size(); order++) {
 			CardSet set = dataset.sets().get(order);
@@ -75,7 +77,11 @@ public class TcgDatasetImporter {
 				UpsertedCard upserted = upsertCard(gameId, setId, rarityIds.get(card.rarity()), set.externalIdOf(card),
 						card, cardOrder);
 				cardIds.put(card.key(), upserted.id());
-				newCards += upserted.inserted() ? 1 : 0;
+				switch (upserted.change()) {
+					case INSERTED -> newCards++;
+					case UPDATED -> updatedCards++;
+					case UNCHANGED -> unchangedCards++;
+				}
 			}
 			cards += set.cards().size();
 
@@ -88,7 +94,7 @@ public class TcgDatasetImporter {
 			packs += set.packs().size();
 		}
 		return new ImportReport(dataset.game().slug(), dataset.rarities().size(), dataset.sets().size(), cards, newCards,
-				packs);
+				updatedCards, unchangedCards, packs);
 	}
 
 	private Long upsertGame(TcgDataset.Game game) {
@@ -156,7 +162,14 @@ public class TcgDatasetImporter {
 	}
 
 	/** @param inserted whether the card is new, rather than one that was there already */
-	private record UpsertedCard(Long id, boolean inserted) {
+	/** What an import did to a card row. */
+	private enum Change {
+
+		INSERTED, UPDATED, UNCHANGED
+
+	}
+
+	private record UpsertedCard(Long id, Change change) {
 	}
 
 	/**
@@ -173,6 +186,10 @@ public class TcgDatasetImporter {
 				SET set_id = EXCLUDED.set_id, rarity_id = EXCLUDED.rarity_id, card_number = EXCLUDED.card_number,
 				    name = EXCLUDED.name, image_url = EXCLUDED.image_url, thumbnail_url = EXCLUDED.thumbnail_url,
 				    metadata = EXCLUDED.metadata, display_order = EXCLUDED.display_order
+				WHERE (tcg_cards.set_id, tcg_cards.rarity_id, tcg_cards.card_number, tcg_cards.name, tcg_cards.image_url,
+				       tcg_cards.thumbnail_url, tcg_cards.metadata, tcg_cards.display_order)
+				      IS DISTINCT FROM (EXCLUDED.set_id, EXCLUDED.rarity_id, EXCLUDED.card_number, EXCLUDED.name,
+				       EXCLUDED.image_url, EXCLUDED.thumbnail_url, EXCLUDED.metadata, EXCLUDED.display_order)
 				RETURNING id, (xmax = 0) AS inserted
 				""")
 			.param("gameId", gameId)
@@ -185,9 +202,17 @@ public class TcgDatasetImporter {
 			.param("thumbnailUrl", card.thumbnailUrl(), Types.VARCHAR)
 			.param("metadata", this.json.writeValueAsString(card.metadata()))
 			.param("order", order)
-			// xmax is 0 on a row this statement inserted, and set on one it updated.
-			.query((row, index) -> new UpsertedCard(row.getLong("id"), row.getBoolean("inserted")))
-			.single();
+			// xmax is 0 on a row this statement inserted, and set on one it updated. A card that is already
+			// exactly as the dataset says is left alone and returns no row.
+			.query((row, index) -> new UpsertedCard(row.getLong("id"),
+					row.getBoolean("inserted") ? Change.INSERTED : Change.UPDATED))
+			.optional()
+			.orElseGet(() -> new UpsertedCard(this.jdbc
+				.sql("SELECT id FROM tcg_cards WHERE game_id = :gameId AND external_id = :externalId")
+				.param("gameId", gameId)
+				.param("externalId", externalId)
+				.query(Long.class)
+				.single(), Change.UNCHANGED));
 	}
 
 	private Long upsertPack(Long setId, Pack pack, int order) {

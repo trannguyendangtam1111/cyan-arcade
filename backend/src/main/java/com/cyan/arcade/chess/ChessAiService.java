@@ -22,8 +22,12 @@ import com.cyan.arcade.chess.analysis.Evaluation;
 import com.cyan.arcade.chess.engine.ChessGame;
 import com.cyan.arcade.chess.engine.Color;
 import com.cyan.arcade.chess.engine.Move;
+import com.cyan.arcade.chess.engine.Piece;
+import com.cyan.arcade.chess.engine.PieceType;
 import com.cyan.arcade.chess.engine.Position;
+import com.cyan.arcade.chess.engine.Result;
 import com.cyan.arcade.chess.stockfish.EngineException;
+import com.cyan.arcade.chess.stockfish.EngineScore;
 import com.cyan.arcade.chess.stockfish.EnginePool;
 import com.cyan.arcade.chess.stockfish.SearchRequest;
 import com.cyan.arcade.chess.stockfish.SearchResult;
@@ -127,20 +131,57 @@ class ChessAiService {
 				}
 				this.cache.put(this.cache.key(this.engine.knownEngineName(), request), result);
 				this.store.countHint(matchId);
-				ChessMatch counted = new ChessMatch(locked.id(), locked.mode(), locked.status(), locked.moves(),
-						locked.undone(), locked.drawOffer(), locked.winner(), locked.termination(), locked.revision(),
-						locked.userId(), locked.playerId(), locked.createdAt(), locked.updatedAt(), locked.finishedAt(),
-						locked.engineSide(), locked.difficulty(), locked.hintsUsed() + 1);
+				ChessMatch counted = locked.withHintCounted();
 				List<String> line = (result.best() != null)
 						? EnginePositions.sanLine(position, result.best().pv(), LINE_LENGTH)
 						: List.of(EngineViews.suggested(position, best).san());
+				// The score of the searched position is the score with the engine's move played.
+				Evaluation evaluation = (result.best() != null)
+						? Evaluation.fromEngine(result.best().score(), position.turn()) : null;
 				return new HintResponse(locked.revision(), EngineViews.suggested(position, best), line, result.depth(),
-						this.engine.knownEngineName(), this.chess.hintsOf(counted, owner));
+						this.engine.knownEngineName(), this.chess.hintsOf(counted, owner),
+						(evaluation != null) ? EngineViews.evaluation(evaluation) : null, ideasOf(position, best, result));
 			});
 		}
 		catch (EngineException ex) {
 			throw EngineErrors.toApi(ex, "hint");
 		}
+	}
+
+	/**
+	 * What a suggested move does, as the rules and the engine's own score show it: checkmate, a forced
+	 * mate the engine found, a capture, a check, a promotion, castling. A quiet move gets none; nothing
+	 * is said that the position and the search do not show.
+	 */
+	static List<String> ideasOf(Position position, Move move, SearchResult result) {
+		List<String> ideas = new ArrayList<>();
+		Position after = position.play(move);
+		if (after.inCheck() && after.legalMoves().isEmpty()) {
+			ideas.add("It is checkmate.");
+			return ideas;
+		}
+		EngineScore score = (result.best() != null) ? result.best().score() : null;
+		if (score != null && score.isMate() && score.isExact() && score.value() > 0) {
+			ideas.add("Stockfish finds a forced mate in " + score.value() + ".");
+		}
+		Piece taken = position.capturedBy(move);
+		if (taken != null) {
+			ideas.add("It captures a " + pieceName(taken.type()) + (position.isEnPassant(move) ? " en passant." : "."));
+		}
+		if (move.promotion() != null) {
+			ideas.add("It promotes the pawn to a " + pieceName(move.promotion()) + ".");
+		}
+		if (position.isCastling(move)) {
+			ideas.add("It castles.");
+		}
+		if (after.inCheck()) {
+			ideas.add("It gives check.");
+		}
+		return ideas;
+	}
+
+	private static String pieceName(PieceType type) {
+		return type.name().toLowerCase(java.util.Locale.ROOT);
 	}
 
 	/** The checks for a hint: the match on, at that revision, the caller's turn, a hint left. */
@@ -210,11 +251,13 @@ class ChessAiService {
 	// --- Evaluation (admins) -------------------------------------------------------------------------
 
 	/**
-	 * Stockfish's view of the match's current position: an evaluation from White's side, the best
-	 * move and up to a few principal variations. Read only; a finished game is answered from its
-	 * result, without a search.
+	 * Stockfish's view of a position of the match (the one now, or the one after {@code ply} moves):
+	 * an evaluation from White's side, the best move and up to a few principal variations. Read only;
+	 * the final position of a finished game is answered from its result, without a search. The
+	 * position is always the match's own, found by the server; the revision makes sure the caller
+	 * was looking at the match as it is.
 	 */
-	EvaluationResponse evaluate(Owner owner, UUID matchId, int revision, Integer depth, Integer lines) {
+	EvaluationResponse evaluate(Owner owner, UUID matchId, int revision, Integer depth, Integer lines, Integer ply) {
 		requireAdmin(owner);
 		ChessAiProperties.Evaluation limits = this.properties.evaluation();
 		int requestedDepth = (depth != null) ? depth : limits.defaultDepth();
@@ -229,39 +272,49 @@ class ChessAiService {
 			throw new ConflictException(ChessService.STALE_REVISION, "The match has changed since; showing it as it is now");
 		}
 		ChessGame game = match.game();
-		Position position = game.position();
-		if (game.isOver()) {
-			Color winner = game.result().map((result) -> result.winner()).orElse(null);
-			Evaluation finished = Evaluation.finished(winner);
-			return new EvaluationResponse(match.revision(), position.turn(), EngineViews.evaluation(finished), null,
-					List.of(), 0, requestedDepth, true, true, this.engine.knownEngineName());
+		int at = (ply != null) ? ply : game.moves().size();
+		if (at > game.moves().size()) {
+			throw new ApiException(HttpStatus.BAD_REQUEST, ANALYSIS_NOT_ALLOWED,
+					"The match has " + game.moves().size() + " moves; there is no position after move " + at);
+		}
+		Position position = game.positions().get(at);
+		if (game.isOver() && at == game.moves().size()) {
+			Result result = game.result().orElseThrow();
+			Evaluation finished = Evaluation.finished(result.winner());
+			return new EvaluationResponse(match.revision(), at, position.turn(), EngineViews.evaluation(finished), null,
+					List.of(), 0, requestedDepth, true, true, result.termination(), this.engine.knownEngineName());
 		}
 		this.limiter.check(owner.userId());
 
-		SearchRequest request = EnginePositions.request(game, game.moves().size(),
+		SearchRequest request = EnginePositions.request(game, at,
 				new SearchRequest.Limits(requestedDepth, (int) limits.maxMovetime().toMillis(), null), requestedLines,
 				SearchRequest.Strength.FULL);
 		try {
 			String key = this.cache.key(this.engine.knownEngineName(), request);
-			SearchResult result = this.cache.get(key);
-			if (result == null) {
-				result = this.engine.search(request, limits.maxMovetime().plus(MARGIN), () -> false);
+			SearchResult cached = this.cache.get(key);
+			SearchResult result = (cached != null) ? cached
+					: this.engine.search(request, limits.maxMovetime().plus(MARGIN), () -> false);
+			// Checked before it is kept: an unusable answer is never served again from the cache.
+			EvaluationResponse response = evaluationOf(match, at, position, result, requestedDepth);
+			if (cached == null) {
 				this.cache.put(this.cache.key(this.engine.knownEngineName(), request), result);
 			}
-			return evaluationOf(match, position, result, requestedDepth);
+			return response;
 		}
 		catch (EngineException ex) {
 			throw EngineErrors.toApi(ex, "evaluation");
 		}
 	}
 
-	private EvaluationResponse evaluationOf(ChessMatch match, Position position, SearchResult result, int requestedDepth) {
+	private EvaluationResponse evaluationOf(ChessMatch match, int ply, Position position, SearchResult result,
+			int requestedDepth) {
 		List<LineView> lines = new ArrayList<>();
 		for (SearchResult.Line line : result.lines()) {
 			Evaluation evaluation = Evaluation.fromEngine(line.score(), position.turn());
 			List<String> pv = line.pv().subList(0, Math.min(LINE_LENGTH, line.pv().size()));
 			List<String> san = EnginePositions.sanLine(position, pv, LINE_LENGTH);
-			lines.add(new LineView(line.multipv(), EngineViews.evaluation(evaluation), san, pv.subList(0, san.size()),
+			List<String> fens = EnginePositions.fenLine(position, pv, san.size());
+			lines.add(new LineView(line.multipv(), EngineViews.evaluation(evaluation), san, pv.subList(0, san.size()), fens,
 					line.depth()));
 		}
 		Move best = EnginePositions.legal(position, result.bestMove());
@@ -271,8 +324,8 @@ class ChessAiService {
 		SuggestedMove bestMove = EngineViews.suggested(position, best);
 		boolean complete = !result.interrupted() && result.depth() >= requestedDepth
 				&& lines.get(0).evaluation().exact();
-		return new EvaluationResponse(match.revision(), position.turn(), lines.get(0).evaluation(), bestMove, lines,
-				result.depth(), requestedDepth, complete, false, this.engine.knownEngineName());
+		return new EvaluationResponse(match.revision(), ply, position.turn(), lines.get(0).evaluation(), bestMove, lines,
+				result.depth(), requestedDepth, complete, false, null, this.engine.knownEngineName());
 	}
 
 	/** Whether the engine runs, and what it offers; starts an engine if none is running yet. */

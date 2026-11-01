@@ -4,6 +4,8 @@ import java.net.URI;
 import java.util.UUID;
 
 import com.cyan.arcade.chess.ChessMatch.Owner;
+import com.cyan.arcade.chess.ChessViews.CoachRequest;
+import com.cyan.arcade.chess.ChessViews.CoachResponse;
 import com.cyan.arcade.chess.ChessViews.DrawRequest;
 import com.cyan.arcade.chess.ChessViews.HintResponse;
 import com.cyan.arcade.chess.ChessViews.MatchResponse;
@@ -11,6 +13,7 @@ import com.cyan.arcade.chess.ChessViews.MoveRequest;
 import com.cyan.arcade.chess.ChessViews.ResignRequest;
 import com.cyan.arcade.chess.ChessViews.RevisionRequest;
 import com.cyan.arcade.chess.ChessViews.StartRequest;
+import com.cyan.arcade.chess.ChessViews.VariationRequest;
 import com.cyan.arcade.common.error.ApiException;
 import com.cyan.arcade.common.security.AuthenticatedUser;
 import com.cyan.arcade.common.security.GuestPlayer;
@@ -40,9 +43,12 @@ class ChessController {
 
 	private final ChessAiService ai;
 
-	ChessController(ChessService chess, ChessAiService ai) {
+	private final ChessCoachService coach;
+
+	ChessController(ChessService chess, ChessAiService ai, ChessCoachService coach) {
 		this.chess = chess;
 		this.ai = ai;
+		this.coach = coach;
 	}
 
 	@PostMapping
@@ -91,6 +97,18 @@ class ChessController {
 		return this.chess.redo(owner(user, playerId), id, request.revision());
 	}
 
+	/**
+	 * "Continue from here": a variation of this match from its position after {@code ply} moves, as a
+	 * new analysis match. The match itself is only read: its moves, result and revision stay.
+	 */
+	@PostMapping("/{id}/variations")
+	ResponseEntity<MatchResponse> variation(@PathVariable UUID id, @Valid @RequestBody VariationRequest request,
+			@AuthenticationPrincipal AuthenticatedUser user,
+			@RequestHeader(name = GuestPlayer.HEADER, required = false) UUID playerId) {
+		MatchResponse variation = this.chess.variation(owner(user, playerId), id, request.ply());
+		return ResponseEntity.created(URI.create("/api/chess/matches/" + variation.id())).body(variation);
+	}
+
 	@PostMapping("/{id}/resign")
 	MatchResponse resign(@PathVariable UUID id, @Valid @RequestBody ResignRequest request,
 			@AuthenticationPrincipal AuthenticatedUser user,
@@ -113,6 +131,16 @@ class ChessController {
 	HintResponse hint(@PathVariable UUID id, @Valid @RequestBody RevisionRequest request,
 			@AuthenticationPrincipal AuthenticatedUser user) {
 		return this.ai.hint(owner(user, null), id, request.revision());
+	}
+
+	/**
+	 * Coach Mode: Stockfish's judgement of a move the caller played in this match. Signed-in players
+	 * only (the security rules ask for a session), for their own moves; it changes nothing.
+	 */
+	@PostMapping("/{id}/coach")
+	CoachResponse coach(@PathVariable UUID id, @Valid @RequestBody CoachRequest request,
+			@AuthenticationPrincipal AuthenticatedUser user) {
+		return this.coach.judge(owner(user, null), id, request.ply(), request.uci());
 	}
 
 	static Owner ownerOrNull(AuthenticatedUser user, UUID playerId) {

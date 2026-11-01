@@ -61,15 +61,38 @@ final class ChessViews {
 	/**
 	 * @param depth search depth, up to the configured maximum; the configured default when left out
 	 * @param lines principal variations, 1 to the configured maximum
+	 * @param ply the position after this many moves of the match (0 for the start); the position now
+	 * when left out
 	 */
 	record EvaluationRequest(@NotNull @Min(0) Integer revision, @Min(1) @Max(40) Integer depth,
-			@Min(1) @Max(5) Integer lines) {
+			@Min(1) @Max(5) Integer lines, @Min(0) Integer ply) {
+	}
+
+	/**
+	 * Coach Mode: the move to judge, as the match recorded it.
+	 * @param ply 1 for White's first move
+	 * @param uci the move at that ply, in UCI; a move taken back since is refused
+	 */
+	record CoachRequest(@NotNull @Min(1) Integer ply, @NotNull @Pattern(regexp = "[a-h][1-8][a-h][1-8][qrbn]?") String uci) {
+	}
+
+	/** @param ply the position of the game to continue from: after this many moves (0: the start) */
+	record VariationRequest(@NotNull @Min(0) Integer ply) {
+	}
+
+	/**
+	 * Where a variation comes from.
+	 * @param matchId the game it was started from ({@code null} once that game is forgotten)
+	 * @param ply the ply of that game the variation starts at
+	 */
+	record VariationSource(UUID matchId, int ply) {
 	}
 
 	/**
 	 * A match as its players see it.
 	 * @param revision goes up with every change; actions send the one they were chosen in
 	 * @param fen the position now
+	 * @param startFen the position the match started from
 	 * @param checkedKing the square of the king in check, or {@code null}
 	 * @param legalMoves every move the side to move may make; none once the match is over
 	 * @param lastMove the move that led here, or {@code null} at the start
@@ -83,12 +106,15 @@ final class ChessViews {
 	 * @param engine for a game against Stockfish, its side and difficulty; {@code null} otherwise
 	 * @param hints the caller's move hints in this match
 	 * @param result once the match is over
+	 * @param source for a variation, the game and position it starts from; {@code null} for a game
 	 */
-	record MatchResponse(UUID id, Mode mode, Status status, int revision, String fen, Color turn, int fullmoveNumber,
+	record MatchResponse(UUID id, Mode mode, Status status, int revision, String fen, String startFen, Color turn,
+			int fullmoveNumber,
 			int halfmoveClock, boolean check, String checkedKing, List<LegalMove> legalMoves, PlayedMove lastMove,
 			List<PlayedMove> history, Map<Color, List<String>> captured, Map<Color, Integer> material,
 			Color drawOffer, Termination claimableDraw, int repetitions, boolean canUndo, boolean canRedo,
-			EngineView engine, HintAllowance hints, ResultView result, Instant createdAt, Instant updatedAt) {
+			EngineView engine, HintAllowance hints, ResultView result, Instant createdAt, Instant updatedAt,
+			VariationSource source) {
 	}
 
 	/**
@@ -98,8 +124,11 @@ final class ChessViews {
 			boolean castling, boolean enPassant) {
 	}
 
-	/** @param ply 1 for White's first move, 2 for Black's reply, … */
-	record PlayedMove(int ply, Color color, String from, String to, String uci, String san) {
+	/**
+	 * @param ply 1 for White's first move, 2 for Black's reply, …
+	 * @param fen the position after the move
+	 */
+	record PlayedMove(int ply, Color color, String from, String to, String uci, String san, String fen) {
 	}
 
 	/**
@@ -130,10 +159,14 @@ final class ChessViews {
 	 * A move hint. It changes nothing on the board.
 	 * @param revision the revision of the position the hint is for
 	 * @param line the engine's expected continuation in SAN, the hint first
+	 * @param evaluation Stockfish's evaluation of the position with that move played, from White's side
+	 * ({@code null} when its search gave no score)
+	 * @param ideas what the move does, as the rules see it (a capture, a check, a mate the engine
+	 * found, a promotion, castling); empty when it is a quiet move. Nothing here is guessed.
 	 * @param depth how deep the engine searched
 	 */
 	record HintResponse(int revision, SuggestedMove move, List<String> line, int depth, String engine,
-			HintAllowance hints) {
+			HintAllowance hints, EvaluationView evaluation, List<String> ideas) {
 	}
 
 	/**
@@ -151,18 +184,26 @@ final class ChessViews {
 			double whiteWinPercent, Color favoured, boolean exact) {
 	}
 
-	/** One principal variation. */
-	record LineView(int rank, EvaluationView evaluation, List<String> san, List<String> uci, int depth) {
+	/**
+	 * One principal variation.
+	 * @param fens the position after each of its moves, for stepping through it on a board
+	 */
+	record LineView(int rank, EvaluationView evaluation, List<String> san, List<String> uci, List<String> fens,
+			int depth) {
 	}
 
 	/**
-	 * An engine evaluation of a match's current position.
+	 * An engine evaluation of a position of a match.
+	 * @param ply the position evaluated: after this many moves
 	 * @param complete whether the search reached its depth without being cut short; otherwise the
 	 * numbers are provisional
 	 * @param finished for a finished game, the result instead of a search
+	 * @param termination for a finished game, how it ended (a won game is shown as mate on the board
+	 * whether it was mated or resigned); {@code null} otherwise
 	 */
-	record EvaluationResponse(int revision, Color sideToMove, EvaluationView evaluation, SuggestedMove bestMove,
-			List<LineView> lines, int depth, int requestedDepth, boolean complete, boolean finished, String engine) {
+	record EvaluationResponse(int revision, int ply, Color sideToMove, EvaluationView evaluation, SuggestedMove bestMove,
+			List<LineView> lines, int depth, int requestedDepth, boolean complete, boolean finished,
+			Termination termination, String engine) {
 	}
 
 	/** One reviewed move. */
@@ -177,9 +218,30 @@ final class ChessViews {
 	 * @param analyzed positions analysed so far, of {@code total}
 	 * @param moves the moves reviewed so far, in order; a move appears once both positions around it
 	 * are analysed
+	 * @param summary each side's accuracy and labels over the moves reviewed so far (final once the
+	 * status is {@code DONE})
 	 */
 	record ReviewResponse(UUID matchId, String status, int analyzed, int total, List<ReviewedMove> moves, String engine,
-			ReviewSettings settings, String error) {
+			ReviewSettings settings, ReviewSummary summary, String error) {
+	}
+
+	record ReviewSummary(SideSummary white, SideSummary black) {
+	}
+
+	/**
+	 * @param accuracy average move accuracy in percent (see {@code Accuracy}), over the rated moves;
+	 * {@code null} without any
+	 * @param rated moves counted in the accuracy: every reviewed move but the forced and unrated ones
+	 * @param counts moves by label
+	 */
+	record SideSummary(Double accuracy, int rated, Map<MoveClass, Integer> counts) {
+	}
+
+	/**
+	 * Coach Mode's judgement of one move, as a review would give it (from a shorter analysis).
+	 * @param ply the move judged
+	 */
+	record CoachResponse(UUID matchId, int ply, ReviewedMove move, String engine) {
 	}
 
 	record ReviewSettings(long movetimeMs, int depth, int minDepth) {

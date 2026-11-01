@@ -13,7 +13,7 @@ interface LookPickerProps {
 }
 
 /**
- * Which board and pieces to play with: the game's own, or a skin the player may wear (owned, or
+ * The Skin picker: which board and pieces to play with: the game's own, or a skin the player may wear (owned, or
  * free for an admin, as the server says). Skins not yet owned point to the shop; wearing goes through
  * the platform, which asks the server.
  */
@@ -21,10 +21,7 @@ export function LookPicker({ cosmetics, look }: LookPickerProps) {
   if (!cosmetics) return null
 
   return (
-    <section aria-labelledby="chess-look" className="flex flex-col gap-3 rounded-control bg-surface-muted p-3">
-      <h2 id="chess-look" className="font-display text-base font-semibold">
-        Your look
-      </h2>
+    <section aria-label="Skin" className="flex flex-col gap-3 text-ink">
       {!cosmetics.signedIn && (
         <Link to={cosmetics.loginPath} className="inline-flex items-center gap-1 text-sm font-bold text-brand-700 hover:text-brand-900">
           <LogIn aria-hidden className="size-4" />

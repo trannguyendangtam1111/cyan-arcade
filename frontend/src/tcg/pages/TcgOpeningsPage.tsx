@@ -110,7 +110,7 @@ function OpenedPack({ opening }: { opening: Opening }) {
             {isNew && (
               <span
                 aria-hidden
-                className="absolute -top-1 -right-1 rounded-full bg-emerald-700 px-1.5 text-[0.65rem] font-bold text-white"
+                className="absolute -top-1 -right-1 rounded-full bg-emerald-800 px-1.5 text-[0.65rem] font-bold text-emerald-50"
               >
                 NEW
               </span>

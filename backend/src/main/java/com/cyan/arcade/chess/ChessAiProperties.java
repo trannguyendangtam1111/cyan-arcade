@@ -2,6 +2,8 @@ package com.cyan.arcade.chess;
 
 import java.time.Duration;
 
+import com.cyan.arcade.chess.analysis.MoveClassifier;
+
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
@@ -12,11 +14,14 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * @param hintsPerGame move hints a player (not an admin) gets per match
  * @param requestsPerMinute engine requests (hints, engine moves, evaluations, reviews) one account
  * may make in a minute
+ * @param coach Coach Mode's searches and its own limit
+ * @param classification the limits of the move labels, in winning chances lost
  */
 @ConfigurationProperties("app.chess")
 record ChessAiProperties(@DefaultValue Engine engine, @DefaultValue Hints hints, @DefaultValue Evaluation evaluation,
 		@DefaultValue Review review, @DefaultValue Cache cache,
-		@DefaultValue("3") int hintsPerGame, @DefaultValue("30") int requestsPerMinute) {
+		@DefaultValue("3") int hintsPerGame, @DefaultValue("30") int requestsPerMinute, @DefaultValue Coach coach,
+		@DefaultValue Classification classification) {
 
 	ChessAiProperties {
 		if (hintsPerGame < 0 || requestsPerMinute < 1) {
@@ -93,6 +98,47 @@ record ChessAiProperties(@DefaultValue Engine engine, @DefaultValue Hints hints,
 			if (depth < 1 || minDepth < 1 || maxPlies < 1 || concurrent < 1 || queue < 0) {
 				throw new IllegalArgumentException("app.chess.review: depth, min-depth, max-plies, concurrent >= 1, queue >= 0");
 			}
+		}
+
+	}
+
+	/**
+	 * Coach Mode: each move judged from two short searches (the positions before and after it).
+	 *
+	 * @param movetime time per position
+	 * @param depth the deepest a position is searched
+	 * @param minDepth below this depth a move is left unrated
+	 * @param requestsPerMinute judgements one account may ask for in a minute (cached ones are free)
+	 */
+	record Coach(@DefaultValue("400ms") Duration movetime, @DefaultValue("14") int depth, @DefaultValue("8") int minDepth,
+			@DefaultValue("40") int requestsPerMinute) {
+
+		Coach {
+			if (depth < 1 || minDepth < 1 || requestsPerMinute < 1 || movetime.isNegative() || movetime.isZero()) {
+				throw new IllegalArgumentException("app.chess.coach: movetime > 0, depth, min-depth and requests-per-minute >= 1");
+			}
+		}
+
+	}
+
+	/**
+	 * The most winning chances (percentage points) a move may lose and still be Excellent, Good, an
+	 * Inaccuracy or a Mistake; beyond the last it is a Blunder. Used by game reviews and Coach Mode.
+	 */
+	record Classification(@DefaultValue("2") double excellent, @DefaultValue("5") double good,
+			@DefaultValue("10") double inaccuracy, @DefaultValue("20") double mistake) {
+
+		Classification {
+			thresholds(excellent, good, inaccuracy, mistake);
+		}
+
+		MoveClassifier.Thresholds thresholds() {
+			return thresholds(this.excellent, this.good, this.inaccuracy, this.mistake);
+		}
+
+		private static MoveClassifier.Thresholds thresholds(double excellent, double good, double inaccuracy,
+				double mistake) {
+			return new MoveClassifier.Thresholds(excellent, good, inaccuracy, mistake);
 		}
 
 	}

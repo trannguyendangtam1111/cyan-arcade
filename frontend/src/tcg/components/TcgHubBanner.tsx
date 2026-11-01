@@ -12,6 +12,7 @@ export function TcgHubBanner() {
     <Link
       to="/tcg"
       style={gameAccent(null)}
+      data-theme-keep
       className="group relative flex items-center justify-between gap-6 overflow-hidden rounded-card bg-linear-to-br from-purple-700 via-fuchsia-600 to-pink-600 p-6 text-white shadow-soft transition-all duration-200 hover:-translate-y-1 hover:shadow-lift active:translate-y-0 sm:p-8"
     >
       <span className="relative max-w-md">

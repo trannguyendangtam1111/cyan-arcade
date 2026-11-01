@@ -110,7 +110,7 @@ export function LeaderboardPage() {
                   onClick={() => select(selected.slug, option)}
                   className={cn(
                     'rounded-full px-3 py-1.5 font-display font-medium whitespace-nowrap transition-all active:scale-95 sm:px-4',
-                    option === period ? 'bg-ink text-white shadow-soft' : 'text-ink-soft hover:text-ink',
+                    option === period ? 'bg-ink text-canvas shadow-soft' : 'text-ink-soft hover:text-ink',
                   )}
                 >
                   {periodNames[option].label}

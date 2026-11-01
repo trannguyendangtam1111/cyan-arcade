@@ -100,9 +100,10 @@ describe('Chess in the arcade', () => {
 
     const asAdmin = mockApi({ games, user: admin, shopItems, handlers: [chessServer().handler] })
     renderRoute('/games/chess')
-    expect(await screen.findByRole('region', { name: 'Play vs Stockfish' })).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'Engine analysis' })).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'Game review' })).toBeInTheDocument()
+    // The engine tools are there, on demand: buttons, not open panels.
+    expect(await screen.findByRole('button', { name: 'vs Stockfish' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Analysis' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Review' })).toBeDisabled()
     expect(requests(asAdmin, '/api/ai/access')).toHaveLength(1)
     // There is no Human/AI switch: the engine is an opponent and an analyst, not an autoplayer.
     expect(screen.queryByRole('group', { name: 'Play mode' })).not.toBeInTheDocument()
@@ -122,14 +123,16 @@ describe('Chess skins', () => {
   it('stay locked in the game for a player who has not bought them', async () => {
     mockApi({ games, user: pixel, shopItems, handlers: [chessServer().handler] })
     renderRoute('/games/chess')
-    const look = await screen.findByRole('region', { name: 'Your look' })
+    fireEvent.click(await screen.findByRole('button', { name: 'Skin' }))
+    const look = await screen.findByRole('region', { name: 'Skin' })
     expect(await within(look).findByRole('radio', { name: 'Midnight Hall (in the shop)' })).toBeDisabled()
   })
 
   it('are worn by an admin without buying them, and change only colours', async () => {
     const fetchSpy = mockApi({ games, user: admin, shopItems, coins: 0, handlers: [chessServer().handler] })
     renderRoute('/games/chess')
-    const look = await screen.findByRole('region', { name: 'Your look' })
+    fireEvent.click(await screen.findByRole('button', { name: 'Skin' }))
+    const look = await screen.findByRole('region', { name: 'Skin' })
     fireEvent.click(await within(look).findByRole('radio', { name: 'Midnight Hall' }))
 
     await waitFor(() => expect(within(look).getByRole('radio', { name: 'Midnight Hall' })).toHaveAttribute('aria-checked', 'true'))

@@ -195,7 +195,7 @@ export default function FlappyBirdGame(props: GameProps<FlappyAI>) {
               {status === 'over' ? `Flight over. You scored ${score}.` : ''}
             </p>
             {status === 'ready' && (
-              <p className="pointer-events-none absolute inset-x-0 bottom-[16%] mx-auto flex w-max max-w-[90%] flex-col items-center gap-1 rounded-2xl bg-ink/85 px-4 py-2 text-center font-display text-sm font-semibold text-white shadow-soft motion-safe:animate-pop-in">
+              <p className="pointer-events-none absolute inset-x-0 bottom-[16%] mx-auto flex w-max max-w-[90%] flex-col items-center gap-1 rounded-2xl bg-night/85 px-4 py-2 text-center font-display text-sm font-semibold text-white shadow-soft motion-safe:animate-pop-in">
                 {isAi ? (
                   'The AI is getting ready…'
                 ) : (

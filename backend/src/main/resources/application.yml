@@ -136,6 +136,21 @@ app:
       queue: ${CHESS_REVIEW_QUEUE:4}
       kept-for: ${CHESS_REVIEW_KEPT_FOR:30m}
       abandoned-after: ${CHESS_REVIEW_ABANDONED_AFTER:1m}
+    coach:
+      # Coach Mode (signed-in players and admins, their own moves): time and depth per position
+      # (two positions a move, the one before often cached already), the depth below which a move is
+      # left unrated, and judgements one account may ask for a minute (cached ones are free).
+      movetime: ${CHESS_COACH_MOVETIME:400ms}
+      depth: ${CHESS_COACH_DEPTH:14}
+      min-depth: ${CHESS_COACH_MIN_DEPTH:8}
+      requests-per-minute: ${CHESS_COACH_REQUESTS_PER_MINUTE:40}
+    classification:
+      # Move labels by the winning chances a move lost, in percentage points: Excellent up to the
+      # first, Good, Inaccuracy, Mistake up to the last, Blunder beyond. Reviews and Coach Mode.
+      excellent: ${CHESS_CLASS_EXCELLENT:2}
+      good: ${CHESS_CLASS_GOOD:5}
+      inaccuracy: ${CHESS_CLASS_INACCURACY:10}
+      mistake: ${CHESS_CLASS_MISTAKE:20}
     cache:
       # Engine results kept in memory for reuse (keyed by engine version, settings and position).
       max-entries: ${CHESS_ANALYSIS_CACHE_ENTRIES:5000}

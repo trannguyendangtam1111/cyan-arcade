@@ -90,7 +90,7 @@ export default function TetrisGame(props: GameProps<TetrisAI>) {
               <p
                 key={game.lineClear.id}
                 aria-hidden
-                className="pointer-events-none absolute top-[18%] left-1/2 -translate-x-1/2 rounded-full bg-ink px-4 py-1 font-display text-sm font-semibold whitespace-nowrap text-white opacity-0 shadow-soft motion-safe:animate-toast"
+                className="pointer-events-none absolute top-[18%] left-1/2 -translate-x-1/2 rounded-full bg-night px-4 py-1 font-display text-sm font-semibold whitespace-nowrap text-white opacity-0 shadow-soft motion-safe:animate-toast"
               >
                 {game.lineClear.label}
               </p>

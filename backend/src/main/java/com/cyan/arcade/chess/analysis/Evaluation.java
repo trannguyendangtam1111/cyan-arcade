@@ -48,7 +48,10 @@ public record Evaluation(Kind kind, int centipawns, Integer mateIn, Color mating
 		return new Evaluation(Kind.MATE, 0, moves, matingSide, exact);
 	}
 
-	/** A finished position: checkmate by {@code winner}, or a draw when {@code winner} is {@code null}. */
+	/**
+	 * A finished game: won by {@code winner}, shown as mate on the board whether it was mated or
+	 * resigned, or a draw when {@code winner} is {@code null}.
+	 */
 	public static Evaluation finished(Color winner) {
 		return (winner == null) ? centipawns(0, true) : mate(0, winner, true);
 	}

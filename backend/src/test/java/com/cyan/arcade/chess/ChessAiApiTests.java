@@ -2,6 +2,7 @@ package com.cyan.arcade.chess;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
@@ -11,6 +12,8 @@ import java.util.concurrent.Future;
 
 import com.cyan.arcade.IntegrationTest;
 import com.cyan.arcade.Players;
+import com.cyan.arcade.chess.engine.Move;
+import com.cyan.arcade.chess.engine.Position;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -251,10 +254,7 @@ class ChessAiApiTests {
 		move(admin, match, 1, reply).andExpect(status().isOk());
 		engineMove(admin, match, 2).andExpect(status().isOk()).andExpect(jsonPath("$.history", hasSize(3)));
 
-		// Takebacks and draw offers are for two people at one board.
-		this.mockMvc.perform(post("/api/chess/matches/{id}/undo", match).session(admin)
-			.contentType(MediaType.APPLICATION_JSON)
-			.content("{\"revision\":3}")).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("UNDO_NOT_ALLOWED"));
+		// Draw offers are for two people at one board.
 		this.mockMvc.perform(post("/api/chess/matches/{id}/draw", match).session(admin)
 			.contentType(MediaType.APPLICATION_JSON)
 			.content("{\"revision\":3,\"action\":\"OFFER\",\"side\":\"BLACK\"}"))
@@ -264,6 +264,85 @@ class ChessAiApiTests {
 		resign(admin, match, 3, "WHITE").andExpect(status().isForbidden());
 		resign(admin, match, 3, "BLACK").andExpect(status().isOk()).andExpect(jsonPath("$.result.winner").value("WHITE"));
 		engineMove(admin, match, 4).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("MATCH_OVER"));
+	}
+
+	@Test
+	void aTakebackAgainstStockfishReturnsToThePlayersTurnAndRedoReplaysBoth() throws Exception {
+		MockHttpSession admin = newAdmin();
+		String match = id(startEngineGame(admin, "BLACK", "CLUB"));
+		String opening = body(engineMove(admin, match, 0).andExpect(status().isOk()).andExpect(jsonPath("$.canUndo").value(false)));
+		// The engine's first move is not the player's to take back.
+		takeBack(admin, match, "undo", 1).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("NOTHING_TO_UNDO"));
+
+		List<String> replies = JsonPath.read(opening, "$.legalMoves[*].uci");
+		move(admin, match, 1, replies.get(0)).andExpect(status().isOk()).andExpect(jsonPath("$.canUndo").value(true));
+		// Taken back before Stockfish answers: only the player's move.
+		takeBack(admin, match, "undo", 2).andExpect(status().isOk())
+			.andExpect(jsonPath("$.history", hasSize(1)))
+			.andExpect(jsonPath("$.turn").value("BLACK"))
+			.andExpect(jsonPath("$.canRedo").value(true));
+		takeBack(admin, match, "redo", 3).andExpect(status().isOk())
+			.andExpect(jsonPath("$.history", hasSize(2)))
+			.andExpect(jsonPath("$.turn").value("WHITE"));
+		String answered = body(engineMove(admin, match, 4).andExpect(status().isOk()).andExpect(jsonPath("$.history", hasSize(3))));
+		List<String> played = JsonPath.read(answered, "$.history[*].uci");
+
+		// After the engine's reply: back to the player's turn, the reply and the player's move both gone.
+		takeBack(admin, match, "undo", 5).andExpect(status().isOk())
+			.andExpect(jsonPath("$.history[*].uci", contains(played.get(0))))
+			.andExpect(jsonPath("$.turn").value("BLACK"))
+			.andExpect(jsonPath("$.canRedo").value(true));
+		// A move chosen in the position before the takeback is refused.
+		engineMove(admin, match, 5).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("STALE_REVISION"));
+		// Redo plays both again, in order, and it is the player's turn.
+		takeBack(admin, match, "redo", 6).andExpect(status().isOk())
+			.andExpect(jsonPath("$.history[*].uci", contains(played.toArray())))
+			.andExpect(jsonPath("$.turn").value("BLACK"))
+			.andExpect(jsonPath("$.canRedo").value(false));
+
+		// A new move after a takeback drops what could have been replayed.
+		takeBack(admin, match, "undo", 7).andExpect(status().isOk());
+		move(admin, match, 8, replies.get(1)).andExpect(status().isOk()).andExpect(jsonPath("$.canRedo").value(false));
+		takeBack(admin, match, "redo", 9).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("NOTHING_TO_REDO"));
+	}
+
+	@Test
+	void aHintSaysWhatItsMoveDoesAndHowStockfishRatesIt() throws Exception {
+		MockHttpSession player = Players.register(this.mockMvc);
+		String match = id(start(player));
+		String quiet = body(hint(player, match, 0).andExpect(status().isOk()));
+		assertThat(JsonPath.<List<String>>read(quiet, "$.ideas")).isEmpty();
+		assertThat(JsonPath.<String>read(quiet, "$.evaluation.kind")).isEqualTo("CENTIPAWNS");
+
+		int revision = 0;
+		for (String uci : List.of("f2f3", "e7e5", "g2g4")) {
+			move(player, match, revision++, uci).andExpect(status().isOk());
+		}
+		hint(player, match, revision).andExpect(status().isOk())
+			.andExpect(jsonPath("$.move.san").value("Qh4#"))
+			.andExpect(jsonPath("$.ideas", contains("It is checkmate.")))
+			.andExpect(jsonPath("$.evaluation.kind").value("MATE"))
+			.andExpect(jsonPath("$.evaluation.matingSide").value("BLACK"));
+	}
+
+	@Test
+	void aVariationGivesAPlayerNoHintsAndAnAdminAsManyAsBefore() throws Exception {
+		MockHttpSession player = Players.register(this.mockMvc);
+		String game = id(start(player));
+		String branch = JsonPath.read(body(this.mockMvc.perform(post("/api/chess/matches/{id}/variations", game).session(player)
+			.contentType(MediaType.APPLICATION_JSON)
+			.content("{\"ply\":0}")).andExpect(status().isCreated())), "$.id");
+		hint(player, branch, 0).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("HINT_LIMIT_REACHED"));
+		hint(player, game, 0).andExpect(status().isOk()).andExpect(jsonPath("$.hints.remaining").value(2));
+
+		MockHttpSession admin = newAdmin();
+		String adminGame = id(start(admin));
+		String adminBranch = JsonPath.read(body(this.mockMvc.perform(post("/api/chess/matches/{id}/variations", adminGame)
+			.session(admin)
+			.contentType(MediaType.APPLICATION_JSON)
+			.content("{\"ply\":0}")).andExpect(status().isCreated())), "$.id");
+		hint(admin, adminBranch, 0).andExpect(status().isOk()).andExpect(jsonPath("$.hints.limit").value(nullValue()));
+		evaluate(admin, adminBranch, 0, 12, 1).andExpect(status().isOk());
 	}
 
 	@Test
@@ -308,6 +387,7 @@ class ChessAiApiTests {
 			.andExpect(jsonPath("$.lines[1].evaluation.centipawns").value(10))
 			.andExpect(jsonPath("$.lines[0].san", hasSize(2)))
 			.andExpect(jsonPath("$.complete").value(true))
+			.andExpect(jsonPath("$.termination").value(nullValue()))
 			.andExpect(jsonPath("$.bestMove.san").isString());
 
 		// Black to move and 20 centipawns up is -0.20 for White.
@@ -347,7 +427,24 @@ class ChessAiApiTests {
 		int searches = this.engine.searches.get();
 		evaluate(admin, match, 4, 12, 1).andExpect(status().isOk())
 			.andExpect(jsonPath("$.finished").value(true))
+			.andExpect(jsonPath("$.termination").value("CHECKMATE"))
 			.andExpect(jsonPath("$.evaluation.display").value("0-1"));
+		assertThat(this.engine.searches.get()).isEqualTo(searches);
+	}
+
+	@Test
+	void aResignedGameIsShownAsItsResultAndHowItEnded() throws Exception {
+		MockHttpSession admin = newAdmin();
+		String match = id(start(admin));
+		move(admin, match, 0, "e2e4").andExpect(status().isOk());
+		resign(admin, match, 1, "BLACK").andExpect(status().isOk());
+
+		int searches = this.engine.searches.get();
+		evaluate(admin, match, 2, 12, 1).andExpect(status().isOk())
+			.andExpect(jsonPath("$.finished").value(true))
+			.andExpect(jsonPath("$.termination").value("RESIGNATION"))
+			.andExpect(jsonPath("$.evaluation.matingSide").value("WHITE"))
+			.andExpect(jsonPath("$.evaluation.display").value("1-0"));
 		assertThat(this.engine.searches.get()).isEqualTo(searches);
 	}
 
@@ -436,6 +533,94 @@ class ChessAiApiTests {
 			.andExpect(jsonPath("$.engine").value("FakeFish 1"));
 	}
 
+	@Test
+	void anEarlierPositionOfTheGameIsEvaluatedWithTheBoardOfEachLine() throws Exception {
+		MockHttpSession admin = newAdmin();
+		String match = id(start(admin));
+		move(admin, match, 0, "e2e4").andExpect(status().isOk());
+		move(admin, match, 1, "e7e5").andExpect(status().isOk());
+
+		String body = body(evaluateAt(admin, match, 2, 0, 2).andExpect(status().isOk())
+			.andExpect(jsonPath("$.ply").value(0))
+			.andExpect(jsonPath("$.sideToMove").value("WHITE"))
+			.andExpect(jsonPath("$.evaluation.display").value("+0.20"))
+			.andExpect(jsonPath("$.lines.length()").value(2)));
+		List<String> uci = JsonPath.read(body, "$.lines[0].uci");
+		List<String> fens = JsonPath.read(body, "$.lines[0].fens");
+		assertThat(fens).hasSameSizeAs(uci);
+		// Each board of a line is the server's own, played through the rules from the position asked about.
+		Position after = Position.initial().play(Move.parse(uci.get(0)));
+		assertThat(fens.get(0)).isEqualTo(after.toFen());
+
+		evaluateAt(admin, match, 2, 1, 1).andExpect(status().isOk()).andExpect(jsonPath("$.sideToMove").value("BLACK"));
+		evaluateAt(admin, match, 2, 3, 1).andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("ANALYSIS_NOT_ALLOWED"));
+		evaluateAt(admin, match, 1, 0, 1).andExpect(status().isConflict())
+			.andExpect(jsonPath("$.code").value("STALE_REVISION"));
+		// A player still has no evaluations, whichever position.
+		evaluateAt(Players.register(this.mockMvc), match, 2, 0, 1).andExpect(status().isForbidden());
+	}
+
+	@Test
+	void aFinishedGamesEarlierPositionsAreSearchedAndOnlyTheLastIsItsResult() throws Exception {
+		MockHttpSession admin = newAdmin();
+		String match = id(start(admin));
+		int revision = 0;
+		for (String uci : List.of("f2f3", "e7e5", "g2g4", "d8h4")) {
+			move(admin, match, revision++, uci).andExpect(status().isOk());
+		}
+		evaluateAt(admin, match, 4, 4, 1).andExpect(jsonPath("$.finished").value(true))
+			.andExpect(jsonPath("$.termination").value("CHECKMATE"));
+		evaluateAt(admin, match, 4, 3, 1).andExpect(jsonPath("$.finished").value(false))
+			.andExpect(jsonPath("$.evaluation.display").value("#-1"))
+			.andExpect(jsonPath("$.bestMove.san").value("Qh4#"));
+	}
+
+	@Test
+	void aReviewSumsUpEachSidesAccuracyAndLabelsAndAwardsNothing() throws Exception {
+		MockHttpSession admin = newAdmin();
+		Long adminId = Players.userId(this.mockMvc, admin);
+		String match = id(start(admin));
+		int revision = 0;
+		for (String uci : List.of("f2f3", "e7e5", "g2g4", "d8h4")) {
+			move(admin, match, revision++, uci).andExpect(status().isOk());
+		}
+		String rewards = rewardsOf(adminId);
+
+		reviewStart(admin, match).andExpect(status().isAccepted());
+		String review = awaitReview(admin, match);
+
+		assertThat(JsonPath.<String>read(review, "$.status")).isEqualTo("DONE");
+		Map<String, Integer> white = JsonPath.read(review, "$.summary.white.counts");
+		Map<String, Integer> black = JsonPath.read(review, "$.summary.black.counts");
+		assertThat(white.values().stream().mapToInt(Integer::intValue).sum()).isEqualTo(2);
+		assertThat(black.values().stream().mapToInt(Integer::intValue).sum()).isEqualTo(2);
+		// g4 lets Black mate at once: a blunder, and White's accuracy shows it; Black's mate is best.
+		assertThat(white).containsEntry("BLUNDER", 1);
+		assertThat(black).containsEntry("BEST", 1);
+		Double whiteAccuracy = JsonPath.read(review, "$.summary.white.accuracy");
+		Double blackAccuracy = JsonPath.read(review, "$.summary.black.accuracy");
+		assertThat(whiteAccuracy).isLessThan(blackAccuracy);
+		assertThat(blackAccuracy).isBetween(90.0, 100.0);
+		// A review is no game played: no coins, XP, sessions or achievements.
+		assertThat(rewardsOf(adminId)).isEqualTo(rewards);
+	}
+
+	/** What the platform has given an account: coins, XP, sessions and achievements, as counts. */
+	private String rewardsOf(Long userId) {
+		return this.jdbc.queryForObject("SELECT (SELECT count(*) FROM coin_transactions WHERE user_id = ?) || '|' "
+				+ "|| (SELECT count(*) FROM game_sessions WHERE user_id = ?) || '|' "
+				+ "|| (SELECT count(*) FROM user_achievements WHERE user_id = ?) || '|' || (SELECT xp FROM users WHERE id = ?)",
+				String.class, userId, userId, userId, userId);
+	}
+
+	private ResultActions evaluateAt(MockHttpSession session, String match, int revision, int ply, int lines)
+			throws Exception {
+		return this.mockMvc.perform(post("/api/ai/chess/matches/{id}/evaluation", match).session(session)
+			.contentType(MediaType.APPLICATION_JSON)
+			.content("{\"revision\":" + revision + ",\"depth\":12,\"lines\":" + lines + ",\"ply\":" + ply + "}"));
+	}
+
 	// --- Helpers -------------------------------------------------------------------------------------
 
 	/** A new account promoted to admin, signed in again so its session carries the role. */
@@ -472,6 +657,12 @@ class ChessAiApiTests {
 		return this.mockMvc.perform(post("/api/chess/matches/{id}/moves", match).session(session)
 			.contentType(MediaType.APPLICATION_JSON)
 			.content("{\"revision\":" + revision + ",\"move\":\"" + uci + "\"}"));
+	}
+
+	private ResultActions takeBack(MockHttpSession session, String match, String action, int revision) throws Exception {
+		return this.mockMvc.perform(post("/api/chess/matches/{id}/" + action, match).session(session)
+			.contentType(MediaType.APPLICATION_JSON)
+			.content("{\"revision\":" + revision + "}"));
 	}
 
 	private ResultActions resign(MockHttpSession session, String match, int revision, String side) throws Exception {

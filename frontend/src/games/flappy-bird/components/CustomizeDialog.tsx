@@ -139,7 +139,7 @@ function SkinTile({ slot, skinId, name, description, label, rarity, free, sold, 
       <div className={cn('relative grid h-20 place-items-center rounded-xl bg-surface', !owned && 'opacity-70')}>
         <SkinPreview slot={slot} skinId={skinId} className="h-17" />
         {!owned && (
-          <span className="absolute top-1.5 right-1.5 grid size-6 place-items-center rounded-full bg-ink/80 text-white">
+          <span className="absolute top-1.5 right-1.5 grid size-6 place-items-center rounded-full bg-night/80 text-white">
             <Lock aria-hidden className="size-3.5" />
           </span>
         )}

@@ -347,6 +347,133 @@ class ChessApiTests {
 			.andExpect(jsonPath("$.code").value("NOTHING_TO_REDO"));
 	}
 
+	@Test
+	void everyKindOfMoveIsTakenBackAndReplayedExactly() throws Exception {
+		// A capture, en passant, both castling rights spent by castling, and a promotion.
+		roundTrip("e2e4", "a7a6", "e4e5", "d7d5", "e5d6", "e7d6", "g1f3", "b8c6", "f1c4", "a6a5", "e1g1");
+		roundTrip("h2h4", "g7g5", "h4g5", "h7h6", "g5h6", "a7a6", "h6h7", "a6a5", "h7g8n");
+	}
+
+	/**
+	 * Plays the moves, then takes every one back (each step must give exactly the position before it,
+	 * castling rights and en passant square included), then replays them all.
+	 */
+	private void roundTrip(String... moves) throws Exception {
+		UUID guest = UUID.randomUUID();
+		String match = id(body(start(null, guest)));
+		List<String> fens = new ArrayList<>(List.of(INITIAL_FEN));
+		String last = null;
+		for (String uci : moves) {
+			last = body(play(null, guest, match, uci));
+			fens.add(JsonPath.read(last, "$.fen"));
+		}
+		int revision = moves.length;
+		for (int ply = moves.length; ply >= 1; ply--) {
+			revisionOnly(null, guest, match, "undo", revision++).andExpect(status().isOk())
+				.andExpect(jsonPath("$.fen").value(fens.get(ply - 1)))
+				.andExpect(jsonPath("$.history", hasSize(ply - 1)))
+				.andExpect(jsonPath("$.canRedo").value(true));
+		}
+		revisionOnly(null, guest, match, "undo", revision).andExpect(status().isConflict())
+			.andExpect(jsonPath("$.code").value("NOTHING_TO_UNDO"));
+		String replayed = null;
+		for (int ply = 1; ply <= moves.length; ply++) {
+			replayed = body(revisionOnly(null, guest, match, "redo", revision++).andExpect(status().isOk())
+				.andExpect(jsonPath("$.fen").value(fens.get(ply))));
+		}
+		assertThat(JsonPath.<List<String>>read(replayed, "$.history[*].san"))
+			.isEqualTo(JsonPath.<List<String>>read(last, "$.history[*].san"));
+		assertThat(JsonPath.<Object>read(replayed, "$.captured")).isEqualTo(JsonPath.read(last, "$.captured"));
+		assertThat(JsonPath.<Boolean>read(replayed, "$.canRedo")).isFalse();
+	}
+
+	// --- Variations ----------------------------------------------------------------------------------
+
+	@Test
+	void aVariationStartsFromAnEarlierPositionAndLeavesTheGameAsItWas() throws Exception {
+		MockHttpSession player = Players.register(this.mockMvc);
+		Long playerId = Players.userId(this.mockMvc, player);
+		String game = id(body(start(player, null)));
+		play(player, null, game, "e2e4", "e7e5", "g1f3", "b8c6");
+		String rewards = rewardsOf(playerId);
+
+		String variation = body(variation(player, null, game, 2).andExpect(status().isCreated())
+			.andExpect(jsonPath("$.mode").value("ANALYSIS"))
+			.andExpect(jsonPath("$.status").value("ACTIVE"))
+			.andExpect(jsonPath("$.revision").value(0))
+			.andExpect(jsonPath("$.history[*].san", contains("e4", "e5")))
+			.andExpect(jsonPath("$.turn").value("WHITE"))
+			.andExpect(jsonPath("$.source.matchId").value(game))
+			.andExpect(jsonPath("$.source.ply").value(2))
+			// A player's hints are the game's: a variation gives none.
+			.andExpect(jsonPath("$.hints.remaining").value(0)));
+		String branch = id(variation);
+		assertThat(branch).isNotEqualTo(game);
+
+		// Played like a local game, both sides, with takebacks, but nothing to resign or agree.
+		move(player, null, branch, 0, "d2d4").andExpect(status().isOk()).andExpect(jsonPath("$.history", hasSize(3)));
+		move(player, null, branch, 1, "e5d4").andExpect(status().isOk()).andExpect(jsonPath("$.lastMove.san").value("exd4"));
+		revisionOnly(player, null, branch, "undo", 2).andExpect(status().isOk()).andExpect(jsonPath("$.canRedo").value(true));
+		resign(player, null, branch, 3, "WHITE").andExpect(status().isConflict())
+			.andExpect(jsonPath("$.code").value("NOT_IN_ANALYSIS"));
+		draw(player, null, branch, 3, "OFFER", "WHITE").andExpect(status().isConflict())
+			.andExpect(jsonPath("$.code").value("NOT_IN_ANALYSIS"));
+
+		// The game is untouched, still in progress, and still the player's current game.
+		this.mockMvc.perform(get("/api/chess/matches/{id}", game).session(player))
+			.andExpect(jsonPath("$.revision").value(4))
+			.andExpect(jsonPath("$.status").value("ACTIVE"))
+			.andExpect(jsonPath("$.history[*].san", contains("e4", "e5", "Nf3", "Nc6")))
+			.andExpect(jsonPath("$.source").value(nullValue()));
+		this.mockMvc.perform(get("/api/chess/matches/current").session(player)).andExpect(jsonPath("$.id").value(game));
+		move(player, null, game, 4, "f1b5").andExpect(status().isOk());
+
+		// A variation of the variation is one of the same game, from where the two part.
+		String nested = body(variation(player, null, branch, 3).andExpect(status().isCreated()));
+		assertThat(JsonPath.<String>read(nested, "$.source.matchId")).isEqualTo(game);
+		assertThat(JsonPath.<Integer>read(nested, "$.source.ply")).isEqualTo(2);
+		assertThat(JsonPath.<List<String>>read(nested, "$.history[*].san")).containsExactly("e4", "e5", "d4");
+		// It leaves the earlier variation (one open at a time), never the game.
+		this.mockMvc.perform(get("/api/chess/matches/{id}", branch).session(player))
+			.andExpect(jsonPath("$.status").value("ABANDONED"));
+		this.mockMvc.perform(get("/api/chess/matches/{id}", game).session(player))
+			.andExpect(jsonPath("$.status").value("ACTIVE"));
+
+		// No such position, and nobody else's game.
+		variation(player, null, game, 6).andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("NO_SUCH_POSITION"));
+		variation(Players.register(this.mockMvc), null, game, 1).andExpect(status().isNotFound());
+		// Exploring earns nothing.
+		assertThat(rewardsOf(playerId)).isEqualTo(rewards);
+	}
+
+	@Test
+	void aFinishedGameKeepsItsResultWhenItsPositionsAreExplored() throws Exception {
+		UUID guest = UUID.randomUUID();
+		String game = id(body(start(null, guest)));
+		play(null, guest, game, "f2f3", "e7e5", "g2g4", "d8h4");
+
+		// Mate on the board: there is nothing to play from there.
+		variation(null, guest, game, 4).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("MATCH_OVER"));
+		String branch = id(body(variation(null, guest, game, 3).andExpect(status().isCreated())));
+		move(null, guest, branch, 0, "g8f6").andExpect(status().isOk()).andExpect(jsonPath("$.status").value("ACTIVE"));
+
+		this.mockMvc.perform(as(get("/api/chess/matches/current"), null, guest))
+			.andExpect(jsonPath("$.id").value(game))
+			.andExpect(jsonPath("$.status").value("FINISHED"))
+			.andExpect(jsonPath("$.result.winner").value("BLACK"))
+			.andExpect(jsonPath("$.result.termination").value("CHECKMATE"))
+			.andExpect(jsonPath("$.revision").value(4));
+	}
+
+	/** What the platform has given an account: coins, XP, sessions and achievements, as counts. */
+	private String rewardsOf(Long userId) {
+		return this.jdbc.queryForObject("SELECT (SELECT count(*) FROM coin_transactions WHERE user_id = ?) || '|' "
+				+ "|| (SELECT count(*) FROM game_sessions WHERE user_id = ?) || '|' "
+				+ "|| (SELECT count(*) FROM user_achievements WHERE user_id = ?) || '|' || (SELECT xp FROM users WHERE id = ?)",
+				String.class, userId, userId, userId, userId);
+	}
+
 	// --- Whose match ---------------------------------------------------------------------------------
 
 	@Test
@@ -450,6 +577,11 @@ class ChessApiTests {
 			throws Exception {
 		return this.mockMvc.perform(as(post("/api/chess/matches/{id}/" + action, match), session, guest)
 			.content("{\"revision\":" + revision + "}"));
+	}
+
+	private ResultActions variation(MockHttpSession session, UUID guest, String match, int ply) throws Exception {
+		return this.mockMvc.perform(as(post("/api/chess/matches/{id}/variations", match), session, guest)
+			.content("{\"ply\":" + ply + "}"));
 	}
 
 	private ResultActions resign(MockHttpSession session, UUID guest, String match, int revision, String side)

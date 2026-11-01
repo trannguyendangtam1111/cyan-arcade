@@ -32,7 +32,8 @@ class EngineLimitsTests {
 				new ChessAiProperties.Hints(Duration.ofMillis(600), 18),
 				new ChessAiProperties.Evaluation(16, 22, Duration.ofSeconds(3), 3),
 				new ChessAiProperties.Review(Duration.ofMillis(250), 16, 8, 300, 1, 4, Duration.ofMinutes(30), Duration.ofMinutes(1)),
-				new ChessAiProperties.Cache(cacheEntries, Duration.ofHours(6)), 3, perMinute);
+				new ChessAiProperties.Cache(cacheEntries, Duration.ofHours(6)), 3, perMinute,
+				new ChessAiProperties.Coach(Duration.ofMillis(400), 14, 8, 40), new ChessAiProperties.Classification(2, 5, 10, 20));
 	}
 
 	@Test

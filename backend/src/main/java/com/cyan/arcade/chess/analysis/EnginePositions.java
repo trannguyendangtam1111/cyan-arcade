@@ -53,6 +53,27 @@ public final class EnginePositions {
 	}
 
 	/**
+	 * The position after each move of a line (FEN), played through the rules; it stops at the first
+	 * move that is not legal, like {@link #sanLine}.
+	 */
+	public static List<String> fenLine(Position start, List<String> pv, int maxMoves) {
+		List<String> fens = new ArrayList<>();
+		Position position = start;
+		for (String uci : pv) {
+			if (fens.size() >= maxMoves) {
+				break;
+			}
+			Move move = legal(position, uci);
+			if (move == null) {
+				break;
+			}
+			position = position.play(move);
+			fens.add(position.toFen());
+		}
+		return fens;
+	}
+
+	/**
 	 * A principal variation in standard notation, played through the rules; it stops at the first
 	 * move that is not legal (an engine never sends one, but nothing here takes that on trust).
 	 */

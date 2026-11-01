@@ -14,6 +14,7 @@ import {
   STALE_REVISION,
   startEngineGame,
   startMatch,
+  startVariation,
   undoMove,
 } from '../api/chessApi'
 import { canMoveFrom, movesBetween, parsePlacement, squareIndex, targetsFrom, type Target } from '../engine/board'
@@ -26,6 +27,8 @@ export interface Notice {
 }
 
 const NO_TARGETS = new Map<string, Target>()
+
+const sideLabel = (side: Side) => (side === 'WHITE' ? 'White' : 'Black')
 
 /**
  * A two-player game of chess on this device, played on the server. The server answers every action
@@ -112,8 +115,18 @@ export function useChessGame(onFirstMove: () => void) {
   const load = useCallback(() => {
     setLoading(true)
     setLoadError(false)
+    // A variation is brought up to date as itself: it is never the player's current game.
+    const shown = matchRef.current
+    if (shown?.mode === 'ANALYSIS') {
+      return fetchMatch(shown.id)
+        .then((fresh) => {
+          show(fresh)
+          setLoading(false)
+        })
+        .catch(() => setLoading(false))
+    }
     return fetchOrStart()
-  }, [fetchOrStart])
+  }, [fetchOrStart, show])
 
   // --- Actions -------------------------------------------------------------------------------------
 
@@ -189,11 +202,17 @@ export function useChessGame(onFirstMove: () => void) {
       const piece = placement[squareIndex(square)]
       if (square === selected || !piece || piece.side !== current.turn) {
         setSelected(null)
+        // Only the side to move moves: say so rather than ignore the tap (in a game against
+        // Stockfish its pieces never answer; a premove is made while Stockfish is to move).
+        if (piece && piece.side !== current.turn && square !== selected) {
+          say(current.mode !== 'AI' ? `It is ${sideLabel(current.turn)}'s move: only ${sideLabel(current.turn)}'s pieces can move now.` : "Those are Stockfish's pieces.", 'info')
+        }
         return
       }
       setSelected(square)
+      // A notice above the board stays until the next action is sent: clearing it now would move the
+      // board under the player's second click (or drag) and land the move on another square.
       if (!canMoveFrom(current.legalMoves, square)) say('That piece has no legal move right now.', 'info')
-      else setNotice(null)
     },
     [placement, playerTurn, say, selected, submit],
   )
@@ -214,6 +233,71 @@ export function useChessGame(onFirstMove: () => void) {
     [promotion, submit],
   )
 
+  /** A drag picked up a piece: it is selected, so its legal squares show while it moves. */
+  const pickUp = useCallback(
+    (square: string) => {
+      const current = matchRef.current
+      if (!current || !playerTurn || busyRef.current || !canMoveFrom(current.legalMoves, square)) return
+      // The notice stays: the board must not move under a piece being dragged.
+      setSelected(square)
+    },
+    [playerTurn],
+  )
+
+  /**
+   * A dragged piece let go over a square: the move if it is legal (with the promotion choice for a
+   * pawn), else nothing but a word to say so. The same move submitted by a click is the same request.
+   */
+  const drop = useCallback(
+    (from: string, to: string) => {
+      const current = matchRef.current
+      if (!current || !playerTurn || busyRef.current) return
+      const moves = movesBetween(current.legalMoves, from, to)
+      if (moves.length === 1) {
+        void submit(moves[0].uci)
+        return
+      }
+      if (moves.length > 1) {
+        setSelected(from)
+        setPromotion({ from, to })
+        return
+      }
+      setSelected(null)
+      say('That move is not legal here.', 'info')
+    },
+    [playerTurn, say, submit],
+  )
+
+  /**
+   * A planned move (a premove) once it is the player's turn: played if it is still legal, with the
+   * promotion dialog for a pawn (the piece is never guessed); otherwise nothing is sent.
+   * @returns `'played'`, `'promotion'` (the dialog is open), `'illegal'`, or `'wait'` (not now)
+   */
+  const playPlanned = useCallback(
+    (from: string, to: string): 'played' | 'promotion' | 'illegal' | 'wait' => {
+      const current = matchRef.current
+      if (!current || busyRef.current || !playerTurn) return 'wait'
+      const moves = movesBetween(current.legalMoves, from, to)
+      if (moves.length === 1) {
+        void submit(moves[0].uci)
+        return 'played'
+      }
+      if (moves.length > 1) {
+        setSelected(from)
+        setPromotion({ from, to })
+        return 'promotion'
+      }
+      return 'illegal'
+    },
+    [playerTurn, submit],
+  )
+
+  /** Whether the piece on a square may be dragged now: the player's turn, a piece with a legal move. */
+  const movable = useCallback(
+    (square: string) => playerTurn && !busy && match !== null && canMoveFrom(match.legalMoves, square),
+    [busy, match, playerTurn],
+  )
+
   const deselect = useCallback(() => {
     setSelected(null)
     setPromotion(null)
@@ -227,21 +311,27 @@ export function useChessGame(onFirstMove: () => void) {
     [act],
   )
 
-  /** A new game from the start, local or (admins) against Stockfish. The one in progress, if any, is left. */
+  /**
+   * A new game from the start, local or (admins) against Stockfish. The one in progress, if any, is
+   * left. `quiet` for a match that is no new game (a variation, or back to the game): the hub is not told.
+   * @returns whether the board now shows the new match
+   */
   const begin = useCallback(
-    async (start: () => Promise<MatchView>) => {
-      if (busyRef.current) return
+    async (start: () => Promise<MatchView>, quiet = false): Promise<boolean> => {
+      if (busyRef.current) return false
       busyRef.current = true
       setBusy(true)
       setNotice(null)
       try {
         const fresh = await start()
-        firstMoveCalled.current = null
+        firstMoveCalled.current = quiet ? fresh.id : null
         setEngineFailed(false)
         setHint(null)
         show(fresh)
+        return true
       } catch (error) {
         say(error instanceof ApiError && error.code !== NETWORK_ERROR ? error.message : "Couldn't start a new game. Check your connection and try again.")
+        return false
       } finally {
         busyRef.current = false
         setBusy(false)
@@ -253,6 +343,34 @@ export function useChessGame(onFirstMove: () => void) {
   )
 
   const newGame = useCallback(() => begin(startMatch), [begin])
+
+  /**
+   * "Continue from here": a variation of the match shown from its position after `ply` moves. The
+   * match itself stays as it is (its moves, its result); the board shows the variation instead.
+   */
+  const explore = useCallback(
+    (ply: number) => {
+      const shown = matchRef.current
+      if (!shown) return Promise.resolve(false)
+      return begin(() => startVariation(shown.id, ply), true)
+    },
+    [begin],
+  )
+
+  /** From a variation back to the game it came from (or, once that is gone, the current game). */
+  const leaveVariation = useCallback(() => {
+    const source = matchRef.current?.source
+    return begin(async () => {
+      if (source?.matchId) {
+        try {
+          return await fetchMatch(source.matchId)
+        } catch {
+          // Forgotten since: the player's current game instead.
+        }
+      }
+      return (await fetchCurrentMatch()) ?? startMatch()
+    }, true)
+  }, [begin])
   const playEngine = useCallback((playerSide: Side, difficulty: Difficulty) => begin(() => startEngineGame(playerSide, difficulty)), [begin])
 
   // --- Hints -----------------------------------------------------------------------------------------
@@ -332,6 +450,13 @@ export function useChessGame(onFirstMove: () => void) {
     resign,
     draw,
     newGame,
+    explore,
+    leaveVariation,
+    pickUp,
+    drop,
+    movable,
+    playPlanned,
+    say,
   }
 }
 

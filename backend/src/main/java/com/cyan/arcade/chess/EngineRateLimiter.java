@@ -10,6 +10,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import com.cyan.arcade.common.error.ApiException;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 
@@ -34,8 +35,14 @@ class EngineRateLimiter {
 
 	private final Map<Long, Deque<Long>> requests = new ConcurrentHashMap<>();
 
+	@Autowired
 	EngineRateLimiter(ChessAiProperties properties, Clock clock) {
-		this.perMinute = properties.requestsPerMinute();
+		this(properties.requestsPerMinute(), clock);
+	}
+
+	/** A limiter of its own, for requests counted apart (Coach Mode's judgements). */
+	EngineRateLimiter(int perMinute, Clock clock) {
+		this.perMinute = perMinute;
 		this.clock = clock;
 	}
 

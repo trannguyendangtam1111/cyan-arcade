@@ -1,40 +1,68 @@
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, LoaderCircle, SearchCheck, X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { cn } from '@/lib/cn'
-import type { ChessAi, ClassificationInfo } from '../ai/chessAi'
-import type { ReviewResponse } from '../types/chessTypes'
-import { EvalBar } from './EvalBar'
-
-const TONES: Record<ClassificationInfo['tone'], string> = {
-  best: 'bg-[#d1fae5] text-[#065f46]',
-  good: 'bg-[#e0f2fe] text-[#075985]',
-  inaccuracy: 'bg-[#fef3c7] text-[#92400e]',
-  mistake: 'bg-[#ffedd5] text-[#9a3412]',
-  blunder: 'bg-[#ffe4e6] text-[#9f1239]',
-  neutral: 'bg-surface text-ink-soft',
-}
+import { moveQuality } from '../analysis/moveQuality'
+import { errorFrom, reviewSummary } from '../analysis/reviewText'
+import { whiteShare } from '../analysis/score'
+import type { MoveClass, ReviewResponse, Side, SideSummary } from '../types/chessTypes'
+import { EvalGraph } from './EvalGraph'
+import { MoveFeedback } from './MoveFeedback'
 
 interface ReviewPanelProps {
-  ai: ChessAi
   review: ReviewResponse | null
   error: string | null
   running: boolean
   finished: boolean
-  selected: number | null
+  /** The ply on the board (0 for the start). */
+  ply: number
+  /** The board follows the game (no move picked yet): stepping forward starts from the first move. */
+  live: boolean
+  onPly: (ply: number) => void
   side: 'before' | 'after'
+  onSide: (side: 'before' | 'after') => void
   onStart: () => void
   onCancel: () => void
   onClose: () => void
-  onSelect: (index: number | null) => void
-  onSide: (side: 'before' | 'after') => void
+}
+
+const COUNTED: readonly MoveClass[] = ['BEST', 'EXCELLENT', 'GOOD', 'INACCURACY', 'MISTAKE', 'BLUNDER', 'FORCED', 'UNRATED']
+
+const sideName = (side: Side) => (side === 'WHITE' ? 'White' : 'Black')
+
+function SideCard({ side, summary }: { side: Side; summary: SideSummary }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-1 rounded-md bg-surface p-2" data-testid={`summary-${side.toLowerCase()}`}>
+      <p className="flex items-baseline justify-between gap-1">
+        <span className="text-xs font-bold tracking-wide text-ink-soft uppercase">{sideName(side)}</span>
+        <strong className="font-display text-xl tabular-nums" aria-label={`${sideName(side)} accuracy`}>
+          {summary.accuracy === null ? '—' : `${summary.accuracy.toFixed(1)}%`}
+        </strong>
+      </p>
+      <ul className="flex flex-col gap-0.5 text-xs">
+        {COUNTED.filter((label) => (summary.counts[label] ?? 0) > 0).map((label) => {
+          const quality = moveQuality(label)
+          return (
+            <li key={label} className="flex items-center gap-1.5">
+              <span aria-hidden className="grid size-4 shrink-0 place-items-center rounded-full text-[0.6rem] font-bold text-white" style={{ background: quality.color, color: quality.ink }}>
+                {quality.symbol}
+              </span>
+              <span className="min-w-0 flex-1 truncate">{quality.label}</span>
+              <span className="font-bold tabular-nums">{summary.counts[label]}</span>
+            </li>
+          )
+        })}
+      </ul>
+    </div>
+  )
 }
 
 /**
- * Admins: a finished game, move by move, as Stockfish sees it: each move's label by the review's
- * published rules, the evaluation before and after, and the engine's preferred move. Moves appear as
- * their analysis arrives; the board shows the selected one.
+ * Admins: a finished game, move by move, as Stockfish sees it. Each side's accuracy and labels, a
+ * graph of the winning chances, a short summary from those numbers, and each move with its label, the
+ * evaluation before and after and the engine's alternative. Moves appear as their analysis arrives;
+ * until the review is done everything is marked provisional. Reviewing changes nothing in the game.
  */
-export function ReviewPanel({ ai, review, error, running, finished, selected, side, onStart, onCancel, onClose, onSelect, onSide }: ReviewPanelProps) {
+export function ReviewPanel({ review, error, running, finished, ply, live, onPly, side, onSide, onStart, onCancel, onClose }: ReviewPanelProps) {
   if (!review) {
     return (
       <section aria-labelledby="chess-review" className="flex flex-col gap-2 rounded-control bg-surface-muted p-3">
@@ -47,7 +75,7 @@ export function ReviewPanel({ ai, review, error, running, finished, selected, si
           Review game
         </Button>
         {error && (
-          <p role="alert" className="text-sm font-semibold text-[#9f1239]">
+          <p role="alert" className="text-sm font-semibold text-rose-700">
             {error}
           </p>
         )}
@@ -56,9 +84,12 @@ export function ReviewPanel({ ai, review, error, running, finished, selected, si
   }
 
   const moves = review.moves
-  const current = selected !== null ? moves[selected] : null
-  const info = current ? ai.classification(current.classification) : null
-  const go = (index: number | null) => index !== null && onSelect(index)
+  const current = ply >= 1 ? (moves[ply - 1] ?? null) : null
+  const quality = current ? moveQuality(current.classification) : null
+  const complete = review.status === 'DONE'
+  const points = moves.length > 0 ? [{ ply: 0, white: whiteShare(moves[0].before) }, ...moves.map((move) => ({ ply: move.ply, white: whiteShare(move.after), classification: move.classification }))] : []
+  const previousError = errorFrom(moves, ply, -1)
+  const nextError = errorFrom(moves, live ? 0 : ply, 1)
 
   return (
     <section aria-labelledby="chess-review" className="flex flex-col gap-3 rounded-control bg-surface-muted p-3">
@@ -85,7 +116,7 @@ export function ReviewPanel({ ai, review, error, running, finished, selected, si
       )}
       {(review.status === 'CANCELLED' || review.status === 'FAILED') && (
         <div className="flex flex-wrap items-center gap-2 text-sm">
-          <p role="alert" className="font-semibold text-[#9f1239]">
+          <p role="alert" className="font-semibold text-rose-700">
             {review.status === 'CANCELLED' ? 'The review was cancelled.' : (review.error ?? 'The review failed.')}
           </p>
           <Button size="sm" variant="secondary" onClick={onStart} className="ml-auto">
@@ -94,55 +125,48 @@ export function ReviewPanel({ ai, review, error, running, finished, selected, si
         </div>
       )}
       {error && (
-        <p role="alert" className="text-sm font-semibold text-[#9f1239]">
+        <p role="alert" className="text-sm font-semibold text-rose-700">
           {error}
         </p>
       )}
 
+      {moves.length > 0 && (
+        <>
+          <div className="grid grid-cols-2 gap-2">
+            <SideCard side="WHITE" summary={review.summary.white} />
+            <SideCard side="BLACK" summary={review.summary.black} />
+          </div>
+          {!complete && <p className="text-xs font-semibold text-amber-800">Provisional: {moves.length} of {review.total - 1} moves analysed so far.</p>}
+          <EvalGraph points={points} selected={ply} onSelect={onPly} label={`White's winning chances through the game, ${moves.length} moves`} />
+          {complete && (
+            <ul className="flex flex-col gap-0.5 text-sm" aria-label="Summary">
+              {reviewSummary(review).map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+
       <div className="flex items-center justify-between gap-1" role="group" aria-label="Review navigation">
-        <Button size="sm" variant="ghost" onClick={() => go(ai.stepToError(moves, selected, -1))} aria-label="Previous inaccuracy, mistake or blunder" disabled={ai.stepToError(moves, selected, -1) === null}>
+        <Button size="sm" variant="ghost" onClick={() => previousError !== null && onPly(previousError)} aria-label="Previous inaccuracy, mistake or blunder" disabled={previousError === null}>
           <ChevronsLeft aria-hidden className="size-4" />
         </Button>
-        <Button size="sm" variant="ghost" onClick={() => go(ai.step(moves, selected, -1))} aria-label="Previous move" disabled={ai.step(moves, selected, -1) === null}>
+        <Button size="sm" variant="ghost" onClick={() => onPly(Math.max(1, ply - 1))} aria-label="Previous move" disabled={ply <= 1}>
           <ChevronLeft aria-hidden className="size-4" />
         </Button>
-        <span className="text-xs font-bold text-ink-soft">
-          {current ? `Move ${Math.ceil(current.ply / 2)}${current.color === 'WHITE' ? '' : '…'}` : `${moves.length} moves reviewed`}
-        </span>
-        <Button size="sm" variant="ghost" onClick={() => go(ai.step(moves, selected, 1))} aria-label="Next move" disabled={ai.step(moves, selected, 1) === null}>
+        <span className="text-xs font-bold text-ink-soft">{current ? `Move ${Math.ceil(current.ply / 2)}${current.color === 'WHITE' ? '' : '…'}` : `${moves.length} moves reviewed`}</span>
+        <Button size="sm" variant="ghost" onClick={() => onPly(Math.min(moves.length, ply + 1))} aria-label="Next move" disabled={ply >= moves.length}>
           <ChevronRight aria-hidden className="size-4" />
         </Button>
-        <Button size="sm" variant="ghost" onClick={() => go(ai.stepToError(moves, selected, 1))} aria-label="Next inaccuracy, mistake or blunder" disabled={ai.stepToError(moves, selected, 1) === null}>
+        <Button size="sm" variant="ghost" onClick={() => nextError !== null && onPly(nextError)} aria-label="Next inaccuracy, mistake or blunder" disabled={nextError === null}>
           <ChevronsRight aria-hidden className="size-4" />
         </Button>
       </div>
 
-      {current && info && (
+      {current && quality && (
         <div className="flex flex-col gap-2 rounded-control bg-surface p-3" aria-live="polite">
-          <p className="flex flex-wrap items-center gap-2">
-            <strong className="font-mono text-lg">
-              {Math.ceil(current.ply / 2)}
-              {current.color === 'WHITE' ? '.' : '…'} {current.san}
-              {info.symbol && !['★', '□'].includes(info.symbol) ? info.symbol : ''}
-            </strong>
-            <span data-testid="classification" className={cn('rounded-full px-2 py-0.5 text-xs font-bold', TONES[info.tone])}>
-              {info.label}
-            </span>
-          </p>
-          <EvalBar evaluation={side === 'before' ? current.before : current.after} ai={ai} provisional={current.classification === 'UNRATED'} />
-          <p className="text-sm">
-            Evaluation <span className="font-mono">{current.before.display}</span> → <span className="font-mono">{current.after.display}</span>
-            {current.loss !== null && current.classification !== 'BEST' && current.classification !== 'FORCED' && (
-              <span className="text-ink-soft"> · {current.loss} points of winning chances lost</span>
-            )}
-          </p>
-          {current.best && current.best.uci !== current.uci && (
-            <p className="text-sm">
-              Stockfish preferred <strong className="font-mono">{current.best.san}</strong>
-              {current.bestLine.length > 1 && <span className="font-mono text-ink-soft"> ({current.bestLine.join(' ')})</span>}
-            </p>
-          )}
-          {current.classification === 'UNRATED' && <p className="text-xs text-ink-soft">The analysis was too shallow to judge this move.</p>}
+          <MoveFeedback move={current} source="review" />
           <div role="radiogroup" aria-label="Board shows" className="grid grid-cols-2 gap-1.5">
             {(['before', 'after'] as const).map((option) => (
               <button
@@ -159,35 +183,9 @@ export function ReviewPanel({ ai, review, error, running, finished, selected, si
           </div>
         </div>
       )}
-
-      {moves.length > 0 && (
-        <ol aria-label="Reviewed moves" className="grid max-h-56 grid-cols-2 gap-1 overflow-y-auto pr-1 text-sm">
-          {moves.map((move, index) => {
-            const label = ai.classification(move.classification)
-            return (
-              <li key={move.ply}>
-                <button
-                  type="button"
-                  onClick={() => onSelect(index)}
-                  aria-current={index === selected ? 'step' : undefined}
-                  aria-label={`${move.color === 'WHITE' ? 'White' : 'Black'} ${move.san}: ${label.label}`}
-                  className={cn('flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left', index === selected ? 'bg-(--accent) text-(--accent-ink)' : 'hover:bg-surface')}
-                >
-                  <span className="w-7 shrink-0 text-right text-xs font-bold opacity-70">
-                    {Math.ceil(move.ply / 2)}
-                    {move.color === 'WHITE' ? '.' : '…'}
-                  </span>
-                  <span className="font-mono font-semibold">{move.san}</span>
-                  <span className={cn('ml-auto rounded-full px-1.5 text-[0.65rem] font-bold', TONES[label.tone])}>{label.label}</span>
-                </button>
-              </li>
-            )
-          })}
-        </ol>
-      )}
       <p className="text-xs text-ink-soft">
-        Labels follow the winning chances a move gave away by Stockfish&apos;s evaluation ({review.engine}, {review.settings.movetimeMs} ms or depth {review.settings.depth} a
-        position). They are numbers, not explanations.
+        Labels follow the winning chances a move gave away by Stockfish&apos;s evaluation ({review.engine}, {review.settings.movetimeMs} ms or depth {review.settings.depth} a position). Accuracy averages
+        each judged move&apos;s score from those losses (a published curve, not Chess.com&apos;s formula); forced and unrated moves are left out.
       </p>
     </section>
   )

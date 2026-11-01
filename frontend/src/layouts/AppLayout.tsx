@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet, ScrollRestoration, useLocation } from 'react-rou
 import { isAdmin, useSession } from '@/api/auth'
 import { useCoins } from '@/api/economy'
 import { ApiStatus } from '@/components/ApiStatus'
+import { ThemeToggle } from '@/components/ThemeToggle'
 import { Logo } from '@/components/brand/Logo'
 import { Avatar } from '@/components/ui/Avatar'
 import { CoinAmount } from '@/components/ui/CoinAmount'
@@ -70,6 +71,8 @@ function AccountLink() {
 
 export function AppLayout() {
   const { pathname } = useLocation()
+  // A signed-in player's coins and account (and an admin's badge) leave no room for the name on phones.
+  const { user } = useSession()
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -82,7 +85,7 @@ export function AppLayout() {
 
       <header className="sticky top-0 z-40 border-b border-line bg-canvas/85 backdrop-blur-sm">
         <div className="mx-auto flex h-16 max-w-page items-center justify-between gap-4 px-gutter">
-          <Logo compactOnTablet />
+          <Logo compactOnTablet compactOnPhone={Boolean(user)} />
 
           <nav aria-label="Primary" className="hidden lg:block">
             <ul className="flex items-center gap-0.5 xl:gap-1">
@@ -105,7 +108,10 @@ export function AppLayout() {
             </ul>
           </nav>
 
-          <AccountLink />
+          <div className="flex shrink-0 items-center gap-2">
+            <ThemeToggle />
+            <AccountLink />
+          </div>
         </div>
       </header>
 

@@ -68,7 +68,7 @@ class ChessAiController {
 	EvaluationResponse evaluate(@PathVariable UUID id, @Valid @RequestBody EvaluationRequest request,
 			@AuthenticationPrincipal AuthenticatedUser user) {
 		return this.ai.evaluate(ChessController.owner(user, null), id, request.revision(), request.depth(),
-				request.lines());
+				request.lines(), request.ply());
 	}
 
 	@PostMapping("/matches/{id}/review")
