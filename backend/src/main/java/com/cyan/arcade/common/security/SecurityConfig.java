@@ -7,6 +7,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.security.autoconfigure.actuate.web.servlet.EndpointRequest;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpHeaders;
@@ -129,8 +130,17 @@ class SecurityConfig {
 
 	/** The CSRF token lives in a cookie the app can read (it is not a secret from the page itself). */
 	@Bean
-	CsrfTokenRepository csrfTokenRepository() {
-		return CookieCsrfTokenRepository.withHttpOnlyFalse();
+	CsrfTokenRepository csrfTokenRepository(
+			@Value("${server.servlet.session.cookie.secure:false}") boolean secureCookies) {
+		CookieCsrfTokenRepository repository = CookieCsrfTokenRepository.withHttpOnlyFalse();
+		// Host-only and readable by the SPA, even when TLS terminates at an untrusted proxy.
+		repository.setCookieCustomizer((cookie) -> {
+			if (secureCookies) {
+				cookie.secure(true);
+			}
+			cookie.sameSite("Lax").path("/");
+		});
+		return repository;
 	}
 
 	/**

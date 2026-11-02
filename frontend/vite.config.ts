@@ -9,7 +9,18 @@ import { defineConfig } from 'vite'
 const apiTarget = process.env.API_PROXY_TARGET ?? 'http://localhost:8080'
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), {
+    name: 'protect-ai-chunks',
+    generateBundle(_options, bundle) {
+      for (const item of Object.values(bundle)) {
+        if (item.type === 'chunk' && Object.keys(item.modules).some((id) =>
+          /[\\/]games[\\/][^\\/]+[\\/]ai[\\/]/.test(id)) &&
+            !item.fileName.startsWith('assets/ai/')) {
+          this.error('AI code must stay inside the authenticated assets/ai boundary: ' + item.fileName)
+        }
+      }
+    },
+  }],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

@@ -2,3 +2,7 @@ target/
 .idea/
 .vscode/
 *.iml
+
+# Local credentials must not enter the Docker build context.
+.env
+.env.*

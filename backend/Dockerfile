@@ -29,12 +29,16 @@ RUN apk add --no-cache curl \
 # A glibc runtime: the official Linux build of Stockfish is linked against glibc, so not Alpine.
 FROM eclipse-temurin:21-jre-noble
 WORKDIR /app
-RUN groupadd --system arcade && useradd --system --gid arcade --no-create-home --shell /usr/sbin/nologin arcade
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system arcade && useradd --system --gid arcade --no-create-home --shell /usr/sbin/nologin arcade
 COPY --from=stockfish /opt/stockfish /opt/stockfish
 COPY --from=build /workspace/target/app.jar app.jar
 ENV STOCKFISH_PATH=/opt/stockfish/stockfish
+# Leave room for native JVM memory and a separate Stockfish process; validate RSS on Render.
+ENV JAVA_TOOL_OPTIONS="-Xms64m -Xmx160m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=32m -XX:MaxDirectMemorySize=16m -Xss512k -XX:+ExitOnOutOfMemoryError"
 USER arcade
 EXPOSE 8080
-HEALTHCHECK --interval=10s --timeout=3s --start-period=40s --retries=5 \
-    CMD wget -qO- http://localhost:8080/actuator/health/readiness | grep -q '"UP"' || exit 1
-ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75", "-jar", "app.jar"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=5 \
+    CMD curl -fsS --max-time 4 "http://127.0.0.1:${PORT:-${SERVER_PORT:-8080}}/actuator/health/readiness" > /dev/null || exit 1
+ENTRYPOINT ["java", "-jar", "app.jar"]

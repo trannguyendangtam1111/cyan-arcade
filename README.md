@@ -129,6 +129,8 @@ The full design, including **how to add a new game**, is in [ARCHITECTURE.md](AR
 
 ## Getting started
 
+For Neon, Render and Vercel setup, see the [production deployment guide](docs/deployment.md).
+
 ### Prerequisites
 
 - **Docker** (Docker Desktop on Windows and macOS). Needed for the stack and for the backend's integration tests.
