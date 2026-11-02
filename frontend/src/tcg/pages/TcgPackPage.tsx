@@ -48,7 +48,15 @@ export function TcgPackPage() {
       </header>
 
       {sessionPending && <LoadingState className="min-h-40" />}
-      {user && <PackOpening pack={pack} allowance={allowance} cardBackUrl={game?.cardBackUrl} />}
+      {user && (
+        <PackOpening
+          key={`${user.id}:${pack.id}`}
+          userId={user.id}
+          pack={pack}
+          allowance={allowance}
+          cardBackUrl={game?.cardBackUrl}
+        />
+      )}
       {user === null && (
         <div className="flex flex-col items-center gap-6">
           <PackArt pack={pack} label={pack.name} className="w-44" />

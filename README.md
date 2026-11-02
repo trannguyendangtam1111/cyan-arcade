@@ -1,15 +1,32 @@
 # Cyan Arcade
 
-**Cyan Arcade is a modular full-stack game platform built with React and Spring Boot.** It is a cute, colorful browser arcade: Snake, 2048, Tetris, Minesweeper, Flappy Bird, Brick Breaker, Word Guess, Sudoku, Dino Run and Chess (two players on one device, or against the real **Stockfish** engine), with AI players for all but Minesweeper and shop skins for Flappy Bird, Brick Breaker, Word Guess, Sudoku, Dino Run and Chess, leaderboards, accounts with XP and achievements, daily challenges, and booster packs of real **Pokémon** and **One Piece** trading cards, opened on the server.
+[![Backend CI](https://github.com/trannguyendangtam1111/cyan-arcade/actions/workflows/backend-ci.yml/badge.svg?branch=main)](https://github.com/trannguyendangtam1111/cyan-arcade/actions/workflows/backend-ci.yml)
 
-It is a portfolio project. The goal is a polished, extensible platform where **adding a game means adding a module**: the platform is not rewritten and existing games are not touched.
+**Cyan Arcade is a full-stack browser arcade with player accounts, leaderboards, a coin economy, a shop, and server-side trading-card pack opening.** The backend uses Java 21, Spring Boot and PostgreSQL; the client uses React and TypeScript.
+
+This portfolio project focuses on backend problems shared by business applications: protecting account access, validating client input, maintaining balances and inventory under concurrency, and making retried operations safe. It is implemented as a modular monolith with shared platform services and separate game modules.
+
+[Run locally](#getting-started) · [Engineering challenges](#backend-engineering-challenges) · [Architecture](ARCHITECTURE.md#backend) · [API reference](API.md) · [Tests and CI](#testing)
+
+## Backend Engineering Highlights
+
+- **Java 21 and Spring Boot 4:** REST controllers, Bean Validation, service-layer transactions, Spring Data JPA and `JdbcClient`, with consistent RFC 9457 Problem Details responses.
+- **Modular architecture:** packages organized by feature, service/DTO boundaries, package-private persistence classes, and ArchUnit rules against dependency cycles and controller access to persistence.
+- **Authentication and authorization:** Spring Security sessions, bcrypt password hashing, `HttpOnly` cookies, CSRF protection, and USER/ADMIN authorization at the HTTP and method levels.
+- **PostgreSQL and Flyway:** versioned migrations, foreign keys, unique/check constraints and leaderboard indexes. Hibernate validates the schema; Open Session in View is disabled.
+- **Transactional integrity:** wallet row locks, pessimistic game-session locks and pack-opening advisory locks coordinate concurrent requests. Coin changes are recorded in an auditable ledger alongside balance updates.
+- **Idempotency:** client request IDs prevent repeated shop purchases. Pack opening stores a response snapshot with a unique user/request key, replays successful retries, and rejects reuse for a different pack.
+- **Secure configuration and abuse protection:** admin seeding requires explicit opt-in and credentials; bounded request limits protect registration, login and game-session creation. Forwarded headers require an explicitly trusted proxy deployment.
+- **Automated verification:** JUnit, MockMvc, PostgreSQL Testcontainers and ArchUnit. The [GitHub Actions workflow](.github/workflows/backend-ci.yml) runs Maven `verify` on Java 21 and uploads available test and JaCoCo reports, including after test failure.
+
+## Screenshots
 
 ![The hub: daily challenges, featured games, top scores](docs/screenshots/home.png)
 
 | | |
 | --- | --- |
 | ![Tetris played by its AI](docs/screenshots/tetris-ai.png) | ![Opening a Pokémon booster pack](docs/screenshots/pack-opening.png) |
-| Every game has an AI mode that plays by itself (for admins) | Packs of real cards, opened on the server and revealed one card at a time |
+| Tetris AI mode, available to admins | Packs of real cards, opened on the server and revealed one card at a time |
 | ![Choose your TCG](docs/screenshots/tcg.png) | ![One Piece sets](docs/screenshots/tcg-one-piece.png) |
 | Pokémon and One Piece, each in its own color | Real sets, shown by their logo or one of their rarest cards |
 | ![A sealed pack](docs/screenshots/pack.png) | ![A card collection](docs/screenshots/collection.png) |
@@ -26,52 +43,43 @@ It is a portfolio project. The goal is a polished, extensible platform where **a
 
 ## Status
 
-Everything listed below works end to end, in Docker, with 431 backend and 594 frontend tests passing. Nothing is a mock-up. See the [roadmap](#roadmap) for what is next and what is deliberately left out.
+The implemented platform includes accounts and roles, scored game sessions, progression, daily challenges, purchases, card collections and opening history. Docker configuration and backend CI are included. Hosted HTTPS deployment, persistent login sessions, password reset and online Chess remain [planned work](#roadmap).
+
+For verification results, inspect the [CI runs and report artifacts](https://github.com/trannguyendangtam1111/cyan-arcade/actions/workflows/backend-ci.yml). No fixed test count or coverage percentage is claimed here; results depend on the revision and checks actually run.
 
 ## Features
 
-**Games**
-- **Snake, 2048, Tetris and Minesweeper**, playable with keyboard and touch. Minesweeper (9 × 9, 10 mines, a safe first click, a Reveal/Flag switch for phones) is the reference for [adding a game](ARCHITECTURE.md#how-to-add-a-new-game): a module of its own and one rules class on the server, and the leaderboards, rewards, achievements, challenges and statistics work for it unchanged.
-- **Flappy Bird**, an original take with a seeded course that speeds up and narrows over seven levels, frame-rate-independent physics, a canvas renderer, an admin-only look-ahead AI, and 16 birds, 11 obstacle themes and 5 skies sold in the shop. Skins are visual only: every bird flies with the same physics.
-- **Brick Breaker**, built for game feel: a cute pixel-art anime arcade of eight handcrafted levels, each in its own world (Cute Sakura, Kawaii Candy, Anime Café, Magical Galaxy, Kitsune Shrine, Cyber Anime, Fantasy Dragon, Dark Moon), then a seeded Endless mode in a retro arcade with hard caps, combos up to ×2.5, nine power-ups (extra balls, Multi-Ball, x2 Score, Wide, Fireball, Laser, Magnet, Extra Life) dropping from about a fifth of the bricks, level-clear bonuses and Perfect Clears, particles, score pop-ups and screen shake, an admin-only AI that predicts bounces and aims at bricks, and paddles, balls and brick themes in the shop (admins may wear every Brick Breaker skin without buying it).
-- **Word Guess**, an original five-letter word game in a cute minimal style (rounded tiles that turn over, a shake for an unknown word, confetti for a solve; all CSS, no image assets). One **Daily Word** per UTC day, the same for everyone and fixed by the date alone, plus unlimited practice words. It is played on the server, which keeps the word and judges every guess (letters are counted, so duplicates are marked right), so the word never reaches the browser early and every score is checked against the run the server recorded. Fewer guesses score more, solving days in a row adds a streak bonus, and three hints (reveal a letter, check a letter, remove letters) cost part of the score. Daily statistics and streaks, six achievements, five daily challenges, tile sets and keyboards in the shop, and an admin-only AI that solves on the server by candidate elimination with four strategies (Balanced, Information Hunter, Conservative, Speed Solver), played back at 0.25x to 8x.
-- **Sudoku**, in a cute minimal style (the grid is the centrepiece; colours and CSS only). Puzzles are generated from a seed with exactly one solution (proved by search) and graded by the techniques logic needs, not by clue count: Easy (full houses, hidden singles), Medium (naked singles), Hard (locked candidates, pairs, triples), Expert (X-Wing, Y-Wing, Swordfish, hidden triples). One **Daily Sudoku** per UTC day for everyone (difficulty by weekday, stored once made), and practice games of every difficulty, ranked or relaxed. It is played on the server like Word Guess: the solution stays there, every digit is judged (a wrong one is a mistake, three end a ranked game), the clock is the server's (pauses left out), and the score is checked against the recorded run. Selection with row, column, box and same-digit highlighting, conflict marking, notes with auto-removal, undo and redo, an eraser, a fill mode, three hints (reveal a cell, find a solvable cell, explain the next step) that cost score, statistics and streaks, settings, full keyboard control and a touch number pad. Eight achievements, five daily challenges, board and number-pad skins, and an admin-only server-side AI with three genuinely different strategies (step by step, a fast propagation-and-search solver, teaching), played back at 0.25x to 8x or one move at a time.
-- **Dino Run**, an original endless runner: Pip, a chubby pixel dino, runs through the eight pixel worlds Brick Breaker's levels are drawn in (shared art, scrolled as a mirrored landscape), jumping mounds and pillars and ducking under bats while the world speeds up. A deterministic fixed-step engine (120 steps a second, seeded obstacles) whose collision follows the drawn pixels row by row, a generator that never leaves a gap shorter than a full jump plus reaction time, a documented speed curve the server replays to check every score against the run's time, five achievements, four daily challenges, runner and obstacle skins (the world is not a skin: every run, the AI's too, goes through the worlds in turn, a new one every 500 points), and an admin-only AI (a predictive runner that plays candidate moves forward through the engine) with three strategies: Safe Runner, Balanced Runner and Fast Reaction.
-- **Chess** for two players on one device, with the complete rules enforced on the server: every legal move (pins, checks, castling with all its conditions, en passant, promotion to any piece), checkmate, stalemate, insufficient material, threefold repetition and the fifty-move rule (claimed by the side to move; fivefold repetition and the 75-move rule end the game by themselves), resignation and draw offers. The server keeps each match as its moves and rebuilds the position on every request, so the browser only shows what it is told: legal squares as dots and capture rings, the last move, check, the moves in standard algebraic notation, captured pieces and material, a promotion picker, board flipping, takebacks (local games only) and keyboard control. Original cartoon pieces, and board and piece skins in the shop. Local games are not scored: one person can play both sides, so they have no leaderboard and earn nothing. The rules engine is checked with the standard perft positions. There is no online play; see [Chess](ARCHITECTURE.md#chess).
-- **Stockfish in Chess**, the official open-source engine (version 19, pinned and checksum-verified, run on the server over UCI; no paid service, no language model): signed-in players get **three move hints a game**, counted on the server so neither a reload nor a crafted request gives them back, shown as highlighted squares and SAN and never played for them. Takebacks against Stockfish return to the player's previous turn (their move and the engine's reply), and **Continue from here** turns any earlier position into a separate variation to play on from, leaving the game and its result untouched. Admins also get **games against Stockfish** at five difficulties built on the engine's own `Skill Level` and `UCI_Elo` settings, **position evaluation** (an evaluation bar, always from White's side and never inverted by flipping the board, mate scores kept apart from centipawns, evaluated automatically for every position shown while the bar is on, the last value kept (marked as updating) while the next position is evaluated rather than reset to an equal 50/50, up to three principal variations as rows of clickable moves, the depth reached, provisional results marked), and **game review**: every position of a finished game analysed in the background, every move labelled Best, Excellent, Good, Inaccuracy, Mistake, Blunder or Forced by a published rule on lost winning chances (or left unrated when the analysis is too shallow), with the engine's preferred move and navigation through the game. A bounded pool of engine processes, time limits, cancellation, a per-account rate limit and an analysis cache keep it to a small server. See [Chess engine](#chess-engine-stockfish).
-- **An AI mode for each, for admins**, written as classic algorithms that run in the browser (no AI service): a Hamiltonian-cycle Snake that fills the board, an expectimax 2048 player, and a Tetris player that searches every placement with one piece of lookahead. Word Guess's and Sudoku's solvers are the exceptions: they run on the server, because only the server may know the word or the solution. Speed control (0.25x to 8x), pause and restart.
-- Pure, deterministic game engines shared by the human player, the AI and the tests.
+### Games
 
-**Platform**
-- **Server-validated scores**: every human run is a server-side game session, and its score is checked and stored in PostgreSQL.
-- **Leaderboards** per game for **today, this week and all time** (UTC; weeks from Monday): each player once with their best score, a podium for the top three, your own rank and best score even off the page, deterministic ranks without ties, and your ranks in every game on your profile.
-- **Accounts**: register, log in, log out. Passwords are stored only as bcrypt hashes; the session lives in an `HttpOnly` cookie with CSRF protection; repeated failed logins are throttled.
-- **Progression**: XP for every finished game, levels, and ten achievements, each worth XP and coins.
-- **Coins**: a platform-wide currency earned by playing, beating your best, achievements, daily challenges and the daily login reward, and spent in the shop. Every change is a row in an auditable ledger; the server decides every amount. See [Economy](#economy-coins-rewards-and-the-shop).
-- **Daily login reward**: once a day (UTC), more for every day in a row, a free card pack on day 7.
-- **Daily challenges**: a new challenge per game every day, plus one for card packs ("open 3 packs"), created by a scheduled job and worth XP and coins.
-- **Shop**: extra card packs, badges, titles, profile frames and game skins for coins, by category; some unlock at higher levels. Every item shows whether it is locked, too dear, owned or equipped; the shop explains the day's free packs and the bought ones. Badges, titles and frames are equipped from the shop and shown on the public profile; a coin history explains every reward.
-- **Player identity**: a stable username (the account) and a display name, bio and avatar the player edits; a **public profile** for every player (`/players/{username}`) with their worn title and badge, statistics, ranks and achievements, linked from the leaderboards.
-- **Profile**: level and XP progress, coins, statistics across the platform (games, play time, cards, packs, coins earned) and per game, game history, coin history, achievements, the badge and title you wear, and an avatar.
-- **Game hub**: the home page puts your coins, level and daily reward first, then today's challenges, recently played games, featured games, card packs, the top scores of each game, your latest achievements and categories.
-- **Admin dashboard**: users, active users, games, packs, cards and coins in circulation (all time and today), and audited coin grants.
-- **Two roles**: every account is a **USER** (a player) or an **ADMIN**. Admins also get AI mode and card packs without a daily allowance. The server enforces both; see [Roles](#roles-players-and-admins).
-- Guests can play every game; an account is only needed to earn things. A game can be marked **unscored** in the catalog (Chess): it is played like any other but opens no score session, so it has no leaderboard, rewards or daily challenge.
+- **Arcade games:** Snake, 2048, Tetris, Minesweeper, Flappy Bird, Brick Breaker and Dino Run, with keyboard/touch controls and game-specific score checks. Selected games include admin-only algorithmic AI modes.
+- **Word Guess:** daily and practice puzzles; the backend keeps the answer and judges guesses, hints and scoring.
+- **Sudoku:** daily and practice puzzles with unique solutions, difficulty grading, server-validated moves and server-timed ranked runs.
+- **Chess:** server-enforced rules for local two-player games, plus Stockfish hints and Coach Mode for signed-in players; engine games, analysis and reviews for admins. Chess is unscored and has no online multiplayer yet.
+- **Shared client features:** responsive layouts, light/dark themes, game skins and accessible keyboard controls. Game design and extension details are in [ARCHITECTURE.md](ARCHITECTURE.md#how-to-add-a-new-game).
 
-**Card packs (TCG)**
-- **Real card data**: the **Pokémon TCG** (26 sets, 4,779 cards, from TCGdex, the 30th Celebration included) and the **One Piece Card Game** (20 sets, 3,023 cards with alternate arts, from OPTCG API), with their real names, numbers, rarities and card images.
-- A trading-card module of its own, built to carry **any number of card games**, each with its own rarities, sets and pack layouts. Nothing in the tables is specific to one game.
-- An **import job** that reads each game's source once and stores it in PostgreSQL. It is repeatable and idempotent; the arcade never calls a source while players browse or open packs.
-- **Packs are opened on the server**: it draws each card from the pack's pool by the pack's published odds, records the opening and adds the cards to the collection in one transaction. The client only says which pack. Odds are labelled as **simulator probabilities**, since neither publisher gives official pull rates.
-- A pack-opening experience: the pack tears open, cards are dealt face down and flipped one by one, rarer cards glow and burst, then a summary of new cards and duplicates. Each game has its own accent color; the arcade stays cyan.
-- **Collection** by game and set, with completion, and an **opening history**. A daily pack allowance for players (10 by default), plus any extra packs bought in the shop; none for admins.
+### Platform
 
-**Engineering**
-- A modular monolith whose boundaries are enforced by tests (ArchUnit in the backend, source-level rules in the frontend).
-- One error format for the whole API (RFC 9457 problem details), including 401/403 from the security layer.
-- Accessible, responsive UI: phones, tablets and desktop; keyboard support; reduced-motion support; text colors checked against WCAG AA.
-- **Light and dark themes** for the whole platform, switched from the header: the first visit follows the system, a choice is kept in the browser across pages and reloads, and the page never flashes in the other theme. Game boards, skins and card art keep their own colours in both. See [Design system](ARCHITECTURE.md#design-system).
-- Docker Compose stack with nginx serving the app with security headers and proxying the API.
+- Accounts with USER/ADMIN roles, editable identities, public profiles and an admin dashboard.
+- Daily, weekly and all-time leaderboards with deterministic ranking and each player's best score.
+- XP, levels, achievements, daily challenges and a daily login reward, using the server's UTC date.
+- A coin economy with transaction history; a shop for extra packs, badges, titles, profile frames and game skins; inventory and equipment rules enforced on the backend.
+- Guest play, with an account required to earn rewards, buy items and collect cards.
+
+### Trading-card packs
+
+- Pokémon and One Piece catalogs imported into PostgreSQL; browsing and opening packs do not call the external data APIs. Card images are loaded from their source hosts.
+- Server-side card selection using published simulator probabilities, followed by an atomic update to opening history, collections and allowance/bonus-pack consumption.
+- Request-ID-based replay for pack-opening retries, with no new card draw or allowance consumption. See the [API contract](API.md#opening-packs).
+- Collections grouped by game and set, duplicate counts, opening history, and a configurable daily allowance with extra packs available in the shop.
+
+## Backend Engineering Challenges
+
+| Challenge | Implemented solution | Code / design |
+| --- | --- | --- |
+| Concurrent purchases must not overspend a wallet | Lock the wallet row before checking ownership and balance; write the purchase, debit and inventory change in one transaction. A database check rejects negative balances, and a unique reward reference prevents duplicate credits. | [CoinStore](backend/src/main/java/com/cyan/arcade/economy/CoinStore.java), [ShopService](backend/src/main/java/com/cyan/arcade/shop/ShopService.java) |
+| A response can be lost after an opening commits | Persist a complete response snapshot under a unique `(user_id, request_id)` key. Serialize openings per player with a PostgreSQL transaction advisory lock. Retries replay the original result; using that key for another pack returns `409`. Purchases use their own request-ID deduplication. | [PackOpeningService](backend/src/main/java/com/cyan/arcade/tcg/opening/PackOpeningService.java), [migration](backend/src/main/resources/db/migration/V27__idempotent_pack_opening.sql) |
+| Simultaneous score submissions must not award rewards twice | Lock the game session, verify ownership/state and validate its result; persist the score and progression changes in one transaction. A unique score/session constraint backs up the service checks. | [GameSessionService](backend/src/main/java/com/cyan/arcade/score/GameSessionService.java), [score schema](backend/src/main/resources/db/migration/V4__create_game_sessions_and_scores.sql) |
+| New games must fit shared platform rules | Keep game-specific rules behind a common contract, expose services and DTOs across features, and enforce module boundaries and acyclic dependencies with ArchUnit. | [Backend architecture](ARCHITECTURE.md#backend), [ArchitectureTests](backend/src/test/java/com/cyan/arcade/ArchitectureTests.java) |
 
 ## Architecture
 
@@ -103,7 +111,7 @@ flowchart LR
 ```
 
 - **Frontend**: a React SPA. Each game is a module behind one small interface (`GameModule`), with its rules in a pure engine that knows nothing of React. The card game is a separate module mounted under `/tcg` and loaded on demand.
-- **Backend**: one deployable Spring Boot application, packaged by feature. Features talk to each other through services and DTOs, never through each other's entities, and the card game module is invisible to the rest of the platform.
+- **Backend**: one Spring Boot application, packaged by feature. Features talk to each other through services and DTOs, never through each other's entities, and the card game module is invisible to the rest of the platform.
 - **Card data**: imported from external sources into PostgreSQL by a job you run (see [Card games](#card-games)); pack opening, browsing and collections only ever read the database. Card images are loaded by the browser straight from the sources' image hosts.
 - **Data**: PostgreSQL, with the schema owned by Flyway migrations and Hibernate set to `validate`.
 
@@ -116,7 +124,7 @@ The full design, including **how to add a new game**, is in [ARCHITECTURE.md](AR
 | Frontend | React 19, TypeScript, Vite, React Router, TanStack Query, Tailwind CSS 4, Lucide icons |
 | Backend  | Java 21, Spring Boot 4 (Web MVC, Security, Data JPA, Validation, Actuator), Hibernate, Flyway |
 | Database | PostgreSQL 18 |
-| Testing  | Vitest + Testing Library, JUnit 5, MockMvc, Testcontainers, ArchUnit; coverage with V8 and JaCoCo |
+| Testing  | Vitest + Testing Library, JUnit, MockMvc, Testcontainers, ArchUnit; coverage with V8 and JaCoCo |
 | Tooling  | Docker Compose, nginx, Maven Wrapper, oxlint |
 
 ## Getting started
@@ -132,7 +140,7 @@ The full design, including **how to add a new game**, is in [ARCHITECTURE.md](AR
 docker compose up --build
 ```
 
-Open http://localhost:3000. The first start creates the database, runs the migrations and creates today's daily challenges. The card games are imported once, by a separate run that downloads them and exits (about a minute):
+Open http://localhost:3000. The first start creates the database, runs the migrations and creates today's daily challenges. The card games are imported once, by a separate run that downloads them and exits (run on demand):
 
 ```bash
 docker compose run --rm backend --spring.profiles.active=import-tcg
@@ -154,21 +162,39 @@ A fresh database has the games (and, once imported, the card games) but no playe
 node tools/demo/seed-demo-data.mjs
 ```
 
-It plays through the public API: five demo players, games on every leaderboard, and some opened Pokémon and One Piece packs (import the card games first). It takes about two minutes, because the server measures how long each game lasted; `--packs-only` just opens packs for players who exist already. The demo accounts' password is in the script; it is for local demos only. `node tools/demo/capture-screenshots.mjs` then retakes the screenshots with a headless Chrome.
+It plays through the public API: five demo players, games on every leaderboard, and some opened Pokémon and One Piece packs (import the card games first). The server measures game durations; `--packs-only` just opens packs for players who exist already. The demo accounts' password is in the script; it is for local demos only. `node tools/demo/capture-screenshots.mjs` then retakes the screenshots with a headless Chrome.
 
 ### Native development (hot reload)
 
+From the repository root, start PostgreSQL. Stockfish installation is optional for the rest of the platform:
+
 ```bash
 docker compose up -d postgres                  # PostgreSQL on localhost:5433
-sh tools/stockfish/install.sh                  # Stockfish 19 for chess hints and analysis (once; Windows: toolsstockfishinstall.ps1)
-cd backend && ./mvnw spring-boot:run           # API on http://localhost:8080 (Windows: mvnw.cmd)
-cd frontend && npm install && npm run dev      # app on http://localhost:5173
+sh tools/stockfish/install.sh                  # optional, once; Windows: tools/stockfish/install.ps1
 ```
 
-Import or update the card games against the same database (once, and again whenever you want newer data):
+In a backend terminal, explicitly point the application at the Compose database:
 
 ```bash
-cd backend && ./mvnw spring-boot:run -Dspring-boot.run.profiles=import-tcg
+cd backend
+export DB_URL=jdbc:postgresql://localhost:5433/cyan_arcade
+./mvnw spring-boot:run                         # API on http://localhost:8080
+```
+
+On Windows PowerShell, use `$env:DB_URL = 'jdbc:postgresql://localhost:5433/cyan_arcade'` and `./mvnw.cmd spring-boot:run` instead. Native startup does not load Compose's `.env`; export `DB_USERNAME` and `DB_PASSWORD` too if you changed their defaults. The application's fallback database URL uses port **5435**, so the explicit override above is required for Compose's default port **5433**.
+
+In a separate frontend terminal, from the repository root:
+
+```bash
+cd frontend
+npm ci
+npm run dev                                   # app on http://localhost:5173
+```
+
+Import or update the card games against the same database from the backend terminal (with `DB_URL` still set):
+
+```bash
+./mvnw spring-boot:run -Dspring-boot.run.profiles=import-tcg
 ```
 
 Vite proxies `/api` and `/actuator` to the backend, so the browser talks to one origin, as it does through nginx in Docker.
@@ -177,11 +203,11 @@ Vite proxies `/api` and `/actuator` to the backend, so the browser talks to one 
 
 ### Database
 
-- The schema is created and upgraded by **Flyway** when the backend starts (`backend/src/main/resources/db/migration`, `V1` to `V25`). There is no manual step.
-- The **admin account** is created at the first start (see [Roles](#roles-players-and-admins)).
+- The schema is created and upgraded by **Flyway** when the backend starts (`backend/src/main/resources/db/migration`). There is no manual step.
+- An **admin account** is created only when explicitly enabled with credentials (see [Roles](#roles-players-and-admins)).
 - The game catalog comes from migrations; the card catalog comes from the card game import (see [Card games](#card-games)).
 - To start over with an empty database: `docker compose down -v`, then `docker compose up -d`.
-- Login sessions are kept in the backend's memory, so restarting the backend signs everyone out. Everything else is in PostgreSQL.
+- Login sessions are kept in the backend's memory, so restarting the backend signs everyone out. Accounts, scores, balances, inventory and opening history are persisted in PostgreSQL.
 
 ### Configuration
 
@@ -195,8 +221,12 @@ Compose reads these from a `.env` file next to `docker-compose.yml`; [.env.examp
 | `FRONTEND_PORT` | `3000` | Host port of the app |
 | `SESSION_COOKIE_SECURE` | `false` | Set to `true` wherever the site is served over HTTPS |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | Origins allowed to call the API directly from a browser, comma-separated |
+| `REGISTRATION_MAX_REQUESTS`, `REGISTRATION_REQUEST_WINDOW` | `5`, `1h` | Registration attempts per client IP |
+| `LOGIN_MAX_REQUESTS`, `LOGIN_REQUEST_WINDOW` | `30`, `1m` | All login attempts per client IP, in addition to failed-login throttling |
+| `GAME_SESSION_MAX_REQUESTS`, `GAME_SESSION_REQUEST_WINDOW` | `60`, `1m` | Game-session starts per client IP |
 | `TCG_DAILY_PACK_LIMIT` | `10` | Card packs a player may open per day (UTC); `0` means no limit. Admins have none |
-| `ADMIN_USERNAME`, `ADMIN_PASSWORD` | `admin`, `11112002` | The admin account created at first start. **Development defaults: change them** for anything reachable by others |
+| `ADMIN_SEED_ENABLED` | `false` | Explicitly opt in to creating an admin at startup; requires both credentials |
+| `ADMIN_USERNAME`, `ADMIN_PASSWORD` | unset | Both required when admin seeding is enabled; no default credentials |
 | `STOCKFISH_POOL_SIZE`, `STOCKFISH_THREADS`, `STOCKFISH_HASH_MB` | `2`, `1`, `32` | Stockfish processes at most, and search threads and hash memory (MB) each. See [Chess engine](#chess-engine-stockfish) |
 | `CHESS_HINTS_PER_GAME` | `3` | Move hints a player gets per chess game (admins: no limit; guests: none) |
 | `CHESS_ENGINE_REQUESTS_PER_MINUTE` | `30` | Engine requests (hints, engine moves, evaluations, reviews) one account may make per minute |
@@ -205,12 +235,11 @@ The backend reads further settings from environment variables when run natively 
 
 | Variable | Default | Meaning |
 | -------- | ------- | ------- |
-| `DB_URL` | `jdbc:postgresql://localhost:5433/cyan_arcade` | JDBC URL of the database |
+| `DB_URL` | `jdbc:postgresql://localhost:5435/cyan_arcade` | Native fallback; override to port `5433` for Compose PostgreSQL |
 | `SERVER_PORT` | `8080` | Port the API listens on |
 | `LOGIN_MAX_FAILURES`, `LOGIN_FAILURE_WINDOW` | `5`, `5m` | Failed logins allowed per username and address, and how long they are remembered |
 | `GAME_SESSIONS_ABANDONED_AFTER` | `24h` | How long a started game may stay unfinished before the hourly cleanup removes it |
 | `SCHEDULING_ENABLED` | `true` | Switches every scheduled job on or off |
-| `ADMIN_SEED_ENABLED` | `true` | Creates the admin account at startup when it does not exist |
 | `DAILY_CHALLENGES_GENERATION_ENABLED` | `true` | Creates each day's challenges at startup and at midnight UTC |
 | `REWARDS_GAME_COMPLETED_COINS`, `REWARDS_PERSONAL_BEST_COINS` | `5`, `15` | Coins for finishing a game, and extra for beating your own best |
 | `REWARDS_GAMES_PER_DAY` | `40` | How many games a day (UTC) pay the coins for finishing; later ones still earn XP and best-score coins |
@@ -222,6 +251,28 @@ The backend reads further settings from environment variables when run natively 
 | `TCG_POKEMON_URL`, `TCG_POKEMON_CONFIG` | TCGdex's GraphQL API, `classpath:tcg/sources/pokemon.json` | Where Pokémon data comes from, and which sets and pack layouts to use |
 | `TCG_ONE_PIECE_URL`, `TCG_ONE_PIECE_CONFIG` | `https://optcgapi.com/api`, `classpath:tcg/sources/one-piece.json` | The same for One Piece |
 
+**Request limits and reverse proxies.** The three POST limits above use separate, atomic fixed
+windows starting at the first request. They return `429` problem details with code
+`RATE_LIMIT_EXCEEDED` and a `Retry-After` header. Only CSRF-verified requests are counted;
+logout, session restoration (`GET /api/auth/session`) and finishing a game remain available.
+Counters are in memory, reset on restart, and track at most 10,000 route/IP pairs. When full,
+new pairs are refused until capacity expires. Players sharing an IP share each route's budget.
+
+Client addresses come from the socket (`getRemoteAddr()`); arbitrary `Forwarded` or
+`X-Forwarded-For` headers are ignored by default. The supplied nginx overwrites `X-Forwarded-For`
+with its peer address, clears untrusted host/forwarding headers, and preserves the public Host port.
+Since Compose proxy IPs can change, **no proxy
+address is trusted automatically**. Behind nginx, users therefore share its apparent address
+until the deployment is explicitly configured:
+
+- Keep the backend private and identify the actual nginx peer IP(s) seen by the backend.
+- Set `SERVER_FORWARD_HEADERS_STRATEGY=native` and `TRUSTED_PROXY_REGEX` to a pattern matching
+  only those addresses. The default pattern `(?!)` trusts none, even with native handling enabled.
+  Both settings can be supplied through Compose's `.env`. Avoid broad private-network patterns
+  or `framework` forwarding, which bypasses peer validation.
+- If another load balancer/CDN precedes nginx, configure its trust boundary separately; do not
+  forward a client-provided chain or guess its trusted addresses. Recheck trust after network changes.
+
 Frontend build and dev settings:
 
 | Variable | Default | Used by |
@@ -231,7 +282,7 @@ Frontend build and dev settings:
 
 ## Roles: players and admins
 
-Every account has exactly one role. Signing up always makes a **USER**; the only **ADMIN** is the account the application creates for itself.
+Every account has exactly one role. Signing up always makes a **USER**; **ADMIN** accounts are created only through explicitly enabled seeding.
 
 | | USER (player) | ADMIN |
 | --- | --- | --- |
@@ -243,13 +294,15 @@ Every account has exactly one role. Signing up always makes a **USER**; the only
 | Chess against Stockfish, evaluations, game reviews | ❌ | ✅ |
 | Admin page (`/admin`) | ❌ | ✅ |
 
-**Development admin account**
+**Optional admin account**
 
-| Username | Password |
-| --- | --- |
-| `admin` | `11112002` |
-
-These are **demo and development credentials only**. Set `ADMIN_USERNAME` and `ADMIN_PASSWORD` (in `.env` for Docker, or as environment variables) before the arcade is reachable by anyone else, or set `ADMIN_SEED_ENABLED=false` and create no admin at all.
+Admin seeding is disabled by default. For local Docker development, copy `.env.example` to `.env`,
+set `ADMIN_SEED_ENABLED=true`, and fill in `ADMIN_USERNAME` and `ADMIN_PASSWORD` with your own
+credentials before starting the stack. The ignored `.env` file is read by Docker Compose; for native
+development, export those same three environment variables before starting the backend.
+There is no default username or password. Enabling seeding with either credential missing or blank
+fails startup without creating an account. After creation, set `ADMIN_SEED_ENABLED=false` and remove
+the seeding credentials from your environment; the account remains available.
 
 - **Seeding**: at startup, if no account has the admin username, one is created with the ADMIN role and the password hashed by the same bcrypt encoder as every other password. Otherwise nothing happens: restarting creates no duplicate, never resets the password, and never promotes a player who registered that name first (it logs a warning instead). The password is never logged. Changing `ADMIN_PASSWORD` later does not change an account that already exists.
 - **How it is enforced**: the role is stored with the account (`users.role`) and becomes the session's Spring Security authority, `ROLE_USER` or `ROLE_ADMIN`, when the player signs in. Admin-only endpoints (`/api/admin/**`, `/api/ai/**`) require `ROLE_ADMIN` in the security configuration and again with `@PreAuthorize("hasRole('ADMIN')")` on their controllers; a player gets `403`, a guest `401`. Nothing checks a username.
@@ -260,16 +313,13 @@ These are **demo and development credentials only**. Set `ADMIN_USERNAME` and `A
 
 ## Chess engine (Stockfish)
 
-Chess uses [Stockfish 19](https://stockfishchess.org/), the free and open-source engine (GPL-3.0), as its only source of moves and evaluations. It runs on the backend server as separate, unmodified processes, spoken to over UCI; there is no paid service, no API key and no language model, and the engine never explains moves in words: hints, evaluations and labels are numbers and moves.
+Chess integrates [Stockfish 19](https://stockfishchess.org/) over UCI as separate backend processes. A bounded process pool, request limits, timeouts and an analysis cache control engine use.
 
-- **Installation**: the Docker image downloads the pinned official release at build time and checks its SHA-256; for a natively run backend, `tools/stockfish/install.sh` (or `install.ps1`) does the same once. Nothing is downloaded at startup and no binary is committed. Version, checksums and troubleshooting: [tools/stockfish/README.md](tools/stockfish/README.md); licence and source availability: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-- **Without the engine** the arcade runs as usual; the backend logs a warning at startup and every engine request answers `503 ENGINE_UNAVAILABLE`. Moves are never invented in its place.
-- **Who gets what**: players get 3 hints per game (a new game brings new ones; refused requests and engine failures cost nothing) and **Coach Mode**, which rates each of their own moves as it is played (Best, Excellent, Good, Inaccuracy, Mistake, Blunder, Forced or Not rated) with the move Stockfish preferred; admins also get unlimited hints, games against Stockfish, analysis of any position of the game with up to three lines, and game reviews with each side's accuracy. Guests get neither hints nor the coach. The server decides from the session's role; hiding buttons is only a convenience.
-- **The page**: the board comes first, with each player's strip (captured pieces and material) and a strip under it to step through the game (first, previous, next, live; with a "Live" or "Reviewing move N" marker) and to draw or flip. Beside it on a desktop (under it on a phone): Hint, New game, Undo, Redo, Offer draw, Resign, the tool buttons (Coach, and for admins Analysis, Review and vs Stockfish; Skin, Help, Display) and the move list. Panels open only when asked; Help explains every control and key.
-- **Playing**: drag a piece (mouse or finger) or tap it and then a marked square. Only the side to move moves: a press on the other side's pieces says so. Against Stockfish, a move can be **premoved** while it thinks (violet and dashed): it is played when the player's turn comes if it is still legal (the promotion piece is asked for, never guessed) and dropped with a note if not; Cancel or Esc clears it. Right-click and drag draws an arrow, a right click highlights a square (Shift: green, Alt/Ctrl: blue); on touch screens use **Draw**; Esc or Clear removes them.
-- **Looking back is not taking back**: the arrows under the board, the move list and ← → (with the board or the move list focused; ↑/Home the start, ↓/End the live game) only show earlier positions, while the game goes on (a move Stockfish makes meanwhile is announced, and the view stays). The board takes moves only in the live game. **Undo** and **Redo** really take a move back and replay it on the server, in two-player games only; against Stockfish there are no takebacks. The Display panel turns the evaluation bar, the analysis panel, move-quality labels, the move list and drawings on and off, kept in this browser, without touching the game.
-- **Move labels and accuracy**: a move is labelled by how much of the mover's winning chances it gave away by Stockfish's analysis (Excellent up to 2 points, Good 5, Inaccuracy 10, Mistake 20, Blunder beyond; configurable under `app.chess.classification`); evaluations are always from White's side, mates shown as `#3`/`#-2`, never as pawns. Accuracy is the average of `103.1668 × e^(−0.04354 × loss) − 3.1669` over a side's judged moves (the curve Lichess publishes; not Chess.com's formula). Symbols: ★ Best, `!` Excellent, ✓ Good, `?!` Inaccuracy, `?` Mistake, `??` Blunder, □ Forced, and none for Not rated; a label from Coach Mode's quick analysis is drawn dashed until the game review replaces it. There is no Book, Brilliant (`!!`) or Great label: no opening book is installed, and a lost-chances threshold cannot tell a brilliant move from a lucky one. These are the arcade's own labels and limits, not a copy of any other site's. See ARCHITECTURE.md, Chess.
-- **Resource limits** (all configurable, see `application.yml`, `app.chess.*`): 2 engine processes of 1 thread and 32 MB hash each; at most 4 requests waiting for an engine, each for 3 s; hints 600 ms, evaluations up to depth 22 and 3 s, review positions 250 ms each, Coach Mode 400 ms or depth 14 per position (two positions a move, one usually cached); one review running at a time with 4 waiting; 30 engine requests per account per minute, and apart from those 40 coach judgements per account per minute (cached ones free) with one at a time; an analysis cache of 5,000 results for 6 hours, keyed by the engine's version, its settings and the position. To give it more room, raise `STOCKFISH_POOL_SIZE` (processes) before `STOCKFISH_THREADS` (threads each), and keep pool size × threads within the server's cores.
+- **Installation:** Docker downloads a pinned release and verifies its SHA-256 during the image build. Native development uses the [install scripts and instructions](tools/stockfish/README.md). The engine is GPL-3.0; see [third-party notices](THIRD_PARTY_NOTICES.md) for licence and source availability.
+- **Access:** signed-in players get move hints and Coach Mode; admins also get engine games, position analysis and finished-game reviews. Authorization is enforced by the backend.
+- **Availability:** the rest of the platform runs without the binary; engine requests return `503 ENGINE_UNAVAILABLE` when it is absent. Real-engine tests are conditional on its installation; scripted tests cover the protocol separately.
+
+See the [Chess architecture](ARCHITECTURE.md#chess) for rules, ownership, revisions, engine lifecycle and analysis details.
 
 ## Economy: coins, rewards and the shop
 
@@ -284,7 +334,7 @@ Coins are the platform's currency. Players earn them by playing and spend them i
 | Daily login reward | 50, 60, 70, 80, 100, 125, 200 (+ a free pack) | day |
 | An admin's grant | 1 to 100,000, with a reason | request |
 
-- **The server decides every amount.** No request ever says how many coins to add; the client says what happened (a game finished, today's reward claimed, this item bought) and the server applies its own rules.
+- **The server decides every amount.** Player requests do not choose reward amounts; the client says what happened (a game finished, today's reward claimed, this item bought) and the server applies its own rules.
 - **A ledger, not just a number.** Every change is a row in `coin_transactions` (amount, balance after, type, what it refers to, description, and for grants the admin who made them). The balance in `user_wallets` is kept next to it for quick reads and is always the sum of the ledger.
 - **Nothing is paid twice.** Each reward refers to what it rewards (the game session, the achievement, the challenge, the day), and a unique index allows one transaction per player, type and reference: a repeated or replayed request finds the first and pays nothing.
 - **Nothing goes below zero.** Every change locks the player's wallet row first, so changes to one balance happen one at a time; spending more than the balance fails and changes nothing, and the database refuses a negative balance anyway.
@@ -297,7 +347,7 @@ Coins are the platform's currency. Players earn them by playing and spend them i
 
 ## Card games
 
-The arcade carries two real trading card games. Their data is **imported** into PostgreSQL from public sources; at runtime the arcade only reads its own database.
+The arcade carries two real trading card games. Their data is **imported** into PostgreSQL from public sources; browsing and pack opening use the local catalog, while external data APIs are used only by imports.
 
 ```text
 External source ──(import job, on demand)──▶ PostgreSQL ──▶ Cyan Arcade (browsing, packs, collections)
@@ -305,10 +355,10 @@ External source ──(import job, on demand)──▶ PostgreSQL ──▶ Cyan
 
 | Game | Source | What is imported | Images |
 | ---- | ------ | ---------------- | ------ |
-| Pokémon TCG | [TCGdex](https://tcgdex.dev) GraphQL API: open source, free, no key | 26 sets (the 30th Celebration, Mega Evolution, Scarlet & Violet, Base Set, Jungle, Fossil), 4,779 cards with rarities, set logos and release dates | `assets.tcgdex.net`, in two sizes: small for grids, large for a closer look and pack openings |
-| One Piece Card Game | [OPTCG API](https://optcgapi.com): a free, fan-run public API for the English game | 20 sets (OP-01 to OP-17, the OP14/OP15 boosters with EB04, EB-01 to EB-03), 3,023 cards including parallels, manga, SP and treasure rares | `optcgapi.com`, one size |
+| Pokémon TCG | [TCGdex](https://tcgdex.dev) GraphQL API: open source, free, no key | Configured sets and cards, with rarities, set logos and release dates | `assets.tcgdex.net`, in two sizes: small for grids, large for a closer look and pack openings |
+| One Piece Card Game | [OPTCG API](https://optcgapi.com): a free, fan-run public API for the English game | Configured sets and cards, including alternate-art printings and game-specific rarity data | `optcgapi.com`, one size |
 
-- **Run it** with the `import-tcg` profile (commands above); `TCG_IMPORT_SOURCES=pokemon` imports one game. A run takes about a minute and a few dozen requests: one or two per set.
+- **Run it** with the `import-tcg` profile (commands above); `TCG_IMPORT_SOURCES=pokemon` imports one game. Import duration depends on the configured catalog and source availability.
 - **Repeatable and idempotent**: every card is keyed by its source's id (`sv01-001`, `OP01-120_p1`), so running it again adds what is new, updates what changed and duplicates nothing; the log says, per game, how many cards were new, updated and unchanged, and names any set or cards skipped (a card the source has no image for is never given one). Nothing is deleted, because collections and opening histories point at cards. The whole game is one transaction: a failed run writes nothing.
 - **Configurable**: which sets to take, what each source rarity is called and how rare it is, and how each kind of pack is made up live in `backend/src/main/resources/tcg/sources/*.json`, not in code.
 - **Pack odds are simulator probabilities.** Neither The Pokémon Company nor Bandai publishes official pull rates, so each pack layout is this arcade's approximation, and every pack says so on its page.
@@ -322,29 +372,45 @@ External source ──(import job, on demand)──▶ PostgreSQL ──▶ Cyan
 
 ## Testing
 
-```bash
-cd backend && ./mvnw verify      # all backend tests, then a coverage report (Docker must be running)
+**Backend CI** is configured to run Maven `verify` on Java 21 for pushes to `main` and pull requests targeting `main`. PostgreSQL integration tests use Testcontainers with the GitHub-hosted Linux runner's Docker daemon; no database secrets or separate service are required. The workflow caches Maven dependencies and attempts to upload `backend-reports` even on failure, retaining available Surefire/Failsafe and JaCoCo reports for 14 days. Coverage reports may be absent if verification stops before JaCoCo's report goal.
 
+Run locally:
+
+```bash
+cd backend
+./mvnw verify                             # requires Docker for PostgreSQL Testcontainers
+```
+
+From the repository root, in a separate terminal:
+
+```bash
 cd frontend
+npm ci
 npm run typecheck
 npm run lint
 npm test
-npm run coverage                 # the tests again, with a coverage report
+npm run coverage
 npm run build
 ```
 
-| | Tests | Line coverage | Branch coverage | Report |
-| --- | --- | --- | --- | --- |
-| Backend | 431 | 97.6 % | 87.1 % | `backend/target/site/jacoco/index.html` |
-| Frontend | 594 | 97.2 % | 90.9 % | `frontend/coverage/index.html` |
+| Report | Local output |
+| --- | --- |
+| Backend test results | `backend/target/surefire-reports/` |
+| Backend coverage | `backend/target/site/jacoco/index.html` |
+| Frontend coverage | `frontend/coverage/index.html` |
 
-- **Backend** integration tests run against a real PostgreSQL in Testcontainers, never an in-memory substitute, and go through HTTP with MockMvc. They cover registration, authentication and login throttling, score submission (including simultaneous finishes), leaderboards, achievements and XP, daily challenges, the coin ledger (simultaneous spending, rewards paid once, rollbacks), the daily login reward over several days and under simultaneous claims, the shop (replayed and simultaneous purchases), admin grants, and card packs: the odds over 100,000 simulated packs, duplicates, the daily limit under concurrent requests, and a failure halfway through an opening that must leave nothing behind. The card game sources are tested on recorded answers of the real APIs (no network): mapping, retries, idempotent re-imports, alternate arts and reprints.
-- **Frontend** tests cover the game engines and AIs, the input hooks, every page through the real route table against an in-memory fake of the API, and architecture rules (engines import nothing from React or the browser, games do not reach into each other, the card game is used only through its routes).
+- **HTTP and database behavior:** MockMvc with a real PostgreSQL Testcontainers database and Flyway migrations, covering authentication, scores, rewards, purchases, packs, collections and profiles.
+- **Failure and concurrency cases:** simultaneous spending, duplicate score submissions, retried purchases/openings, allowance limits and rollback after partial failure. Rate-limit and trusted-proxy checks also have focused tests without a database.
+- **Architecture:** ArchUnit checks module dependencies, persistence encapsulation and password-handling boundaries.
+- **Frontend:** game engines, pages, input behavior, opening/retry flows and module boundaries.
+
+Useful backend entry points: [purchase concurrency tests](backend/src/test/java/com/cyan/arcade/shop/ShopApiTests.java), [pack-opening tests](backend/src/test/java/com/cyan/arcade/tcg/PackOpeningApiTests.java), [security-chain tests](backend/src/test/java/com/cyan/arcade/common/security/RequestRateLimitSecurityTests.java), and [architecture rules](backend/src/test/java/com/cyan/arcade/ArchitectureTests.java). For executed results, use the [Actions runs and artifacts](https://github.com/trannguyendangtam1111/cyan-arcade/actions/workflows/backend-ci.yml).
 
 ## Project layout
 
 ```text
 .
+├── .github/workflows/        # backend Maven verification and report artifacts
 ├── docker-compose.yml        # postgres + backend + frontend
 ├── .env.example              # settings for docker compose
 ├── backend/                  # Spring Boot modular monolith, packaged by feature
@@ -359,7 +425,7 @@ npm run build
 │       │   ├── chess/  sudoku/  wordle/              # games played on the server, each a module of its own
 │       │   └── tcg/          # the card game module: game, set, card, pack, opening, collection, dataimport
 │       └── resources/
-│           ├── db/migration/     # Flyway migrations V1 to V24
+│           ├── db/migration/     # versioned Flyway migrations
 │           └── tcg/sources/      # which sets to import, rarities and pack layouts, per card game
 ├── frontend/                 # React + Vite SPA, served by nginx in Docker
 │   ├── nginx/                # nginx configuration and security headers
@@ -376,29 +442,27 @@ npm run build
 
 ## Roadmap
 
-1. ✅ **Foundation**: project setup, design system, pages, game catalog, Docker
-2. ✅ **Snake, 2048, Tetris**: engines, Human mode and AI mode
-3. ✅ **Score keeping** and **leaderboards**
-4. ✅ **Accounts**: registration, login, profile, named leaderboard entries
-5. ✅ **Progression**: XP, levels, achievements, game history
-6. ✅ **Daily challenges and the game hub**
-7. ✅ **Card packs (TCG)**: card games, sets, packs, server-side opening, collection, history, dataset import
-8. ✅ **Production polish**: audit, security hardening, accessibility, test coverage, Docker and nginx
-9. ✅ **Real card data**: Pokémon (TCGdex) and One Piece (OPTCG API) imported into PostgreSQL, game-specific pack layouts, a TCG chooser
-10. ✅ **Roles**: USER and ADMIN, a seeded admin account, AI mode and unlimited packs for admins, enforced by the server
-11. ✅ **Platform economy**: coins and their ledger, rewards for playing, achievements and challenges, the daily login reward, card pack challenges, the shop with extra packs, badges and titles, statistics, the admin dashboard and coin grants
-12. ✅ **Competitive leaderboards**: daily, weekly and all-time boards per game, one entry per player, deterministic ranks, your rank everywhere, a podium, ranks on the profile
-13. ✅ **Player identity**: display names, bios, public profiles, display names on leaderboards
-14. ✅ **Shop and rewards**: shop categories, item states (locked, owned, equipped, affordable), profile frames, pack rules in the shop, a grouped inventory, the reward history and clearer daily rewards
-15. ✅ **Score integrity**: each game's runs checked against its engine's rules and the server's clock, guest runs tied to their browser, expired sessions, players' runs judged one at a time, a daily limit on best-score coins. Practical protection, not perfect anti-cheat
-16. ✅ **New games**: a clean game boundary (game rules in their own backend package, guarded by architecture tests on both sides) and Minesweeper as its reference game
-17. ✅ **Flappy Bird**: a seeded, deterministic course with server-side timing checks, an admin-only AI, and game skins (birds, obstacles, skies) through the ordinary shop and inventory
-18. ✅ **Brick Breaker**: a deterministic arcade engine with power-ups, combos and levels, server-side run checks against the levels' brick counts, an admin-only AI, and paddle, ball and brick skins
-19. ✅ **Word Guess**: a server-played word game with a deterministic Daily Word, streaks, hints that cost score, server-side run checks against the recorded run, an admin-only server-side solver with four strategies, and tile and keyboard skins
-20. ✅ **Sudoku**: a seeded generator with proved-unique puzzles graded by technique, a server-played game with solution-based mistakes, server-timed scores, hints, notes, undo and redo, a stored Daily Sudoku with streaks and statistics, an admin-only server-side AI with three strategies, and board and pad skins
-21. ✅ **Dino Run**: an endless runner on the shared pixel worlds, with a fixed-step seeded engine, pixel-exact collision, a fair obstacle generator, server checks against the speed curve, an admin-only predictive AI with three strategies, and runner and obstacle skins
-22. ✅ **Chess**: two players on one device, the full rules (castling, en passant, promotion, checkmate, stalemate and every draw) enforced by a perft-tested engine on the server, stale and simultaneous moves refused, takebacks, draw offers and claims, resignation, SAN move history, board and piece skins; unscored, through a new generic `scored` flag in the catalog
-23. ✅ **Stockfish in Chess**: the official engine, pinned and verified, behind a bounded UCI process pool; move hints with a server-enforced allowance for players; admin games against Stockfish at five difficulties, position evaluation and game review with move labels, an analysis cache, rate and resource limits
-24. **Next**: deployment to a host with HTTPS, login sessions that survive a restart (Spring Session), password reset, more games (Memory), online Chess between accounts (see [Chess](ARCHITECTURE.md#chess)), Connect Four
+### Implemented
 
-Known limits, on purpose for now: no email or password reset; scores made as a guest are not moved to an account created later; scores and the numbers games report about a run are validated for range but not replayed, so they are not cheat-proof (Word Guess and Sudoku are the exceptions: they are played on the server, though a script could still play them for someone, and Sudoku trusts the browser to hide the board while paused); login throttling is kept in memory per backend instance; card images depend on the sources' image hosts being up; the admin account is fixed by configuration (there is no page to manage roles); coins can be farmed only as fast as scores can, since scores are not replayed (finishing a game pays coins for the first 40 games a day only).
+- Modular backend, shared game catalog, scored sessions, leaderboards and player profiles.
+- Spring Security authentication/authorization, explicit admin seeding, request limits and trusted-proxy configuration.
+- Transactional coins, progression, daily rewards/challenges, purchases, inventory and audited admin grants.
+- Imported card catalogs, server-side pack opening, idempotent request replay, collections and history.
+- Arcade games, server-played Word Guess/Sudoku, local Chess and Stockfish integration.
+- Docker/nginx configuration, automated tests and a backend GitHub Actions workflow.
+
+### Planned
+
+- Hosted deployment with HTTPS.
+- Login sessions that survive a backend restart, using Spring Session.
+- Email/password recovery.
+- Online Chess between accounts, with ownership, matchmaking/invitations and real-time updates; see [design notes](ARCHITECTURE.md#online-chess-later).
+- Additional games such as Memory and Connect Four, after backend reliability work.
+
+### Current limitations
+
+- **Single-instance state:** login sessions and rate-limit counters are in memory and reset on restart. Users sharing an IP share request budgets; proxy trust must be configured for the actual deployment.
+- **Client trust:** browser-game scores are checked for consistency and plausible timing, not replayed from every input. Word Guess and Sudoku keep their answers on the server, but automation is still possible; Sudoku also trusts the browser to hide the board while paused. Coins from scored browser games inherit these limits.
+- **Retry compatibility:** legacy pack-opening calls without an `Idempotency-Key` remain supported and open a new pack on each call. The frontend sends stable keys; successful replay snapshots are retained without automatic expiry.
+- **Account management:** no password reset or role-management page yet. Guest scores are not reassigned after registration; admin credentials are used only for optional creation and do not reset existing accounts.
+- **External assets:** card images depend on their source hosts. Import data availability and catalog contents depend on the configured sources and import run.

@@ -3,19 +3,24 @@ package com.cyan.arcade.tcg;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import com.cyan.arcade.IntegrationTest;
 import com.cyan.arcade.Players;
 import com.cyan.arcade.tcg.dataimport.TcgDatasetImporter;
+import com.cyan.arcade.shop.ShopService;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpSession;
@@ -23,6 +28,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.in;
@@ -54,6 +60,9 @@ class PackOpeningApiTests {
 
 	@Autowired
 	private TcgDatasetImporter importer;
+
+	@Autowired
+	private ShopService shop;
 
 	private Long booster;
 
@@ -374,6 +383,168 @@ class PackOpeningApiTests {
 		assertThat(this.jdbc.queryForObject("SELECT quantity FROM tcg_user_cards WHERE user_id = ?", Integer.class,
 				userId))
 			.isEqualTo(DAILY_LIMIT);
+	}
+
+	@Test
+	void aRetryReplaysTheOriginalCardsAndAllowanceEvenAfterOtherOpeningsOrRetirement() throws Exception {
+		MockHttpSession session = Players.register(this.mockMvc);
+		Long userId = userId(session);
+		UUID requestId = UUID.randomUUID();
+		String first = open(session, this.booster, requestId).andExpect(status().isCreated())
+			.andReturn().getResponse().getContentAsString();
+		open(session, this.single).andExpect(status().isCreated());
+		// Even catalog changes must not change a replay or prevent returning a committed result.
+		this.jdbc.update("UPDATE tcg_packs SET active = FALSE WHERE id = ?", this.booster);
+		try {
+			String replay = open(session, this.booster, requestId).andExpect(status().isCreated())
+				.andReturn().getResponse().getContentAsString();
+			assertThat(JsonPath.<Object>read(replay, "$")).isEqualTo(JsonPath.<Object>read(first, "$"));
+		}
+		finally {
+			this.jdbc.update("UPDATE tcg_packs SET active = TRUE WHERE id = ?", this.booster);
+		}
+		assertThat(count("tcg_pack_opening_requests WHERE user_id = ?", userId)).isEqualTo(1);
+		history(session).andExpect(jsonPath("$.totalEntries").value(2));
+		collection(session).andExpect(jsonPath("$.summary.totalCards").value(4));
+		allowance(session).andExpect(jsonPath("$.openedToday").value(2));
+	}
+
+	@Test
+	void reusingAKeyForAnotherPackIsAConflictAndTheSameKeyIsIndependentForOtherUsers() throws Exception {
+		MockHttpSession session = Players.register(this.mockMvc);
+		UUID requestId = UUID.randomUUID();
+		open(session, this.single, requestId).andExpect(status().isCreated());
+		open(session, this.booster, requestId).andExpect(status().isConflict())
+			.andExpect(jsonPath("$.code").value("IDEMPOTENCY_KEY_CONFLICT"));
+		history(session).andExpect(jsonPath("$.totalEntries").value(1));
+		collection(session).andExpect(jsonPath("$.summary.totalCards").value(1));
+		open(Players.register(this.mockMvc), this.booster, requestId).andExpect(status().isCreated());
+	}
+
+	@Test
+	void malformedKeysAreRejectedWithoutOpeningAnything() throws Exception {
+		MockHttpSession session = Players.register(this.mockMvc);
+		this.mockMvc.perform(post("/api/tcg/packs/{id}/open", this.single).session(session)
+			.header("Idempotency-Key", "not-a-uuid")).andExpect(status().isBadRequest());
+		history(session).andExpect(jsonPath("$.totalEntries").value(0));
+	}
+
+	@Test
+	void concurrentDuplicateRequestsConsumeOneDailyAllowance() throws Exception {
+		MockHttpSession session = Players.register(this.mockMvc);
+		assertConcurrentReplay(session);
+		allowance(session).andExpect(jsonPath("$.openedToday").value(1))
+			.andExpect(jsonPath("$.leftToday").value(DAILY_LIMIT - 1));
+		history(session).andExpect(jsonPath("$.totalEntries").value(1));
+		collection(session).andExpect(jsonPath("$.summary.totalCards").value(1));
+	}
+
+	@Test
+	void concurrentDuplicateRequestsConsumeOneBonusPackAndReplayOneResult() throws Exception {
+		MockHttpSession session = Players.register(this.mockMvc);
+		Long userId = userId(session);
+		for (int index = 0; index < DAILY_LIMIT; index++) {
+			open(session, this.single).andExpect(status().isCreated());
+		}
+		this.shop.give(userId, "EXTRA_PACK", 1);
+		assertConcurrentReplay(session);
+		allowance(session).andExpect(jsonPath("$.openedToday").value(DAILY_LIMIT + 1))
+			.andExpect(jsonPath("$.bonusPacks").value(0));
+		collection(session).andExpect(jsonPath("$.summary.totalCards").value(DAILY_LIMIT + 1));
+		assertThat(count("tcg_pack_opening_requests WHERE user_id = ?", userId)).isEqualTo(1);
+	}
+
+	@Test
+	void concurrentAdminRetriesAreIdempotentDespiteHavingNoDailyLimit() throws Exception {
+		MockHttpSession admin = Players.signInAsAdmin(this.mockMvc);
+		Long userId = userId(admin);
+		int before = count("tcg_pack_openings WHERE user_id = ?", userId);
+		assertConcurrentReplay(admin);
+		assertThat(count("tcg_pack_openings WHERE user_id = ?", userId)).isEqualTo(before + 1);
+	}
+
+	@Test
+	void failingToSaveTheReplayRollsBackCardsOpeningAndBonusConsumptionAndAllowsTheSameKeyAgain() throws Exception {
+		MockHttpSession session = Players.register(this.mockMvc);
+		Long userId = userId(session);
+		for (int index = 0; index < DAILY_LIMIT; index++) {
+			open(session, this.single).andExpect(status().isCreated());
+		}
+		this.shop.give(userId, "EXTRA_PACK", 1);
+		UUID requestId = UUID.randomUUID();
+		int coinsBefore = count("coin_transactions WHERE user_id = ?", userId);
+		this.jdbc.execute("""
+				CREATE FUNCTION tcg_test_fail_replay() RETURNS trigger AS $$
+				BEGIN
+				    IF NEW.user_id = %d THEN RAISE EXCEPTION 'replay storage failed'; END IF;
+				    RETURN NEW;
+				END $$ LANGUAGE plpgsql
+				""".formatted(userId));
+		this.jdbc.execute("""
+				CREATE TRIGGER tcg_test_fail_replay BEFORE INSERT ON tcg_pack_opening_requests
+				FOR EACH ROW EXECUTE FUNCTION tcg_test_fail_replay()
+				""");
+		try {
+			open(session, this.single, requestId).andExpect(status().isInternalServerError());
+		}
+		finally {
+			this.jdbc.execute("DROP TRIGGER tcg_test_fail_replay ON tcg_pack_opening_requests");
+			this.jdbc.execute("DROP FUNCTION tcg_test_fail_replay()");
+		}
+		assertThat(count("tcg_pack_opening_requests WHERE user_id = ?", userId)).isZero();
+		assertThat(count("coin_transactions WHERE user_id = ?", userId)).isEqualTo(coinsBefore);
+		history(session).andExpect(jsonPath("$.totalEntries").value(DAILY_LIMIT));
+		collection(session).andExpect(jsonPath("$.summary.totalCards").value(DAILY_LIMIT));
+		allowance(session).andExpect(jsonPath("$.openedToday").value(DAILY_LIMIT))
+			.andExpect(jsonPath("$.bonusPacks").value(1));
+		open(session, this.single, requestId).andExpect(status().isCreated());
+		open(session, this.single, requestId).andExpect(status().isCreated());
+		assertThat(count("tcg_pack_opening_requests WHERE user_id = ?", userId)).isEqualTo(1);
+		allowance(session).andExpect(jsonPath("$.openedToday").value(DAILY_LIMIT + 1))
+			.andExpect(jsonPath("$.bonusPacks").value(0));
+	}
+
+	@Test
+	void theDatabaseRejectsDuplicateUserRequestIds() throws Exception {
+		MockHttpSession session = Players.register(this.mockMvc);
+		UUID requestId = UUID.randomUUID();
+		open(session, this.single, requestId).andExpect(status().isCreated());
+		// Use another real opening to avoid merely exercising the unique opening_id constraint.
+		String second = open(session, this.single).andExpect(status().isCreated())
+			.andReturn().getResponse().getContentAsString();
+		Long otherOpening = JsonPath.<Number>read(second, "$.opening.id").longValue();
+		assertThatExceptionOfType(DuplicateKeyException.class)
+			.isThrownBy(() -> this.jdbc.update("""
+					INSERT INTO tcg_pack_opening_requests (user_id, request_id, pack_id, opening_id, response)
+					SELECT user_id, request_id, pack_id, ?, response FROM tcg_pack_opening_requests
+					WHERE user_id = ? AND request_id = ?
+					""", otherOpening, userId(session), requestId));
+	}
+
+	private void assertConcurrentReplay(MockHttpSession session) throws Exception {
+		UUID requestId = UUID.randomUUID();
+		int attempts = 8;
+		CyclicBarrier ready = new CyclicBarrier(attempts);
+		List<String> bodies = new ArrayList<>();
+		try (ExecutorService pool = Executors.newFixedThreadPool(attempts)) {
+			List<Callable<String>> requests = new ArrayList<>();
+			for (int index = 0; index < attempts; index++) {
+				requests.add(() -> {
+					ready.await(10, TimeUnit.SECONDS);
+					return open(session, this.single, requestId).andExpect(status().isCreated())
+						.andReturn().getResponse().getContentAsString();
+				});
+			}
+			for (Future<String> result : pool.invokeAll(requests)) {
+				bodies.add(result.get());
+			}
+		}
+		assertThat(bodies.stream().map((body) -> JsonPath.<Object>read(body, "$")).distinct()).hasSize(1);
+	}
+
+	private ResultActions open(MockHttpSession session, Long packId, UUID requestId) throws Exception {
+		return this.mockMvc.perform(post("/api/tcg/packs/{id}/open", packId).session(session)
+			.header("Idempotency-Key", requestId.toString()));
 	}
 
 	private ResultActions open(MockHttpSession session, Long packId) throws Exception {

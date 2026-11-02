@@ -1,6 +1,6 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { admin, mockApi, pixel } from '@/test/mockApi'
 import { renderRoute } from '@/test/renderWithProviders'
 import { RETRY_AFTER_MS } from './components/CardImage'
@@ -10,6 +10,8 @@ type TcgOptions = Parameters<typeof tcgHandlers>[0]
 
 const asGuest = (options?: TcgOptions) => mockApi({ handlers: [tcgHandlers(options)] })
 const asPixel = (options?: TcgOptions) => mockApi({ user: pixel, handlers: [tcgHandlers(options)] })
+
+beforeEach(() => sessionStorage.clear())
 
 /** The requests sent to the card game API, as "METHOD path". */
 const tcgRequests = (fetchSpy: ReturnType<typeof mockApi>) =>
@@ -219,11 +221,60 @@ describe('opening a pack', () => {
     expect(results.getByText('All 3 cards are in your collection.')).toBeInTheDocument()
     expect(results.getByRole('link', { name: 'View collection' })).toHaveAttribute('href', '/tcg/collection')
 
-    // One request opened the pack. It named the pack and sent nothing else.
+    // One request opened the pack, with a retry key and no client-selected cards.
     const opens = fetchSpy.mock.calls.filter(([, init]) => init?.method === 'POST')
     expect(opens).toHaveLength(1)
     expect(String(opens[0][0])).toBe('/api/tcg/packs/20/open')
     expect(opens[0][1]?.body).toBeUndefined()
+    expect(new Headers(opens[0][1]?.headers).get('Idempotency-Key')).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    )
+  })
+
+  it('reuses the pending ID after a lost response and remount, even when the last pack was consumed', async () => {
+    const fetchSpy = asPixel({ openedToday: 4 })
+    const server = fetchSpy.getMockImplementation()!
+    let committed: Response | undefined
+    fetchSpy.mockImplementation(async (input, init) => {
+      if (String(input).endsWith('/open') && init?.method === 'POST') {
+        if (committed) return committed.clone()
+        committed = (await server(input, init)).clone()
+        throw new TypeError('Response lost after commit')
+      }
+      return server(input, init)
+    })
+    const firstPage = renderRoute('/tcg/packs/20')
+    await userEvent.click(await screen.findByRole('button', { name: 'Open pack' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not reach')
+    firstPage.unmount()
+    renderRoute('/tcg/packs/20')
+    const retry = await screen.findByRole('button', { name: 'Open pack' })
+    expect(retry).toBeEnabled()
+    await userEvent.click(retry)
+    await userEvent.click(await screen.findByRole('button', { name: 'Reveal all' }))
+    expect(await screen.findByRole('region', { name: 'Results' })).toBeInTheDocument()
+    const keys = fetchSpy.mock.calls.filter(([input]) => String(input).endsWith('/open'))
+      .map(([, init]) => new Headers(init?.headers).get('Idempotency-Key'))
+    expect(keys).toHaveLength(2)
+    expect(keys[0]).toBeTruthy()
+    expect(keys[1]).toBe(keys[0])
+    expect(sessionStorage.getItem(`tcg-pending-opening:${pixel.id}:20`)).toBeNull()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Open another' })).toBeDisabled())
+  })
+
+  it('uses a new request ID when the player opens another pack', async () => {
+    const fetchSpy = asPixel()
+    renderRoute('/tcg/packs/20')
+    await userEvent.click(await screen.findByRole('button', { name: 'Open pack' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Reveal all' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Open another' }))
+    await screen.findByRole('button', { name: 'Reveal all' })
+    const keys = fetchSpy.mock.calls.filter(([input]) => String(input).endsWith('/open'))
+      .map(([, init]) => new Headers(init?.headers).get('Idempotency-Key'))
+    expect(keys).toHaveLength(2)
+    expect(keys[0]).toBeTruthy()
+    expect(keys[1]).toBeTruthy()
+    expect(keys[1]).not.toBe(keys[0])
   })
 
   it('shows the cards in the order the server sent them', async () => {

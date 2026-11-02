@@ -293,16 +293,21 @@ export function useOpenings(page: number, enabled: boolean) {
 }
 
 /**
- * Opens a pack. The request names the pack and nothing else: which cards come out is decided by
- * the server, and the answer is the only source of what the player sees next.
+ * Opens a pack with the caller's stable request ID. Retries must reuse that ID.
  */
 export function useOpenPack() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (packId: number) => apiFetch<OpenPackResponse>(`/api/tcg/packs/${packId}/open`, { method: 'POST' }),
+    mutationFn: ({ packId, requestId }: { packId: number; requestId: string }) =>
+      apiFetch<OpenPackResponse>(`/api/tcg/packs/${packId}/open`, {
+        method: 'POST',
+        headers: { 'Idempotency-Key': requestId },
+      }),
     onSuccess: ({ allowance }) => {
       // The answer says what is left today; the collection and the history have to be read again.
       queryClient.setQueryData(tcgKeys.allowance, allowance)
+      // A replay contains the original snapshot; refresh today's actual allowance too.
+      void queryClient.invalidateQueries({ queryKey: tcgKeys.allowance })
       void queryClient.invalidateQueries({ queryKey: [...tcgKeys.mine, 'collection'] })
       void queryClient.invalidateQueries({ queryKey: [...tcgKeys.mine, 'openings'] })
       // The platform counts opened packs (daily challenges, which may pay coins) and the profile's numbers.

@@ -28,9 +28,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
  * that is a player is left alone too, with a warning: an application that promoted whoever had
  * registered the name first would hand out admin rights.
  *
- * <p>The defaults ({@code admin} / {@code 11112002}) are for development and demos only; set
- * {@code ADMIN_USERNAME} and {@code ADMIN_PASSWORD} for anything real, or switch the seed off with
- * {@code ADMIN_SEED_ENABLED=false}. The password is never logged.
+ * <p>Disabled by default. Set {@code ADMIN_SEED_ENABLED=true} and supply {@code ADMIN_USERNAME}
+ * and {@code ADMIN_PASSWORD} to opt in. Missing credentials fail configuration before any account
+ * is accessed. The password is never logged.
  */
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(AdminAccountSeeder.AdminProperties.class)
@@ -45,8 +45,14 @@ class AdminAccountSeeder implements ApplicationRunner {
 	 * @param password the admin account's password, used only to create the account
 	 */
 	@ConfigurationProperties("app.admin")
-	record AdminProperties(@DefaultValue("true") boolean seed, @DefaultValue("admin") String username,
-			@DefaultValue("11112002") String password) {
+	record AdminProperties(@DefaultValue("false") boolean seed, String username, String password) {
+
+		AdminProperties {
+			if (seed && (username == null || username.isBlank() || password == null || password.isBlank())) {
+				throw new IllegalArgumentException(
+						"ADMIN_USERNAME and ADMIN_PASSWORD must both be set when ADMIN_SEED_ENABLED=true");
+			}
+		}
 
 		@Override
 		public String toString() {
@@ -77,6 +83,9 @@ class AdminAccountSeeder implements ApplicationRunner {
 
 	/** @return whether an account was created */
 	boolean seed() {
+		if (!this.properties.seed()) {
+			return false;
+		}
 		Optional<UserCredentials> existing = this.users.findCredentials(this.properties.username());
 		if (existing.isPresent()) {
 			if (existing.get().role() != Role.ADMIN) {

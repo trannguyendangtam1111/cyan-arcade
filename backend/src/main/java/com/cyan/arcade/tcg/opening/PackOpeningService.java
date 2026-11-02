@@ -9,10 +9,12 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.random.RandomGenerator;
 import java.util.stream.Collectors;
 
 import com.cyan.arcade.common.error.ApiException;
+import com.cyan.arcade.common.error.ConflictException;
 import com.cyan.arcade.common.platform.BonusPacks;
 import com.cyan.arcade.common.platform.PlayerActivity;
 import com.cyan.arcade.common.security.AuthenticatedUser;
@@ -47,6 +49,8 @@ public class PackOpeningService {
 	public static final String PACK_NOT_AVAILABLE = "PACK_NOT_AVAILABLE";
 
 	public static final String DAILY_PACK_LIMIT_REACHED = "DAILY_PACK_LIMIT_REACHED";
+
+	public static final String IDEMPOTENCY_KEY_CONFLICT = "IDEMPOTENCY_KEY_CONFLICT";
 
 	private final TcgPackService packs;
 
@@ -100,7 +104,26 @@ public class PackOpeningService {
 	 */
 	@Transactional
 	public OpenPackResponse open(AuthenticatedUser player, Long packId) {
+		return open(player, packId, null);
+	}
+
+	/** A key is scoped to one player; a successful retry replays the original response verbatim. */
+	@Transactional
+	public OpenPackResponse open(AuthenticatedUser player, Long packId, UUID requestId) {
 		Long userId = player.id();
+		// Every role and allowance configuration shares the lock. A waiting retry sees the first
+		// transaction's committed result before it can draw cards or consume an extra pack.
+		this.openings.lockOpeningsOf(userId);
+		if (requestId != null) {
+			var earlier = this.openings.findRequest(userId, requestId);
+			if (earlier.isPresent()) {
+				if (!earlier.get().packId().equals(packId)) {
+					throw new ConflictException(IDEMPOTENCY_KEY_CONFLICT,
+							"This idempotency key was already used for a different pack");
+				}
+				return earlier.get().response();
+			}
+		}
 		PackBlueprint pack = this.packs.blueprint(packId);
 		if (!pack.active()) {
 			throw notAvailable("This pack can no longer be opened");
@@ -108,9 +131,6 @@ public class PackOpeningService {
 
 		Instant now = this.clock.instant();
 		if (hasDailyLimit(player)) {
-			// From here to the end of the transaction this player's openings happen one at a time,
-			// so the count below cannot be out of date by the time the new opening is saved.
-			this.openings.lockOpeningsOf(userId);
 			// Once today's allowance is gone, an extra pack the player has (bought in the shop, say)
 			// is used instead. It is used up in this transaction, so a failed opening keeps it.
 			if (allowanceAt(player, now).usedUp() && !this.bonusPacks.useOne(userId)) {
@@ -145,7 +165,11 @@ public class PackOpeningService {
 				pulledCards);
 		// Lets the platform count it (daily challenges), in this transaction.
 		this.events.publishEvent(new PlayerActivity(userId, PlayerActivity.TCG_PACK_OPENED, openingId.toString(), now));
-		return new OpenPackResponse(opening, allowanceAt(player, now));
+		OpenPackResponse response = new OpenPackResponse(opening, allowanceAt(player, now));
+		if (requestId != null) {
+			this.openings.saveRequest(userId, requestId, packId, response);
+		}
+		return response;
 	}
 
 	@Transactional(readOnly = true)

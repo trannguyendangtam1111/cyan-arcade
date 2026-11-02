@@ -23,6 +23,12 @@ import org.springframework.context.annotation.Import;
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
 @SpringBootTest(properties = { "app.scheduling.enabled=false", "app.daily-challenges.generation-enabled=false",
+		"app.admin.seed=true", "app.admin.username=" + Players.ADMIN_USERNAME,
+		"app.admin.password=" + Players.ADMIN_PASSWORD,
+		// Shared integration fixtures create many accounts/runs from one address. Focused security
+		// tests exercise real, low request limits independently, without a database.
+		"app.security.request-limits.registration-max=10000", "app.security.request-limits.login-max=10000",
+		"app.security.request-limits.game-session-max=10000",
 		"app.tcg.daily-pack-limit=5",
 		"app.chess.requests-per-minute=10000", "app.chess.coach.requests-per-minute=5" })
 @AutoConfigureMockMvc

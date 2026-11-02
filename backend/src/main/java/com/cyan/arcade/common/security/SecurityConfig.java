@@ -1,6 +1,9 @@
 package com.cyan.arcade.common.security;
 
 import java.util.List;
+import java.time.Clock;
+
+import tools.jackson.databind.json.JsonMapper;
 
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.security.autoconfigure.actuate.web.servlet.EndpointRequest;
@@ -23,6 +26,7 @@ import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfAuthenticationStrategy;
 import org.springframework.security.web.csrf.CsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -44,7 +48,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
  * </ul>
  */
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties(CorsProperties.class)
+@EnableConfigurationProperties({ CorsProperties.class, RequestRateLimitFilter.Limits.class })
 @EnableMethodSecurity
 class SecurityConfig {
 
@@ -52,10 +56,13 @@ class SecurityConfig {
 
 	@Bean
 	SecurityFilterChain apiSecurityFilterChain(HttpSecurity http, ProblemDetailSecurityHandler problemHandler,
-			SecurityContextRepository securityContextRepository, CsrfTokenRepository csrfTokenRepository) {
+			SecurityContextRepository securityContextRepository, CsrfTokenRepository csrfTokenRepository,
+			RequestRateLimitFilter.Limits limits, Clock clock, JsonMapper json) {
 		http.cors(Customizer.withDefaults())
 			.csrf((csrf) -> csrf.csrfTokenRepository(csrfTokenRepository)
 				.csrfTokenRequestHandler(new SpaCsrfTokenRequestHandler()))
+			// Construct only in this chain: no second servlet-filter registration. CSRF runs first.
+			.addFilterAfter(new RequestRateLimitFilter(limits, clock, json), CsrfFilter.class)
 			.securityContext((context) -> context.securityContextRepository(securityContextRepository))
 			// Signing in is done by the auth feature's own JSON endpoints, not by browser forms or Basic auth.
 			.httpBasic(AbstractHttpConfigurer::disable)
@@ -148,7 +155,7 @@ class SecurityConfig {
 		configuration.setAllowedOrigins(properties.allowedOrigins());
 		configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
 		configuration.setAllowedHeaders(List.of(HttpHeaders.ACCEPT, HttpHeaders.CONTENT_TYPE, GuestPlayer.HEADER,
-				"X-XSRF-TOKEN"));
+				"X-XSRF-TOKEN", "Idempotency-Key"));
 		// The session cookie must travel with requests from the allowed origins.
 		configuration.setAllowCredentials(true);
 		configuration.setMaxAge(3600L);

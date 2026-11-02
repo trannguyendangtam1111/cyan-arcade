@@ -207,8 +207,19 @@ Responds `200 OK` with the same body as registering, and sets `CYAN_SESSION`. Th
 ```
 
 - A successful login clears the count. Unknown usernames are counted like known ones, so the throttle does not reveal which usernames exist either.
-- Other usernames, and the same username from another address, are not affected. Behind a reverse proxy every request has the proxy's address, so there the limit is effectively per username.
+- Failed-login counts are separate per username/address. There is also an all-attempt login budget per client address (below).
 - The limits are `LOGIN_MAX_FAILURES` and `LOGIN_FAILURE_WINDOW`. The counts are kept in memory by each backend instance.
+
+**Public POST budgets:** registration (`/api/auth/register`) allows 5 attempts/hour per client IP;
+login (`/api/auth/login`) allows 30 attempts/minute; game-session creation (`/api/game-sessions`)
+allows 60 attempts/minute. Each has a separate fixed window starting at its first request.
+Requests over budget return `429` problem details with `code: RATE_LIMIT_EXCEEDED` and
+`Retry-After` in seconds. CSRF failures are rejected before counting; logout, session restoration
+and finishing an existing game session are unaffected. Counters are bounded and per instance.
+
+The address is `getRemoteAddr()`, never a header read directly by application code. Forwarding
+is disabled by default; the README documents native Tomcat forwarding with explicitly trusted
+proxy addresses. Without that setup, clients behind nginx share its IP budget.
 
 #### `POST /api/auth/logout`
 
@@ -1636,6 +1647,19 @@ The daily allowance applies to players; **an admin has none**. It is decided by 
 #### `POST /api/tcg/packs/{id}/open`
 
 Opens a pack for the signed-in player. **There is no request body**: the pack is in the path, the player in the session, and which cards come out is decided by the server alone, from the cards in the database. Anything a client sends in a body or query is ignored.
+
+Send an `Idempotency-Key` header containing a client-generated UUID for each intended opening.
+Reuse it for all retries, including after a timeout. A successful retry returns `201` with the
+original response, including card order, `isNew` flags and the allowance snapshot at that time;
+use `GET /api/tcg/allowance` for the current allowance. Reusing a key for another pack returns
+`409 IDEMPOTENCY_KEY_CONFLICT`; malformed UUIDs return `400`. Keys are scoped to the signed-in
+user and retained with their successful result. Failed transactions retain no key and can be retried.
+
+For compatibility, the header is optional; requests without it still open a new pack every time
+and have no retry protection. The frontend now generates one UUID per opening, reuses it on
+errors/retries, and keeps pending attempts in session storage per account and pack across reloads.
+After receiving success it clears the pending key, so **Open another** gets a new UUID. If browser
+storage is unavailable, reload recovery is unavailable; retries on the current screen remain safe.
 
 The server draws each slot's rarity by the pack's odds and then a card of that rarity from the pack's pool, avoiding repeats within one pack while the pool allows. It records the opening and adds every card to the player's collection, all in one transaction: either all of it happens or none of it does.
 

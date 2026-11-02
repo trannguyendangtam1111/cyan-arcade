@@ -22,8 +22,8 @@ import org.springframework.stereotype.Component;
  *
  * <p>Failures are counted per username and address, in memory. Counting per pair rather than per
  * username keeps someone else from locking a player out of their own account just by failing on
- * purpose, as long as the two come from different addresses. Behind a reverse proxy every request
- * has the proxy's address, so there the limit is effectively per username.
+ * purpose, as long as the two come from different addresses. The caller uses getRemoteAddr(),
+ * which is the proxy's address unless trusted native forwarding is explicitly configured.
  *
  * <p>This is a speed bump, not a vault door: the counts are lost on restart and are not shared
  * between instances.

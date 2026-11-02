@@ -105,7 +105,7 @@ class RolesAndAdminAccountTests {
 
 	@Test
 	void theAdminPasswordIsNeverPartOfTheConfigurationsDescription() {
-		assertThat(new AdminProperties(true, "admin", "11112002")).asString().doesNotContain("11112002");
+		assertThat(new AdminProperties(true, "admin", "test-only-secret")).asString().doesNotContain("test-only-secret");
 	}
 
 	// --- Signing in --------------------------------------------------------------------------------

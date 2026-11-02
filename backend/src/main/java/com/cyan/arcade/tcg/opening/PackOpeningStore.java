@@ -5,6 +5,10 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+import tools.jackson.databind.json.JsonMapper;
 
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
@@ -15,8 +19,39 @@ class PackOpeningStore {
 
 	private final JdbcClient jdbc;
 
-	PackOpeningStore(JdbcClient jdbc) {
+	private final JsonMapper json;
+
+	PackOpeningStore(JdbcClient jdbc, JsonMapper json) {
 		this.jdbc = jdbc;
+		this.json = json;
+	}
+
+	record OpeningRequest(Long packId, OpenPackResponse response) {
+	}
+
+	Optional<OpeningRequest> findRequest(Long userId, UUID requestId) {
+		return this.jdbc.sql("""
+				SELECT pack_id, response FROM tcg_pack_opening_requests
+				WHERE user_id = :userId AND request_id = :requestId
+				""")
+			.param("userId", userId)
+			.param("requestId", requestId)
+			.query((row, index) -> new OpeningRequest(row.getLong("pack_id"),
+					this.json.readValue(row.getString("response"), OpenPackResponse.class)))
+			.optional();
+	}
+
+	void saveRequest(Long userId, UUID requestId, Long packId, OpenPackResponse response) {
+		this.jdbc.sql("""
+				INSERT INTO tcg_pack_opening_requests (user_id, request_id, pack_id, opening_id, response)
+				VALUES (:userId, :requestId, :packId, :openingId, CAST(:response AS jsonb))
+				""")
+			.param("userId", userId)
+			.param("requestId", requestId)
+			.param("packId", packId)
+			.param("openingId", response.opening().id())
+			.param("response", this.json.writeValueAsString(response))
+			.update();
 	}
 
 	record OpeningRow(Long id, Long packId, Instant openedAt) {

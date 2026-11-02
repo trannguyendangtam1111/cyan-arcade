@@ -22,6 +22,13 @@ spring:
 
 server:
   port: ${SERVER_PORT:8080}
+  # Opt in to native handling only with an explicit trusted-proxy pattern for the deployment.
+  forward-headers-strategy: ${SERVER_FORWARD_HEADERS_STRATEGY:none}
+  tomcat:
+    remoteip:
+      # Match nothing by default, even if native forwarding is enabled accidentally.
+      internal-proxies: ${TRUSTED_PROXY_REGEX:(?!)}
+      port-header: X-Forwarded-Port
   servlet:
     session:
       # How long a player stays signed in without visiting.
@@ -55,13 +62,19 @@ info:
     version: '@project.version@'
 
 app:
+  security:
+    request-limits:
+      registration-max: ${REGISTRATION_MAX_REQUESTS:5}
+      registration-window: ${REGISTRATION_REQUEST_WINDOW:1h}
+      login-max: ${LOGIN_MAX_REQUESTS:30}
+      login-window: ${LOGIN_REQUEST_WINDOW:1m}
+      game-session-max: ${GAME_SESSION_MAX_REQUESTS:60}
+      game-session-window: ${GAME_SESSION_REQUEST_WINDOW:1m}
   admin:
-    # At startup, creates the admin account (role ADMIN) when no account has this username. Never
-    # changes an existing account. The defaults are for development and demos only: set your own
-    # ADMIN_USERNAME and ADMIN_PASSWORD wherever the arcade is reachable by others.
-    seed: ${ADMIN_SEED_ENABLED:true}
-    username: ${ADMIN_USERNAME:admin}
-    password: ${ADMIN_PASSWORD:11112002}
+    # Explicit opt-in only; both credentials are required when enabled. Never changes an existing account.
+    seed: ${ADMIN_SEED_ENABLED:false}
+    username: ${ADMIN_USERNAME:}
+    password: ${ADMIN_PASSWORD:}
   auth:
     login:
       # Failed logins allowed per username and address before further attempts are refused,

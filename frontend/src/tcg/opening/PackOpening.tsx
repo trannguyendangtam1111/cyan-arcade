@@ -1,5 +1,5 @@
 import { Eye, FastForward, PackageOpen, RotateCcw, Sparkles } from 'lucide-react'
-import { useEffect, useReducer } from 'react'
+import { useEffect, useReducer, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { ApiError } from '@/api/client'
 import { Badge } from '@/components/ui/Badge'
@@ -23,6 +23,7 @@ function prefersReducedMotion(): boolean {
 }
 
 interface PackOpeningProps {
+  userId: number
   pack: TcgPack
   /** What the player may still open today; `undefined` while that is being looked up. */
   allowance: Allowance | undefined
@@ -38,22 +39,40 @@ interface PackOpeningProps {
  * happens next by itself: every step is a state in {@link openingReducer}, moved on by the server's
  * answer, a timer or the player.
  */
-export function PackOpening({ pack, allowance, cardBackUrl }: PackOpeningProps) {
+export function PackOpening({ userId, pack, allowance, cardBackUrl }: PackOpeningProps) {
   const [state, dispatch] = useReducer(openingReducer, sealed)
+  const storageKey = `tcg-pending-opening:${userId}:${pack.id}`
+  const [pendingId, setPendingId] = useState(() => readPendingId(storageKey))
+  const requestId = useRef(pendingId)
+  const requesting = useRef(false)
   const openPack = useOpenPack()
   const { phase, opening, revealed } = state
 
   // Once today's packs are gone, extra ones (from the shop) can still be opened.
-  const noneLeft = allowance?.leftToday === 0 && allowance.bonusPacks === 0
+  // A lost response may have used the last pack already; its retry must still be available.
+  const noneLeft = allowance?.leftToday === 0 && allowance.bonusPacks === 0 && pendingId === null
   const open = () => {
+    if (requesting.current || (phase !== 'sealed' && phase !== 'results')) return
+    requesting.current = true
+    requestId.current ??= crypto.randomUUID()
+    rememberPendingId(storageKey, requestId.current)
+    setPendingId(requestId.current)
     dispatch({ type: 'open' })
-    openPack.mutate(pack.id, {
-      onSuccess: (response) => dispatch({ type: 'opened', opening: response.opening }),
-      onError: (error) =>
+    openPack.mutate({ packId: pack.id, requestId: requestId.current }, {
+      onSuccess: (response) => {
+        requesting.current = false
+        requestId.current = null
+        setPendingId(null)
+        rememberPendingId(storageKey, null)
+        dispatch({ type: 'opened', opening: response.opening })
+      },
+      onError: (error) => {
+        requesting.current = false
         dispatch({
           type: 'failed',
           message: error instanceof ApiError ? error.message : 'The pack could not be opened. Please try again.',
-        }),
+        })
+      },
     })
   }
 
@@ -204,6 +223,24 @@ export function PackOpening({ pack, allowance, cardBackUrl }: PackOpeningProps) 
       )}
     </div>
   )
+}
+
+/** Keep an uncertain attempt across a reload, scoped to this account and pack in this tab. */
+function readPendingId(key: string): string | null {
+  try {
+    return sessionStorage.getItem(key)
+  } catch {
+    return null
+  }
+}
+
+function rememberPendingId(key: string, id: string | null) {
+  try {
+    if (id === null) sessionStorage.removeItem(key)
+    else sessionStorage.setItem(key, id)
+  } catch {
+    // With storage disabled, the ref still keeps retries safe until this component unmounts.
+  }
 }
 
 interface RevealCardProps {

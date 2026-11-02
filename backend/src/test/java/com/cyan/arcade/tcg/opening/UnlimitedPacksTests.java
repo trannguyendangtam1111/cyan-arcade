@@ -2,6 +2,7 @@ package com.cyan.arcade.tcg.opening;
 
 import java.time.Clock;
 import java.util.List;
+import java.util.UUID;
 import java.util.random.RandomGenerator;
 
 import com.cyan.arcade.IntegrationTest;
@@ -91,6 +92,22 @@ class UnlimitedPacksTests {
 		assertThat(this.jdbc.queryForObject("SELECT quantity FROM tcg_user_cards WHERE user_id = ?", Integer.class,
 				userId))
 			.isEqualTo(8);
+	}
+
+	@Test
+	void withoutALimitRetriesStillReturnOneOpening() throws Exception {
+		this.importer.importDataset(TinyCardGame.dataset(), "test");
+		Long single = TinyCardGame.packId(this.jdbc, "single");
+		Long userId = registeredUserId();
+		AuthenticatedUser player = new AuthenticatedUser(userId, "player", Role.USER);
+		PackOpeningService unlimited = new PackOpeningService(this.packs, this.cards, this.collections, this.store,
+				this.random, new OpeningProperties(0), BonusPacks.NONE, this.events, this.clock);
+		UUID requestId = UUID.randomUUID();
+		OpenPackResponse first = this.transaction.execute((status) -> unlimited.open(player, single, requestId));
+		OpenPackResponse replay = this.transaction.execute((status) -> unlimited.open(player, single, requestId));
+		assertThat(replay).isEqualTo(first);
+		assertThat(this.jdbc.queryForObject("SELECT count(*) FROM tcg_pack_openings WHERE user_id = ?", Long.class,
+				userId)).isEqualTo(1L);
 	}
 
 	@Test

@@ -1,5 +1,7 @@
 package com.cyan.arcade.tcg.opening;
 
+import java.util.UUID;
+
 import com.cyan.arcade.common.security.AuthenticatedUser;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -10,6 +12,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -32,12 +35,14 @@ class PackOpeningController {
 
 	/**
 	 * Opens a pack. The request has no body on purpose: which pack is in the path, who is asking is
-	 * in the session, and which cards come out is for the server alone to decide.
+	 * in the session, and which cards come out is for the server alone to decide. Clients supply
+	 * the same Idempotency-Key on every retry of one intended opening.
 	 */
 	@PostMapping("/packs/{id}/open")
 	@ResponseStatus(HttpStatus.CREATED)
-	OpenPackResponse open(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable Long id) {
-		return this.openings.open(user, id);
+	OpenPackResponse open(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable Long id,
+			@RequestHeader(name = "Idempotency-Key", required = false) UUID requestId) {
+		return this.openings.open(user, id, requestId);
 	}
 
 	@GetMapping("/openings")
