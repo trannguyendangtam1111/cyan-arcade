@@ -1,5 +1,5 @@
 import { next } from '@vercel/functions'
-import { authorizeAiAsset, PRIVATE_HEADERS } from './deployment.ts'
+import { authorizeAiAsset, PRIVATE_HEADERS } from './deployment.js'
 
 // Run before every filesystem/cache lookup, including encoded asset paths.
 // Only AI asset requests call Spring; ordinary assets and API rewrites pass through.

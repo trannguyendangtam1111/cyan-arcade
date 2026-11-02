@@ -1,3 +1,8 @@
+import { execFileSync } from 'node:child_process'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { basename, dirname, join, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
+import ts from 'typescript'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { backendOrigin, vercelConfiguration } from '../deployment'
 import middleware, { config as middlewareConfig } from '../middleware'
@@ -40,6 +45,49 @@ describe('Vercel deployment boundary', () => {
     for (const value of ['http://backend.invalid', origin + '/api', origin + '?key=x',
       'https://user:password@backend.invalid']) {
       expect(() => backendOrigin(value)).toThrow()
+    }
+  })
+
+  it('loads JavaScript-only middleware artifacts for the homepage, favicons and protected assets', () => {
+    const cache = resolve(process.cwd(), 'node_modules/.tmp')
+    mkdirSync(cache, { recursive: true })
+    const runtime = mkdtempSync(join(cache, 'middleware-runtime-'))
+    try {
+      for (const name of ['middleware', 'deployment']) {
+        const source = readFileSync(resolve(process.cwd(), name + '.ts'), 'utf8')
+        const { outputText } = ts.transpileModule(source, {
+          fileName: name + '.ts',
+          compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2023 },
+        })
+        writeFileSync(join(runtime, name + '.js'), outputText)
+      }
+      writeFileSync(join(runtime, 'package.json'), JSON.stringify({ type: 'module' }))
+      const entry = pathToFileURL(join(runtime, 'middleware.js')).href
+      const program = [
+        'let calls = 0;',
+        'globalThis.fetch = async () => { calls++; return new Response(null, { status: 403 }); };',
+        'const { default: middleware } = await import(' + JSON.stringify(entry) + ');',
+        'const results = [];',
+        'for (const path of ["/", "/favicon.ico", "/favicon.png"]) {',
+        '  const response = await middleware(new Request("https://arcade.example.invalid" + path));',
+        '  results.push(response.headers.get("x-middleware-next"));',
+        '}',
+        'const publicCalls = calls;',
+        'const denied = await middleware(new Request("https://arcade.example.invalid/assets/ai/chess.js"));',
+        'console.log(JSON.stringify({ results, publicCalls, denied: denied.status }));',
+      ].join('\n')
+      const output = execFileSync(process.execPath, ['--input-type=module', '-e', program], {
+        encoding: 'utf8',
+        env: { ...process.env, BACKEND_ORIGIN: origin },
+        timeout: 15_000,
+      })
+      expect(JSON.parse(output)).toEqual({ results: ['1', '1', '1'], publicCalls: 0, denied: 403 })
+    } finally {
+      // Only remove this test's freshly created directory inside the ignored cache.
+      if (dirname(runtime) !== cache || !basename(runtime).startsWith('middleware-runtime-')) {
+        throw new Error('Refusing to remove an unexpected runtime-test path')
+      }
+      rmSync(runtime, { recursive: true, force: true })
     }
   })
 
