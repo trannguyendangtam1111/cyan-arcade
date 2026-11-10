@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, renderHook as renderHookBare, waitFor } from '@testing-library/react'
 import { createElement, type ReactNode } from 'react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@/api/client'
 import { finishGameSession, startGameSession, type GameSessionResponse, type ScoreResponse } from '@/api/gameSessions'
 import { useScoreSubmission } from './useScoreSubmission'
@@ -311,4 +311,211 @@ describe('useScoreSubmission with game modes', () => {
     expect(hook.current.submission.status).toBe('saved')
   })
 
+})
+
+describe('finishing a run of a mode other than Classic', () => {
+  const offline = () => new ApiError(0, 'NETWORK_ERROR', 'offline')
+  const flush = (ms = 0) => act(async () => void (await vi.advanceTimersByTimeAsync(ms)))
+
+  beforeEach(() => {
+    queryClient = new QueryClient()
+    finish.mockResolvedValue(recorded)
+    vi.useFakeTimers()
+    start.mockResolvedValue({ ...session, mode: 'time-attack' })
+  })
+  afterEach(() => vi.useRealTimers())
+
+  function playTimeAttack() {
+    const rendered = renderHook(() => useScoreSubmission('2048'))
+    act(() => rendered.result.current.onGameStart('time-attack'))
+    act(() => rendered.result.current.onGameOver(result))
+    return rendered.result
+  }
+
+  it('tries again on its own, at once, while its time still fits, and saves the run', async () => {
+    finish.mockRejectedValueOnce(offline()).mockRejectedValueOnce(new ApiError(503, 'HTTP_503', 'unavailable'))
+    const hook = playTimeAttack()
+
+    await flush()
+    expect(finish).toHaveBeenCalledTimes(1)
+    expect(hook.current.submission.status).toBe('saving')
+    await flush(1000)
+    expect(finish).toHaveBeenCalledTimes(2)
+    await flush(3000)
+
+    expect(finish).toHaveBeenCalledTimes(3)
+    expect(hook.current.submission).toEqual({ status: 'saved', score: 12, rewards: null })
+    // The same session every time: one run, one session, finished once.
+    expect(start).toHaveBeenCalledTimes(1)
+    expect(new Set(finish.mock.calls.map(([id]) => id))).toEqual(new Set(['session-1']))
+  })
+
+  it('counts an attempt that had reached the server as saved, not as a second run', async () => {
+    finish.mockRejectedValueOnce(offline()).mockRejectedValueOnce(new ApiError(409, 'SESSION_ALREADY_FINISHED', 'done'))
+    const hook = playTimeAttack()
+    await flush(1000)
+
+    expect(hook.current.submission).toEqual({ status: 'saved', score: 12, rewards: null, alreadySaved: true })
+  })
+
+  it('gives up after a few seconds, still offering to retry', async () => {
+    finish.mockRejectedValue(offline())
+    const hook = playTimeAttack()
+    await flush(10_000)
+
+    expect(finish).toHaveBeenCalledTimes(3)
+    expect(hook.current.submission).toEqual({ status: 'failed', score: 12, canRetry: true, reason: 'error' })
+  })
+
+  it('never sends again a run the server refused', async () => {
+    finish.mockRejectedValue(new ApiError(400, 'SCORE_REJECTED', 'rejected'))
+    const hook = playTimeAttack()
+    await flush(10_000)
+
+    expect(finish).toHaveBeenCalledTimes(1)
+    expect(hook.current.submission).toEqual({ status: 'failed', score: 12, canRetry: false, reason: 'rejected' })
+  })
+
+  it('stops trying for a run once a new one has started', async () => {
+    finish.mockRejectedValueOnce(offline())
+    const { result: hook } = renderHook(() => useScoreSubmission('2048'))
+    act(() => hook.current.onGameStart('time-attack'))
+    act(() => hook.current.onGameOver(result))
+    await flush()
+    act(() => hook.current.onGameStart('time-attack'))
+    await flush(10_000)
+
+    expect(finish).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaves Classic as it was: one attempt, then the manual retry', async () => {
+    start.mockResolvedValue(session)
+    finish.mockRejectedValueOnce(offline())
+    const { result: hook } = renderHook(() => useScoreSubmission('snake'))
+    act(() => hook.current.onGameStart())
+    act(() => hook.current.onGameOver(result))
+    await flush(10_000)
+
+    expect(finish).toHaveBeenCalledTimes(1)
+    expect(hook.current.submission).toEqual({ status: 'failed', score: 12, canRetry: true, reason: 'error' })
+  })
+})
+
+describe('telling a game its run was recorded (onSaved)', () => {
+  beforeEach(() => {
+    queryClient = new QueryClient()
+    start.mockResolvedValue({ ...session, mode: 'puzzle-1' })
+    finish.mockResolvedValue(recorded)
+  })
+
+  /** Plays one Puzzle run that reports `onSaved`, and gives the hook and the callback. */
+  function playStage() {
+    const onSaved = vi.fn()
+    const rendered = renderHook(() => useScoreSubmission('2048'))
+    act(() => rendered.result.current.onGameStart('puzzle-1'))
+    act(() => rendered.result.current.onGameOver({ ...result, onSaved }))
+    return { hook: rendered.result, onSaved }
+  }
+
+  it('calls it once the server has recorded the run, and sends it nowhere', async () => {
+    const { hook, onSaved } = playStage()
+
+    await waitFor(() => expect(hook.current.submission.status).toBe('saved'))
+    expect(onSaved).toHaveBeenCalledTimes(1)
+    // One session, finished once; the callback is not a detail of the run.
+    expect(start).toHaveBeenCalledTimes(1)
+    expect(finish).toHaveBeenCalledTimes(1)
+    expect(finish).toHaveBeenCalledWith('session-1', 12, {})
+  })
+
+  it('never calls it for a run the server refused', async () => {
+    finish.mockRejectedValue(new ApiError(400, 'SCORE_REJECTED', 'rejected'))
+    const { hook, onSaved } = playStage()
+
+    await waitFor(() => expect(hook.current.submission).toMatchObject({ status: 'failed', reason: 'rejected' }))
+    expect(onSaved).not.toHaveBeenCalled()
+  })
+
+  it('never calls it for a run that could not be saved, until a retry saves it', async () => {
+    vi.useFakeTimers()
+    try {
+      finish.mockRejectedValue(new ApiError(0, 'NETWORK_ERROR', 'offline'))
+      const { hook, onSaved } = playStage()
+      await act(async () => void (await vi.advanceTimersByTimeAsync(10_000)))
+
+      expect(hook.current.submission).toMatchObject({ status: 'failed', canRetry: true, reason: 'error' })
+      expect(onSaved).not.toHaveBeenCalled()
+
+      finish.mockResolvedValue(recorded)
+      act(() => hook.current.retry())
+      await act(async () => void (await vi.advanceTimersByTimeAsync(0)))
+      expect(hook.current.submission.status).toBe('saved')
+      expect(onSaved).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('never calls it when the session could not be opened', async () => {
+    start.mockRejectedValue(new ApiError(0, 'NETWORK_ERROR', 'offline'))
+    const { hook, onSaved } = playStage()
+
+    await waitFor(() => expect(hook.current.submission.status).toBe('failed'))
+    expect(onSaved).not.toHaveBeenCalled()
+  })
+
+  it('never calls it for a run the server opened under another mode', async () => {
+    start.mockResolvedValue({ ...session, mode: 'classic' })
+    const { hook, onSaved } = playStage()
+
+    await waitFor(() => expect(hook.current.submission).toMatchObject({ status: 'failed', reason: 'mode-mismatch' }))
+    expect(onSaved).not.toHaveBeenCalled()
+  })
+
+  it('calls it for an attempt that had reached the server, once', async () => {
+    // The first answer was lost on the way back; the retry finds the run finished, which the server
+    // only does once it has accepted it.
+    vi.useFakeTimers()
+    try {
+      finish
+        .mockRejectedValueOnce(new ApiError(0, 'NETWORK_ERROR', 'offline'))
+        .mockRejectedValue(new ApiError(409, 'SESSION_ALREADY_FINISHED', 'done'))
+      const { hook, onSaved } = playStage()
+      await act(async () => void (await vi.advanceTimersByTimeAsync(1000)))
+
+      expect(hook.current.submission).toEqual({ status: 'saved', score: 12, rewards: null, alreadySaved: true })
+      expect(onSaved).toHaveBeenCalledTimes(1)
+
+      // A further answer for the same run (here, sending it again) is not a second save.
+      act(() => hook.current.retry())
+      await act(async () => void (await vi.advanceTimersByTimeAsync(0)))
+      expect(onSaved).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('ignores a late answer once a new run has started', async () => {
+    let resolveFinish!: (value: ScoreResponse) => void
+    finish.mockReturnValue(new Promise((resolve) => (resolveFinish = resolve)))
+    const { hook, onSaved } = playStage()
+    await waitFor(() => expect(finish).toHaveBeenCalled())
+
+    act(() => hook.current.onGameStart('puzzle-1'))
+    await act(async () => resolveFinish(recorded))
+
+    expect(onSaved).not.toHaveBeenCalled()
+  })
+
+  it('keeps the save when the game itself fails in its callback', async () => {
+    const onSaved = vi.fn(() => {
+      throw new Error('storage full')
+    })
+    const rendered = renderHook(() => useScoreSubmission('2048'))
+    act(() => rendered.result.current.onGameStart('puzzle-1'))
+    act(() => rendered.result.current.onGameOver({ ...result, onSaved }))
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1))
+    expect(rendered.result.current.submission).toEqual({ status: 'saved', score: 12, rewards: null })
+  })
 })

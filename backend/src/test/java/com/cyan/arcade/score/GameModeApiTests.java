@@ -158,7 +158,7 @@ class GameModeApiTests {
 		for (String slug : catalog) {
 			this.mockMvc.perform(get("/api/games/{slug}/modes", slug))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.length()").value(1))
+				.andExpect(jsonPath("$.length()").value(slug.equals("2048") ? 9 : 1))
 				.andExpect(jsonPath("$[0].id").value("classic"))
 				.andExpect(jsonPath("$[0].name").value("Classic"))
 				.andExpect(jsonPath("$[0].ranked").value(true))

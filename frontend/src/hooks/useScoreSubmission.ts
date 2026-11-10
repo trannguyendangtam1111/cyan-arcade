@@ -36,6 +36,11 @@ function reasonOf(error: unknown): FailureReason {
   return 'error'
 }
 
+/** Short retries keep timed runs within their server-enforced time allowance. */
+export const FINISH_RETRY_DELAYS_MS = [1000, 3000]
+
+const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+
 interface Run {
   /** The chosen mode, fixed for the run. */
   mode: string
@@ -43,6 +48,9 @@ interface Run {
   session: Promise<GameSessionResponse>
   /** Set once the run has ended. */
   result?: GameResult
+  /** The game was told its run is saved; repeated retries cannot confirm twice. */
+  confirmed?: boolean
+  submitting?: boolean
 }
 
 /** The whole-number details a game reported about its run, in the shape the API accepts. */
@@ -61,6 +69,27 @@ function numericDetails(result: GameResult): Record<string, number> {
  * into the server flow: open a session at the start, finish it with the score at the end. Games
  * never talk to the API themselves, so all score submission stays in one place.
  */
+/** Finishes the session; for a mode other than Classic, tries again shortly after a failure retrying can fix. */
+async function finishWithRetries(
+  mode: string,
+  sessionId: string,
+  score: number,
+  details: Record<string, number>,
+  isCurrent: () => boolean,
+) {
+  const delays = mode === CLASSIC_MODE ? [] : FINISH_RETRY_DELAYS_MS
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await finishGameSession(sessionId, score, details)
+    } catch (error) {
+      const retryable = !(error instanceof ApiError && error.isClientError)
+      if (!retryable || attempt >= delays.length || !isCurrent()) throw error
+      await wait(delays[attempt])
+      if (!isCurrent()) throw error
+    }
+  }
+}
+
 export function useScoreSubmission(gameSlug: string) {
   const queryClient = useQueryClient()
   const [submission, setSubmission] = useState<ScoreSubmission>({ status: 'idle' })
@@ -70,31 +99,47 @@ export function useScoreSubmission(gameSlug: string) {
 
   const submit = useCallback(
     async (run: Run, result: GameResult) => {
+      if (run.submitting || run.confirmed) return
+      run.submitting = true
       const { score } = result
       const isCurrent = () => current.current === run
+      // Tells the game its run is recorded: once per run, and only while it is the current one, so a
+      // late answer for an earlier run (or a second answer for this one) changes nothing.
+      const confirm = () => {
+        if (!isCurrent() || run.confirmed) return
+        run.confirmed = true
+        try {
+          result.onSaved?.()
+        } catch {
+          // The game's own bookkeeping: it cannot undo the save.
+        }
+      }
       setSubmission({ status: 'saving', score })
 
       let session: GameSessionResponse
       try {
         session = await run.session
       } catch {
+        run.submitting = false
         // The session never existed, so there is nothing to finish and nothing to retry.
         if (isCurrent()) setSubmission({ status: 'failed', score, canRetry: false, reason: 'error' })
         return
       }
 
       if (modeOf(session) !== run.mode) {
+        run.submitting = false
         if (isCurrent()) setSubmission({ status: 'failed', score, canRetry: false, reason: 'mode-mismatch' })
         return
       }
 
       try {
-        const recorded = await finishGameSession(session.id, score, numericDetails(result))
+        const recorded = await finishWithRetries(run.mode, session.id, score, numericDetails(result), isCurrent)
         // The leaderboard has a new entry, and a signed-in player's XP, history and achievements
         // have changed, whether or not the player is still looking at this run.
         void queryClient.invalidateQueries({ queryKey: leaderboardKeys.game(gameSlug) })
         void queryClient.invalidateQueries({ queryKey: userKeys.all })
         if (isCurrent()) setSubmission({ status: 'saved', score, rewards: recorded.rewards ?? null })
+        confirm()
       } catch (error) {
         if (!isCurrent()) return
         // "Already finished" means an earlier attempt did reach the server: the score is recorded.
@@ -106,6 +151,9 @@ export function useScoreSubmission(gameSlug: string) {
             ? { status: 'saved', score, rewards: null, alreadySaved: true }
             : { status: 'failed', score, canRetry, reason: reasonOf(error) },
         )
+        if (alreadySaved) confirm()
+      } finally {
+        run.submitting = false
       }
     },
     [gameSlug, queryClient],

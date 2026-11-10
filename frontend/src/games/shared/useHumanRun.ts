@@ -7,7 +7,8 @@ import { useRunStart } from './useRunStart'
  * The life cycle of one human run, identical for every game:
  *
  *   begin()            first input     → tells the platform the run started (once)
- *   finish(score, ..)  game over       → updates the best score and reports the result (once)
+ *   finish(score, ..)  game over       → updates the best score and reports the result (once);
+ *                                       `onSaved`, if given, runs once the server has recorded it
  *   reset()            a new game      → ready for the next run
  *
  * Games call these three and nothing else, so none of them contains its own score-reporting code.
@@ -23,11 +24,11 @@ export function useHumanRun(gameSlug: string, { onGameStart, onGameOver }: GameP
   const finished = useRef(false)
 
   const finish = useCallback(
-    (score: number, metadata?: Record<string, unknown>) => {
+    (score: number, metadata?: Record<string, unknown>, onSaved?: () => void) => {
       if (finished.current) return
       finished.current = true
       setNewBest(record(score))
-      onGameOver({ score, durationMs: elapsedMs(), metadata })
+      onGameOver({ score, durationMs: elapsedMs(), metadata, ...(onSaved && { onSaved }) })
     },
     [record, onGameOver, elapsedMs],
   )

@@ -169,4 +169,9 @@ export interface GameResult {
   durationMs: number
   /** Game-specific extras (lines cleared, max tile, ...) kept opaque to the platform. */
   metadata?: Record<string, unknown>
+  /**
+   * Called once the server has recorded this run, only while it is the latest run. A game can use
+   * this to keep progress for saved clears (2048 Puzzle: the next stage opens).
+   */
+  onSaved?: () => void
 }
