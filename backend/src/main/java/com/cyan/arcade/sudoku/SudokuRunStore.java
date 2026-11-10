@@ -8,6 +8,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -201,6 +202,34 @@ class SudokuRunStore {
 					row.getInt("mistakes"), row.getInt("hints"), row.getLong("active_ms"),
 					row.getObject("puzzle_date", LocalDate.class)))
 			.list();
+	}
+
+	/**
+	 * Makes one player's Practice starts wait for each other until the current transaction
+	 * ends, so two starts at once cannot both find no game in play and both leave one in play. A
+	 * transaction-scoped advisory lock on the player and the mode alone (account or guest): other
+	 * players and Daily starts are never held up, and there is no row to lock
+	 * before the player's first game.
+	 */
+	void lockStarts(Owner owner, Mode mode) {
+		if (mode == Mode.DAILY) {
+			throw new IllegalArgumentException("A daily run is kept one per day by its unique index");
+		}
+		String player = (owner.userId() != null) ? "account:" + owner.userId() : "guest:" + owner.playerId();
+		this.jdbc.sql("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))")
+			.param("key", "sudoku-" + mode.name().toLowerCase(Locale.ROOT) + "-start:" + player)
+			.query((row, index) -> 0)
+			.list();
+	}
+
+	/** Whether the player has a run of the puzzle with these clues, in any mode. */
+	boolean hasPlayed(Owner owner, String givens) {
+		return this.jdbc.sql("SELECT EXISTS (SELECT 1 FROM sudoku_runs WHERE givens = :givens AND " + ownerCondition(owner)
+				+ ")")
+			.param("givens", givens)
+			.params(ownerParams(owner))
+			.query(Boolean.class)
+			.single();
 	}
 
 	/** Forgets relaxed games started before then: they count for nothing once left. */

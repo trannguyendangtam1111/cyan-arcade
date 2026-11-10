@@ -1,6 +1,5 @@
 package com.cyan.arcade.sudoku;
 
-import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -13,7 +12,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.random.RandomGenerator;
 import java.util.stream.Collectors;
 
 import com.cyan.arcade.common.error.ApiException;
@@ -38,7 +36,6 @@ import com.cyan.arcade.sudoku.SudokuViews.StatsResponse;
 import com.cyan.arcade.sudoku.SudokuViews.TodayResponse;
 import com.cyan.arcade.sudoku.daily.DailySchedule;
 import com.cyan.arcade.sudoku.engine.Difficulty;
-import com.cyan.arcade.sudoku.engine.Generator;
 import com.cyan.arcade.sudoku.engine.Grid;
 import com.cyan.arcade.sudoku.engine.Generator.GenerationException;
 import com.cyan.arcade.sudoku.engine.Hints;
@@ -103,13 +100,15 @@ class SudokuService {
 
 	private final Clock clock;
 
-	private final RandomGenerator random = new SecureRandom();
+	private final PracticePuzzles practicePuzzles;
 
-	SudokuService(SudokuRunStore store, DailyPuzzles dailyPuzzles, GameSessionService sessions, Clock clock) {
+	SudokuService(SudokuRunStore store, DailyPuzzles dailyPuzzles, GameSessionService sessions, Clock clock,
+			PracticePuzzles practicePuzzles) {
 		this.store = store;
 		this.dailyPuzzles = dailyPuzzles;
 		this.sessions = sessions;
 		this.clock = clock;
+		this.practicePuzzles = practicePuzzles;
 	}
 
 	/** Today's puzzle and the rules, and the caller's runs ({@code owner} is {@code null} for an unknown guest). */
@@ -161,10 +160,13 @@ class SudokuService {
 
 	/**
 	 * A new practice game of a difficulty: ranked with a session, relaxed without. Any practice game
-	 * the player had going is abandoned.
+	 * the player had going is abandoned. Generation avoids already played puzzles within a bounded
+	 * number of attempts. Starts by one player are serialized so only the latest remains in play.
 	 */
 	@Transactional
 	public RunResponse startPractice(Owner owner, Difficulty difficulty, UUID sessionId) {
+		this.store.lockStarts(owner, Mode.PRACTICE);
+		// A start that waited begins after the game it ends and sees a same-session run already stored.
 		Instant now = this.clock.instant();
 		RunSession session = (sessionId != null) ? ownSession(owner, sessionId) : null;
 		if (session != null) {
@@ -177,7 +179,7 @@ class SudokuService {
 		this.store.abandonPractice(owner, now);
 		Puzzle puzzle;
 		try {
-			puzzle = Generator.generate(difficulty, this.random.nextLong());
+			puzzle = this.practicePuzzles.next(owner, difficulty);
 		}
 		catch (GenerationException ex) {
 			throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, PUZZLE_UNAVAILABLE,
