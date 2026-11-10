@@ -125,6 +125,87 @@ describe('Sudoku', () => {
     expect(cell(2)).toHaveAccessibleName('Row 1, column 3: empty, notes 1')
   })
 
+  it('fills in every empty cell\'s candidates with Auto or C: one undo step, nothing sent, no penalty', async () => {
+    const { server, onGameOver } = setup()
+    await startDaily()
+    // A note of the player's own, at r1c4.
+    fireEvent.click(cell(3))
+    key('n')
+    key('9')
+    key('n')
+    expect(cell(3)).toHaveAccessibleName('Row 1, column 4: empty, notes 9')
+    /** Candidate notes are local: no server requests belong to this action. */
+    const gameCalls = () => server.calls
+    const sent = gameCalls().length
+
+    key('c')
+    // r1c3: row 5 3 7, column 8, box 5 3 6 9 8. r1c4: row 5 3 7, column 1 8 4, box 7 1 9 5.
+    expect(cell(2)).toHaveAccessibleName('Row 1, column 3: empty, notes 1, 2, 4')
+    expect(cell(3)).toHaveAccessibleName('Row 1, column 4: empty, notes 2, 6')
+    expect(cell(0)).toHaveAccessibleName('Row 1, column 1: 5, clue')
+    expect(cell(80)).toHaveAccessibleName('Row 9, column 9: 9, clue')
+
+    // One step back puts every cell's notes back as they were, the player's 9 included.
+    fireEvent.click(tool('Undo'))
+    expect(cell(2)).toHaveAccessibleName('Row 1, column 3: empty')
+    expect(cell(3)).toHaveAccessibleName('Row 1, column 4: empty, notes 9')
+    key('y', { ctrlKey: true })
+    expect(cell(2)).toHaveAccessibleName('Row 1, column 3: empty, notes 1, 2, 4')
+    expect(cell(3)).toHaveAccessibleName('Row 1, column 4: empty, notes 2, 6')
+    key('z', { ctrlKey: true })
+    expect(cell(3)).toHaveAccessibleName('Row 1, column 4: empty, notes 9')
+    // The toolbar button does the same.
+    fireEvent.click(tool('Auto-fill candidates'))
+    expect(cell(3)).toHaveAccessibleName('Row 1, column 4: empty, notes 2, 6')
+
+    // Notes are no move: nothing goes to the game, and the mistakes, hints, clock and score are untouched.
+    await act(async () => Promise.resolve())
+    expect(gameCalls()).toHaveLength(sent)
+    expect(screen.getByText('Mistakes 0/3')).toBeInTheDocument()
+    expect(tool('Hint')).toHaveTextContent('3')
+    expect(screen.getByRole('timer')).toHaveTextContent('1:05')
+    expect(onGameOver).not.toHaveBeenCalled()
+
+    // Notes by hand work as before on the filled-in marks, and a placed digit clears them where it rules them out.
+    fireEvent.click(cell(2))
+    key('n')
+    key('1')
+    expect(cell(2)).toHaveAccessibleName('Row 1, column 3: empty, notes 2, 4')
+    key('n')
+    key('4')
+    expect(cell(2)).toHaveAccessibleName('Row 1, column 3: 4')
+    // r2c3 had 2, 4, 7.
+    expect(cell(11)).toHaveAccessibleName('Row 2, column 3: empty, notes 2, 7')
+    await waitFor(() => expect(server.moves()).toEqual([{ cell: 2, digit: 4 }]))
+  })
+
+  it('cannot fill in candidates while paused or once the game is over', async () => {
+    setup()
+    await startDaily()
+    fireEvent.click(screen.getByRole('button', { name: 'Pause' }))
+    expect(await screen.findByRole('heading', { name: 'Paused' })).toBeInTheDocument()
+    expect(tool('Auto-fill candidates')).toBeDisabled()
+    key('c')
+    fireEvent.click(screen.getAllByRole('button', { name: 'Resume' })[1])
+    await waitFor(() => expect(cell(0)).toHaveAccessibleName('Row 1, column 1: 5, clue'))
+    expect(cell(2)).toHaveAccessibleName('Row 1, column 3: empty')
+    expect(tool('Auto-fill candidates')).toBeEnabled()
+
+    // Three wrong digits end the game (r1c3 is 4, r1c4 is 6), with empty cells left.
+    fireEvent.click(cell(2))
+    key('1')
+    key('2')
+    fireEvent.click(cell(3))
+    key('1')
+    const dialog = await screen.findByRole('dialog', { name: 'Out of mistakes' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(tool('Auto-fill candidates')).toBeDisabled()
+    key('c')
+    expect(cell(4)).toHaveAccessibleName(/^Row 1, column 5: 7/)
+    expect(cell(5)).toHaveAccessibleName('Row 1, column 6: empty')
+  })
+
   it('undoes and redoes, with the buttons and with Ctrl+Z and Ctrl+Y', async () => {
     const { server } = setup()
     await startDaily()

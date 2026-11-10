@@ -11,6 +11,7 @@ import {
   emptyHistory,
   enterDigit,
   eraseCell,
+  fillCandidates as fillCandidatesEdit,
   record,
   redo as redoEdit,
   removeNotes,
@@ -307,6 +308,11 @@ export function useSudokuGame(
     sync(run.id, valueMoves(local.board, result.board))
   }, [run, local, active, paused, mode, sync])
 
+  /** Fills every empty cell's candidates as one local edit, without sending a move or changing score. */
+  const fillCandidates = useCallback(() => {
+    edit((board) => fillCandidatesEdit(board))
+  }, [edit])
+
   /** Clears the player's digits and notes. The clock, mistakes and hints stay: it is the same game. */
   const clearAll = useCallback(() => {
     edit((board) => clearBoard(board))
@@ -484,6 +490,7 @@ export function useSudokuGame(
     highlightDigit,
     notesMode,
     toggleNotes: () => setNotesMode((on) => !on),
+    fillCandidates,
     fillMode,
     fillDigit,
     toggleFill,

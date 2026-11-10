@@ -17,7 +17,7 @@ const SETTING_LABELS: { key: keyof SudokuSettings; label: string; hint: string }
   { key: 'highlightConflicts', label: 'Highlight conflicts', hint: 'Marks digits that repeat in a row, column or box.' },
   { key: 'showMistakes', label: 'Show mistakes', hint: 'Marks digits that are wrong (ranked games). The counter counts them either way.' },
   { key: 'autoRemoveNotes', label: 'Auto-remove notes', hint: 'Placing a digit removes it from the notes it rules out.' },
-  { key: 'keyboardShortcuts', label: 'Keyboard shortcuts', hint: 'N notes, H hint, Esc pause, Ctrl+Z / Ctrl+Y undo and redo.' },
+  { key: 'keyboardShortcuts', label: 'Keyboard shortcuts', hint: 'N notes, C auto notes, H hint, Esc pause, Ctrl+Z / Ctrl+Y undo and redo.' },
 ]
 
 export function SettingsDialog({

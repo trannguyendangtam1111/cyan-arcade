@@ -87,7 +87,7 @@ export default function SudokuGame(props: GameProps<SudokuAiPlayer>) {
   }
 
   // --- Keyboard ----------------------------------------------------------------------------------
-  const { enter, erase, move, toggleNotes, askHint, undo, redo, togglePause, selected } = game
+  const { enter, erase, move, toggleNotes, fillCandidates, askHint, undo, redo, togglePause, selected } = game
   useEffect(() => {
     if (isAi || dialogOpen) return
     const onKeyDown = (event: KeyboardEvent) => {
@@ -108,6 +108,9 @@ export default function SudokuGame(props: GameProps<SudokuAiPlayer>) {
         case 'notes':
           toggleNotes()
           break
+        case 'candidates':
+          fillCandidates()
+          break
         case 'hint':
           askHint('REVEAL')
           break
@@ -124,7 +127,7 @@ export default function SudokuGame(props: GameProps<SudokuAiPlayer>) {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [isAi, dialogOpen, settings.keyboardShortcuts, enter, erase, move, toggleNotes, askHint, undo, redo, togglePause, selected])
+  }, [isAi, dialogOpen, settings.keyboardShortcuts, enter, erase, move, toggleNotes, fillCandidates, askHint, undo, redo, togglePause, selected])
 
   // --- The board: the player's game, or the AI's --------------------------------------------------
   const frame = ai.frame
@@ -271,6 +274,7 @@ export default function SudokuGame(props: GameProps<SudokuAiPlayer>) {
         onRedo={game.redo}
         onErase={game.erase}
         onNotes={game.toggleNotes}
+        onCandidates={game.fillCandidates}
         onFill={game.toggleFill}
         onHint={() => setHintOpen((open) => !open)}
       />
@@ -447,7 +451,8 @@ function HowToPlay() {
     <div className="flex flex-col gap-2">
       <p>Fill the grid so every row, column and 3×3 box holds the digits 1 to 9 once each.</p>
       <p>
-        Pick a cell, then a digit. <Key>N</Key> switches to notes; <Key>Fill</Key> places one digit with every tap. Arrows move, <Key>Del</Key> erases,{' '}
+        Pick a cell, then a digit. <Key>N</Key> switches to notes; <Key>Auto</Key> (or <Key>C</Key>) pencils in every empty cell's candidates;{' '}
+        <Key>Fill</Key> places one digit with every tap. Arrows move, <Key>Del</Key> erases,{' '}
         <Key>Ctrl</Key>+<Key>Z</Key> undoes, <Key>Esc</Key> pauses.
       </p>
       <p>
