@@ -2,7 +2,7 @@ import { memo } from 'react'
 import { cn } from '@/lib/cn'
 import { HEIGHT, WIDTH, dropDistance, pieceCells } from '../engine/tetrisEngine'
 import type { Piece, TetrisState } from '../types/tetrisTypes'
-import { BLOCK, PIECE_COLORS } from './pieceStyles'
+import { BLOCK, CELL_COLORS } from './pieceStyles'
 
 interface TetrisBoardProps {
   state: TetrisState
@@ -36,7 +36,7 @@ export const TetrisBoard = memo(function TetrisBoard({ state, target }: TetrisBo
       {board.map((locked, index) => {
         const type = locked ?? (active.has(index) ? piece.type : null)
         if (type) {
-          return <div key={index} className={cn(BLOCK, PIECE_COLORS[type], !playing && 'opacity-60 grayscale-50')} />
+          return <div key={index} className={cn(BLOCK, CELL_COLORS[type], !playing && 'opacity-60 grayscale-50')} />
         }
         if (ghost.has(index)) {
           return <div key={index} className="rounded-[18%] border-2 border-dashed border-(--accent) bg-(--accent)/15" />

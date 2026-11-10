@@ -196,12 +196,18 @@ describe('Tetris AI decisions', () => {
       const action = ai.getNextAction(current)
       played.push(action)
       current = updateTetris(current, action)
-      expect(played.length).toBeLessThan(20)
+      expect(played.length).toBeLessThan(40)
     }
 
-    expect(played).toEqual(target.actions)
-    expect(played.at(-1)).toBe('HARD_DROP')
-    expect(current).toEqual(target.result)
+    // The placement's moves, then soft drops a row at a time instead of its hard drop.
+    const moves = target.actions.slice(0, -1)
+    expect(played.slice(0, moves.length)).toEqual(moves)
+    expect(new Set(played.slice(moves.length))).toEqual(new Set(['SOFT_DROP']))
+    expect(played).not.toContain('HARD_DROP')
+    // Same landing, same lines, same next piece; only the drop points differ (1 a row, not 2).
+    expect(current.board).toEqual(target.result.board)
+    expect(current.lines).toBe(target.result.lines)
+    expect(current.piece).toEqual(target.result.piece)
   })
 
   it('rotates before sliding, and drops only when in position', () => {
@@ -210,7 +216,24 @@ describe('Tetris AI decisions', () => {
     expect(nextActionTowards({ type: 'T', rotation: 0, x: 3, y: 0 }, target)).toBe('ROTATE_CW')
     expect(nextActionTowards({ type: 'T', rotation: 1, x: 3, y: 0 }, target)).toBe('RIGHT')
     expect(nextActionTowards({ type: 'T', rotation: 1, x: 7, y: 0 }, target)).toBe('LEFT')
-    expect(nextActionTowards({ type: 'T', rotation: 1, x: 5, y: 0 }, target)).toBe('HARD_DROP')
+    expect(nextActionTowards({ type: 'T', rotation: 1, x: 5, y: 0 }, target)).toBe('SOFT_DROP')
+  })
+
+  it('plans again from where the piece is when gravity has carried it against the stack', () => {
+    // Two rows full but for columns 0-1, and a tower in column 2 from row 10 down. From the spawn
+    // rows the O can slide past the tower and clear both rows; once fallen beside it, it cannot.
+    const board = boardWithRows('..XXXXXXXX', '..XXXXXXXX')
+    for (let y = 10; y < HEIGHT; y++) board[y * WIDTH + 2] = 'J'
+    const ai = createTetrisAi()
+    const high = stateWith('O', board)
+    expect(ai.decide(high).target!.x).toBe(0)
+
+    const low: TetrisState = { ...high, piece: { ...high.piece, x: 3, y: 12 } }
+    expect(updateTetris(low, 'LEFT')).toBe(low) // the tower is in the way now
+    const decision = ai.decide(low)
+
+    expect(decision.target!.x).toBeGreaterThanOrEqual(3)
+    expect(updateTetris(low, decision.action)).not.toBe(low) // never a move the board refuses
   })
 
   it('is deterministic: the same state always gives the same placement', () => {

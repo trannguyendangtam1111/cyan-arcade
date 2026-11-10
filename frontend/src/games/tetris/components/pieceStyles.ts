@@ -1,4 +1,4 @@
-import type { PieceType } from '../types/tetrisTypes'
+import type { Garbage, PieceType } from '../types/tetrisTypes'
 
 /** The classic tetromino colours. */
 export const PIECE_COLORS: Record<PieceType, string> = {
@@ -10,6 +10,9 @@ export const PIECE_COLORS: Record<PieceType, string> = {
   J: 'bg-blue-500',
   L: 'bg-orange-500',
 }
+
+/** Every block a board can hold: the pieces' colours, and grey for a Challenge stage's garbage. */
+export const CELL_COLORS: Record<PieceType | Garbage, string> = { ...PIECE_COLORS, G: 'bg-slate-400' }
 
 /** One block of a piece: a rounded square with a highlight on top and a darker lip underneath. */
 export const BLOCK = 'rounded-[18%] shadow-[inset_0_-3px_0_rgb(0_0_0/0.18),inset_0_2px_0_rgb(255_255_255/0.35)]'

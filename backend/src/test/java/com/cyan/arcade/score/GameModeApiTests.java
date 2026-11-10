@@ -159,6 +159,7 @@ class GameModeApiTests {
 			this.mockMvc.perform(get("/api/games/{slug}/modes", slug))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.length()").value(switch (slug) {
+					case "tetris" -> 9;
 					case "snake" -> 10;
 					case "2048" -> 9;
 					default -> 1;
