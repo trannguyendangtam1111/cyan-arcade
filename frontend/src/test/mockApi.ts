@@ -2,7 +2,7 @@ import { vi } from 'vitest'
 import type { SessionUser } from '@/api/auth'
 import type { DailyChallenge } from '@/api/dailyChallenges'
 import type { CoinTransaction, DailyLoginStatus, InventoryEntry, ItemType, ShopItem } from '@/api/economy'
-import type { GameResponse } from '@/api/games'
+import { CLASSIC, type GameMode, type GameResponse } from '@/api/games'
 import type { Rewards } from '@/api/gameSessions'
 import type {
   LeaderboardEntry,
@@ -283,8 +283,15 @@ interface MockApiOptions {
   /** HTTP status for `POST /api/game-sessions/{id}/finish`. Anything but 200 returns a problem. */
   finishStatus?: number
   /**
+   * The modes each game offers (`GET /api/games/{slug}/modes`), by slug. A scored game not listed
+   * offers Classic alone and an unscored one none, as on the real backend. Starting a run and asking
+   * for a board check the mode against these.
+   */
+  modes?: Record<string, GameMode[]>
+  /**
    * Board entries, best first, per game slug (every period) or per `slug:PERIOD` (that period
    * only, e.g. `snake:WEEKLY`). Games not listed have empty boards.
+   * A mode other than Classic has its own: `slug@mode` or `slug@mode:PERIOD` (`slug` alone is Classic).
    */
   scores?: Record<string, Partial<LeaderboardEntry>[]>
   /** The caller's rank and best score, per game slug or per `slug:PERIOD`, like `scores`. */
@@ -345,6 +352,7 @@ const defaultRewards: Rewards = {
 /** Builds the page of a leaderboard the way the backend would. */
 function leaderboardPage(
   gameSlug: string,
+  mode: GameMode,
   period: LeaderboardPeriod,
   scores: Partial<LeaderboardEntry>[],
   page: number,
@@ -363,6 +371,9 @@ function leaderboardPage(
   const timed = period !== 'ALL_TIME'
   return {
     gameSlug,
+    mode: mode.id,
+    order: mode.order,
+    unit: mode.unit,
     period,
     periodStart: timed ? '2026-09-28T00:00:00Z' : null,
     periodEnd: timed ? new Date(Date.now() + 5 * 60 * 60_000 + 12 * 60_000 + 30_000).toISOString() : null,
@@ -384,6 +395,7 @@ export function mockApi({
   games = catalogFixture,
   offline = false,
   finishStatus = 200,
+  modes = {},
   scores = {},
   standings = {},
   ranks = { bestRank: null, bestRankGame: null, games: [] },
@@ -414,6 +426,10 @@ export function mockApi({
   let balance = coins
   let claimedToday = dailyLogin.claimedToday ?? false
   const streak = dailyLogin.streak ?? 0
+  // The mode of the run started last, which its score keeps.
+  let startedMode = CLASSIC.id
+  /** The modes a game offers, like the server: Classic alone unless the test says otherwise. */
+  const declaredModes = (slug: string): GameMode[] => modes[slug] ?? [CLASSIC]
   const owned = new Map<number, number>()
   const purchases = new Map<string, Record<string, unknown>>()
   const worn = new Set<number>()
@@ -855,13 +871,20 @@ export function mockApi({
     // --- Game sessions ---------------------------------------------------------------------
     if (method === 'POST') {
       if (path === '/api/game-sessions') {
-        return json({ id: SESSION_ID, gameSlug: body.gameSlug, startedAt: '2026-09-30T10:00:00Z' }, 201)
+        const gameSlug = String(body.gameSlug)
+        const mode = typeof body.mode === 'string' ? body.mode : CLASSIC.id
+        if (!declaredModes(gameSlug).some((declared) => declared.id === mode)) {
+          return problem(400, 'UNKNOWN_MODE', `${gameSlug} has no mode '${mode}'`)
+        }
+        startedMode = mode
+        return json({ id: SESSION_ID, gameSlug, mode, startedAt: '2026-09-30T10:00:00Z' }, 201)
       }
       if (path === `/api/game-sessions/${SESSION_ID}/finish`) {
         if (finishStatus !== 200) return problem(finishStatus, 'INTERNAL_ERROR', 'Rejected')
         return json({
           sessionId: SESSION_ID,
           gameSlug: 'snake',
+          mode: startedMode,
           score: body.score,
           durationMs: 61_000,
           recordedAt: '2026-09-30T10:01:01Z',
@@ -881,9 +904,22 @@ export function mockApi({
       const size = Number(url.searchParams.get('size') ?? 20)
       const period = (url.searchParams.get('period') ?? 'ALL_TIME') as LeaderboardPeriod
       if (!['DAILY', 'WEEKLY', 'ALL_TIME'].includes(period)) return problem(400, 'BAD_REQUEST', 'Unknown period')
-      const key = `${board}:${period}`
-      const entries = scores[key] ?? scores[board] ?? []
-      return json(leaderboardPage(board, period, entries, page, size, standings[key] ?? standings[board] ?? null))
+      const modeId = url.searchParams.get('mode') ?? CLASSIC.id
+      const mode = declaredModes(board).find((declared) => declared.ranked && declared.id === modeId)
+      if (!mode) return problem(404, 'UNKNOWN_MODE', `${board} has no leaderboard for mode '${modeId}'`)
+      // Classic's entries are keyed by the slug alone; another mode's by `slug@mode`.
+      const boardKey = mode.id === CLASSIC.id ? board : `${board}@${mode.id}`
+      const key = `${boardKey}:${period}`
+      const entries = scores[key] ?? scores[boardKey] ?? []
+      const mine = standings[key] ?? standings[boardKey] ?? null
+      return json(leaderboardPage(board, mode, period, entries, page, size, mine))
+    }
+
+    const modesOf = /^\/api\/games\/([^/]+)\/modes$/.exec(path)?.[1]
+    if (modesOf) {
+      const game = games.find((candidate) => candidate.slug === decodeURIComponent(modesOf))
+      if (!game) return notFound(`Game '${modesOf}' was not found`)
+      return json(game.scored ? declaredModes(game.slug) : [])
     }
 
     const slug = /^\/api\/games\/([^/]+)$/.exec(path)?.[1]

@@ -31,6 +31,10 @@ class Score {
 	@Column(name = "player_id", updatable = false)
 	private UUID playerId;
 
+	/** Copied from the session: a score belongs to the mode its run was played in. */
+	@Column(name = "mode", nullable = false, updatable = false)
+	private String mode;
+
 	@Column(name = "score", nullable = false, updatable = false)
 	private int value;
 
@@ -56,11 +60,16 @@ class Score {
 		this.gameId = session.getGameId();
 		this.userId = session.getUserId();
 		this.playerId = session.getPlayerId();
+		this.mode = session.getMode();
 		this.value = value;
 		this.durationMs = durationMs;
 		this.xpAwarded = xpAwarded;
 		this.personalBest = personalBest;
 		this.createdAt = createdAt;
+	}
+
+	String getMode() {
+		return this.mode;
 	}
 
 	int getValue() {

@@ -19,6 +19,9 @@ import com.cyan.arcade.leaderboard.LeaderboardResponse.Entry;
 import com.cyan.arcade.leaderboard.LeaderboardResponse.Player;
 import com.cyan.arcade.leaderboard.PlayerRanks.GameRanks;
 import com.cyan.arcade.leaderboard.PlayerRanks.Standing;
+import com.cyan.arcade.common.error.ApiException;
+import com.cyan.arcade.score.GameModes;
+import com.cyan.arcade.score.ModeSpec;
 import com.cyan.arcade.score.PlayerBest;
 import com.cyan.arcade.score.RankedScore;
 import com.cyan.arcade.score.ScoreQueries;
@@ -26,6 +29,7 @@ import com.cyan.arcade.user.UserAccount;
 import com.cyan.arcade.user.UserService;
 
 import org.springframework.data.domain.Page;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,40 +48,53 @@ public class LeaderboardService {
 
 	private final UserService users;
 
+	private final GameModes modes;
+
 	private final Clock clock;
 
-	LeaderboardService(GameService games, ScoreQueries scores, UserService users, Clock clock) {
+	LeaderboardService(GameService games, ScoreQueries scores, UserService users, GameModes modes, Clock clock) {
 		this.games = games;
 		this.scores = scores;
 		this.users = users;
+		this.modes = modes;
 		this.clock = clock;
 	}
 
 	/**
+	 * The board of one mode of a game. Every ranked mode has its own; scores of different modes are
+	 * never ranked together.
+	 * @param modeId the mode, as the request names it ({@link GameModes#CLASSIC} when it names none)
 	 * @param userId the signed-in caller, or {@code null}
 	 * @param playerId the caller's guest id, or {@code null} when unknown
+	 * @throws ApiException {@code 404} ({@value GameModes#UNKNOWN_MODE}) for a mode the game does not
+	 * have, or has without a leaderboard
 	 */
-	public LeaderboardResponse leaderboard(String gameSlug, LeaderboardPeriod period, int page, int size, Long userId,
-			UUID playerId) {
+	public LeaderboardResponse leaderboard(String gameSlug, String modeId, LeaderboardPeriod period, int page,
+			int size, Long userId, UUID playerId) {
 		GameInfo game = this.games.requireScoredGame(gameSlug);
+		ModeSpec mode = this.modes.rankedMode(game, modeId)
+			.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, GameModes.UNKNOWN_MODE,
+					game.name() + " has no leaderboard for mode '" + modeId + "'"));
 		Window window = period.windowAt(this.clock.instant());
-		Page<RankedScore> top = this.scores.ranking(game.id(), window.start(), window.end(), page, size);
+		Page<RankedScore> top = this.scores.ranking(game.id(), mode, window.start(), window.end(), page, size);
 
 		// One lookup for the names of everyone on this page.
 		Set<Long> userIds = top.stream().map(RankedScore::userId).filter(Objects::nonNull).collect(Collectors.toSet());
 		Map<Long, UserAccount> accounts = this.users.getAll(userIds);
 
-		Optional<PlayerBest> mine = this.scores.standingOf(game.id(), window.start(), window.end(), userId, playerId);
+		Optional<PlayerBest> mine = this.scores.standingOf(game.id(), mode, window.start(), window.end(), userId,
+				playerId);
 
-		return new LeaderboardResponse(game.slug(), period, window.start(), window.end(),
+		return new LeaderboardResponse(game.slug(), mode.id(), mode.order(), mode.unit(), period, window.start(),
+				window.end(),
 				top.map((score) -> toEntry(score, accountOf(score, accounts), userId, playerId)).getContent(),
 				top.getNumber(), top.getSize(), top.getTotalElements(), top.getTotalPages(),
 				mine.map(PlayerBest::rank).orElse(null), mine.map(PlayerBest::bestScore).orElse(null));
 	}
 
 	/**
-	 * Where a signed-in player stands on every scored game's boards, for their profile: one small
-	 * ranking query per game and period.
+	 * Where a signed-in player stands on every scored game's Classic boards, for their profile: one
+	 * small ranking query per game and period, however many modes the games have.
 	 */
 	public PlayerRanks ranksOf(Long userId) {
 		Instant now = this.clock.instant();
@@ -97,7 +114,7 @@ public class LeaderboardService {
 
 	private Standing standing(GameResponse game, LeaderboardPeriod period, Instant now, Long userId) {
 		Window window = period.windowAt(now);
-		return this.scores.standingOf(game.id(), window.start(), window.end(), userId, null)
+		return this.scores.standingOf(game.id(), ModeSpec.CLASSIC, window.start(), window.end(), userId, null)
 			.map((best) -> new Standing(best.rank(), best.bestScore()))
 			.orElse(null);
 	}

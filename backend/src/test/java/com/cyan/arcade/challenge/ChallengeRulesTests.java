@@ -92,7 +92,7 @@ class ChallengeRulesTests {
 	}
 
 	private static CompletedRun run(int score, Map<String, Integer> details) {
-		return new CompletedRun(UUID.randomUUID(), 1L, "tetris", score, details, false, 1);
+		return new CompletedRun(UUID.randomUUID(), 1L, "tetris", CompletedRun.CLASSIC, score, details, false, 1);
 	}
 
 }

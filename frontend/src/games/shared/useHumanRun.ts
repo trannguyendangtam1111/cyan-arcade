@@ -12,10 +12,12 @@ import { useRunStart } from './useRunStart'
  *
  * Games call these three and nothing else, so none of them contains its own score-reporting code.
  * AI runs simply never call `begin` or `finish`.
+ *
+ * @param lowerIsBetter for a score that is a time to finish: the device's best is the lowest
  */
-export function useHumanRun(gameSlug: string, { onGameStart, onGameOver }: GameProps) {
+export function useHumanRun(gameSlug: string, { onGameStart, onGameOver }: GameProps, lowerIsBetter = false) {
   const { started, begin, reset: resetStart, elapsedMs } = useRunStart(onGameStart)
-  const { best, record } = useHighScore(gameSlug)
+  const { best, record } = useHighScore(gameSlug, lowerIsBetter)
   const [newBest, setNewBest] = useState(false)
   // A ref, for the same reason as in useRunStart: several ticks can fire before a re-render.
   const finished = useRef(false)

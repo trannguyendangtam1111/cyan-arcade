@@ -34,6 +34,10 @@ class GameSession {
 	@Column(name = "player_id", updatable = false)
 	private UUID playerId;
 
+	/** The ruleset the run is played under, fixed when it starts (see {@link GameModes}). */
+	@Column(name = "mode", nullable = false, updatable = false)
+	private String mode;
+
 	@Column(name = "started_at", nullable = false, updatable = false)
 	private Instant startedAt;
 
@@ -43,16 +47,17 @@ class GameSession {
 	protected GameSession() {
 	}
 
-	private GameSession(UUID id, Long gameId, Long userId, UUID playerId, Instant startedAt) {
+	private GameSession(UUID id, Long gameId, Long userId, UUID playerId, String mode, Instant startedAt) {
 		this.id = id;
 		this.gameId = gameId;
 		this.userId = userId;
 		this.playerId = playerId;
+		this.mode = mode;
 		this.startedAt = startedAt;
 	}
 
-	static GameSession start(Long gameId, Long userId, UUID playerId, Instant now) {
-		return new GameSession(UUID.randomUUID(), gameId, userId, playerId, now);
+	static GameSession start(Long gameId, Long userId, UUID playerId, String mode, Instant now) {
+		return new GameSession(UUID.randomUUID(), gameId, userId, playerId, mode, now);
 	}
 
 	void finish(Instant now) {
@@ -89,6 +94,10 @@ class GameSession {
 
 	UUID getPlayerId() {
 		return this.playerId;
+	}
+
+	String getMode() {
+		return this.mode;
 	}
 
 	Instant getStartedAt() {

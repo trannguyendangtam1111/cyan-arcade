@@ -10,8 +10,10 @@ import java.util.UUID;
  * @param userId the account that started it, or {@code null} for a guest
  * @param playerId the guest id it was started with, or {@code null}
  * @param finished whether its score has been submitted
+ * @param mode the mode the run was started in, fixed for the whole run
  */
-public record RunSession(UUID id, String gameSlug, Long userId, UUID playerId, Instant startedAt, boolean finished) {
+public record RunSession(UUID id, String gameSlug, Long userId, UUID playerId, Instant startedAt, boolean finished,
+		String mode) {
 
 	/**
 	 * Whether the run belongs to this caller: the account that started it, or, for a guest's run, the

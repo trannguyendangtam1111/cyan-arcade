@@ -49,7 +49,7 @@ describe('useScoreSubmission', () => {
     act(() => hook.current.onGameOver(result))
 
     await waitFor(() => expect(hook.current.submission).toEqual({ status: 'saved', score: 12, rewards: null }))
-    expect(start).toHaveBeenCalledWith('snake')
+    expect(start).toHaveBeenCalledWith('snake', 'classic')
     expect(finish).toHaveBeenCalledWith('session-1', 12, {})
   })
 
@@ -214,4 +214,101 @@ describe('useScoreSubmission', () => {
 
     expect(hook.current.submission).toEqual({ status: 'idle' })
   })
+})
+
+describe('useScoreSubmission with game modes', () => {
+  beforeEach(() => {
+    queryClient = new QueryClient()
+    finish.mockResolvedValue(recorded)
+  })
+
+  it('starts a run in Classic when no mode is chosen', async () => {
+    start.mockResolvedValue({ ...session, mode: 'classic' })
+    const { result: hook } = renderHook(() => useScoreSubmission('snake'))
+
+    act(() => hook.current.onGameStart())
+    act(() => hook.current.onGameOver(result))
+
+    await waitFor(() => expect(hook.current.submission.status).toBe('saved'))
+    expect(start).toHaveBeenCalledWith('snake', 'classic')
+  })
+
+  it('treats anything but a mode ID, such as a click event, as Classic', async () => {
+    start.mockResolvedValue({ ...session, mode: 'classic' })
+    const { result: hook } = renderHook(() => useScoreSubmission('snake'))
+
+    act(() => hook.current.onGameStart({ type: 'click' }))
+    act(() => hook.current.onGameOver(result))
+
+    await waitFor(() => expect(hook.current.submission.status).toBe('saved'))
+    expect(start).toHaveBeenCalledWith('snake', 'classic')
+  })
+
+  it('sends the chosen mode and finishes a run the server opened in it', async () => {
+    start.mockResolvedValue({ ...session, mode: 'sprint' })
+    const { result: hook } = renderHook(() => useScoreSubmission('snake'))
+
+    act(() => hook.current.onGameStart('sprint'))
+    act(() => hook.current.onGameOver(result))
+
+    await waitFor(() => expect(hook.current.submission).toEqual({ status: 'saved', score: 12, rewards: null }))
+    expect(start).toHaveBeenCalledWith('snake', 'sprint')
+    expect(finish).toHaveBeenCalledWith('session-1', 12, {})
+  })
+
+  it('submits nothing when the server opened the run in another mode', async () => {
+    start.mockResolvedValue({ ...session, mode: 'classic' })
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
+    const { result: hook } = renderHook(() => useScoreSubmission('snake'))
+
+    act(() => hook.current.onGameStart('sprint'))
+    act(() => hook.current.onGameOver(result))
+
+    await waitFor(() =>
+      expect(hook.current.submission).toEqual({ status: 'failed', score: 12, canRetry: false, reason: 'mode-mismatch' }),
+    )
+    expect(finish).not.toHaveBeenCalled()
+    expect(invalidate).not.toHaveBeenCalled()
+
+    // Nothing to retry either: the run is not the chosen mode's.
+    act(() => hook.current.retry())
+    await waitFor(() => expect(hook.current.submission).toMatchObject({ status: 'failed', reason: 'mode-mismatch' }))
+    expect(finish).not.toHaveBeenCalled()
+  })
+
+  it('takes a session without a mode, from a backend before modes, as Classic', async () => {
+    start.mockResolvedValue(session) // no `mode`
+    const { result: hook } = renderHook(() => useScoreSubmission('snake'))
+
+    act(() => hook.current.onGameStart())
+    act(() => hook.current.onGameOver(result))
+    await waitFor(() => expect(hook.current.submission.status).toBe('saved'))
+    expect(finish).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not submit a non-Classic run to a backend that does not know modes', async () => {
+    start.mockResolvedValue(session) // the older backend ignored `mode` and opened a Classic run
+    const { result: hook } = renderHook(() => useScoreSubmission('snake'))
+
+    act(() => hook.current.onGameStart('sprint'))
+    act(() => hook.current.onGameOver(result))
+
+    await waitFor(() => expect(hook.current.submission).toMatchObject({ status: 'failed', reason: 'mode-mismatch' }))
+    expect(finish).not.toHaveBeenCalled()
+  })
+
+  it('keeps the mode of each run: a new run in another mode is judged by its own', async () => {
+    start.mockResolvedValueOnce({ ...session, mode: 'sprint' }).mockResolvedValueOnce({ ...session, id: 'session-2', mode: 'classic' })
+    const { result: hook } = renderHook(() => useScoreSubmission('snake'))
+
+    act(() => hook.current.onGameStart('sprint'))
+    act(() => hook.current.onGameOver(result))
+    await waitFor(() => expect(hook.current.submission.status).toBe('saved'))
+
+    act(() => hook.current.onGameStart())
+    act(() => hook.current.onGameOver(result))
+    await waitFor(() => expect(finish).toHaveBeenCalledWith('session-2', 12, {}))
+    expect(hook.current.submission.status).toBe('saved')
+  })
+
 })

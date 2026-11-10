@@ -59,3 +59,36 @@ describe('useHighScore', () => {
     expect(result.current.best).toBe(5)
   })
 })
+
+describe('useHighScore for a time to finish', () => {
+  beforeEach(() => window.localStorage.clear())
+
+  it('keeps the lowest time as the best, a first time always one', () => {
+    const { result } = renderHook(() => useHighScore('tetris-sprint', true))
+    const record = (time: number) => {
+      let isNewBest = false
+      act(() => {
+        isNewBest = result.current.record(time)
+      })
+      return isNewBest
+    }
+
+    expect(result.current.best).toBe(0)
+    expect(record(80_000)).toBe(true)
+    expect(record(90_000)).toBe(false)
+    expect(record(80_000)).toBe(false)
+    expect(record(79_960)).toBe(true)
+    expect(result.current.best).toBe(79_960)
+    // No time is not a time.
+    expect(record(0)).toBe(false)
+    expect(result.current.best).toBe(79_960)
+  })
+
+  it('leaves the highest-first best of every other game as it was', () => {
+    const { result } = renderHook(() => useHighScore('snake'))
+    act(() => void result.current.record(30))
+    act(() => void result.current.record(10))
+
+    expect(result.current.best).toBe(30)
+  })
+})

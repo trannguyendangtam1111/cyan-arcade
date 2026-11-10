@@ -2,7 +2,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { GameModule, GameProps } from '@/games/types'
 import { getRecentGameSlugs } from '@/lib/recentGames'
-import { CSRF_TOKEN, SESSION_ID, challengesFixture, mockApi, mockProblem, pixel } from '@/test/mockApi'
+import { CSRF_TOKEN, SESSION_ID, challengesFixture, mockApi, mockJson, mockProblem, pixel } from '@/test/mockApi'
 import { renderRoute } from '@/test/renderWithProviders'
 
 // Registers a fake implementation for "snake" only. This proves the platform can host any game
@@ -114,7 +114,7 @@ describe('score keeping on the game page', () => {
     renderRoute('/games/snake')
 
     fireEvent.click(await screen.findByRole('button', { name: 'Start run' }))
-    await waitFor(() => expect(postsTo(fetchSpy)).toEqual([['/api/game-sessions', { gameSlug: 'snake' }]]))
+    await waitFor(() => expect(postsTo(fetchSpy)).toEqual([['/api/game-sessions', { gameSlug: 'snake', mode: 'classic' }]]))
     expect(screen.queryByText(/saved/i)).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Finish run' }))
@@ -122,7 +122,7 @@ describe('score keeping on the game page', () => {
     expect(await screen.findByText(/saved\./)).toHaveTextContent('Score 42 saved.')
     expect(screen.getByRole('link', { name: /view leaderboard/i })).toHaveAttribute('href', '/leaderboard?game=snake')
     expect(postsTo(fetchSpy)).toEqual([
-      ['/api/game-sessions', { gameSlug: 'snake' }],
+      ['/api/game-sessions', { gameSlug: 'snake', mode: 'classic' }],
       [`/api/game-sessions/${SESSION_ID}/finish`, { score: 42, details: {} }],
     ])
     // Both requests carry the CSRF token the server handed out, and the guest id: a guest's run can
@@ -307,5 +307,29 @@ describe('score keeping on the game page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Start run' }))
 
     expect(screen.queryByText(/saved\./)).not.toBeInTheDocument()
+  })
+})
+
+describe('score keeping and game modes', () => {
+  it('saves nothing when the server opens the run in another mode than the one chosen', async () => {
+    const fetchSpy = mockApi({
+      handlers: [
+        // A server that answers with a mode the game did not ask for (the game asks for Classic).
+        ({ path, method }) =>
+          method === 'POST' && path === '/api/game-sessions'
+            ? mockJson({ id: SESSION_ID, gameSlug: 'snake', mode: 'sprint', startedAt: '2026-09-30T10:00:00Z' }, 201)
+            : undefined,
+      ],
+    })
+    renderRoute('/games/snake')
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Start run' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Finish run' }))
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      "This game was started in a different mode than the one chosen, so your score of 42 wasn't saved.",
+    )
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
+    expect(postsTo(fetchSpy)).toEqual([['/api/game-sessions', { gameSlug: 'snake', mode: 'classic' }]])
   })
 })

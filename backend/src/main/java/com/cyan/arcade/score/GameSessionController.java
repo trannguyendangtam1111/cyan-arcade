@@ -31,7 +31,8 @@ class GameSessionController {
 	ResponseEntity<GameSessionResponse> start(@Valid @RequestBody StartGameSessionRequest request,
 			@AuthenticationPrincipal AuthenticatedUser user,
 			@RequestHeader(name = GuestPlayer.HEADER, required = false) UUID playerId) {
-		GameSessionResponse session = this.gameSessionService.start(request.gameSlug(), idOf(user), playerId);
+		GameSessionResponse session = this.gameSessionService.start(request.gameSlug(), request.mode(), idOf(user),
+				playerId);
 		return ResponseEntity.created(URI.create("/api/game-sessions/" + session.id())).body(session);
 	}
 

@@ -77,8 +77,18 @@ export function defineGameModule<Ai>(module: TypedGameModule<Ai>): GameModule {
 
 /** Props the platform passes to a game's root component. */
 export interface GameProps<Ai = unknown> {
-  /** Call when a human run begins. The platform opens a score session. Never call it for AI runs. */
-  onGameStart: () => void
+  /**
+   * Call when a human run begins. The platform opens a score session, under `mode` if given (one of
+   * the modes the server declares for the game) or Classic. Anything but a mode ID (the event, when
+   * it is a click handler) means Classic. Never call it for AI runs.
+   */
+  onGameStart: (mode?: unknown) => void
+  /**
+   * The IDs of the modes the server declares for the game (Classic first), or `undefined` while they
+   * are unknown and for an unscored game. A game offers a mode of its own only while it is listed here,
+   * and passes its ID to `onGameStart` when a run of it begins; without the list, it plays Classic.
+   */
+  modes?: readonly string[]
   /** Call once when that run ends. The platform submits the score. */
   onGameOver: (result: GameResult) => void
   /**

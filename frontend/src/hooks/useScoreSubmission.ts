@@ -2,6 +2,8 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useRef, useState } from 'react'
 import { ApiError } from '@/api/client'
 import {
+  CLASSIC_MODE,
+  modeOf,
   SCORE_REJECTED,
   SESSION_ALREADY_FINISHED,
   SESSION_EXPIRED,
@@ -25,7 +27,7 @@ export type ScoreSubmission =
    */
   | { status: 'failed'; score: number; canRetry: boolean; reason: FailureReason }
 
-export type FailureReason = 'rejected' | 'expired' | 'error'
+export type FailureReason = 'rejected' | 'expired' | 'mode-mismatch' | 'error'
 
 /** What a refusal from the server means for the player. */
 function reasonOf(error: unknown): FailureReason {
@@ -35,6 +37,8 @@ function reasonOf(error: unknown): FailureReason {
 }
 
 interface Run {
+  /** The chosen mode, fixed for the run. */
+  mode: string
   /** Resolves to the server session; rejects if it could not be created. */
   session: Promise<GameSessionResponse>
   /** Set once the run has ended. */
@@ -79,6 +83,11 @@ export function useScoreSubmission(gameSlug: string) {
         return
       }
 
+      if (modeOf(session) !== run.mode) {
+        if (isCurrent()) setSubmission({ status: 'failed', score, canRetry: false, reason: 'mode-mismatch' })
+        return
+      }
+
       try {
         const recorded = await finishGameSession(session.id, score, numericDetails(result))
         // The leaderboard has a new entry, and a signed-in player's XP, history and achievements
@@ -102,11 +111,12 @@ export function useScoreSubmission(gameSlug: string) {
     [gameSlug, queryClient],
   )
 
-  const onGameStart = useCallback(() => {
-    const session = startGameSession(gameSlug)
+  const onGameStart = useCallback((requestedMode?: unknown) => {
+    const mode = typeof requestedMode === 'string' ? requestedMode : CLASSIC_MODE
+    const session = startGameSession(gameSlug, mode)
     // Failure is reported when the run ends; until then it must not surface as an unhandled rejection.
     session.catch(() => undefined)
-    current.current = { session }
+    current.current = { session, mode }
     setSubmission({ status: 'idle' })
   }, [gameSlug])
 

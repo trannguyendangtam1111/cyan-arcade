@@ -4,8 +4,10 @@ import java.util.UUID;
 
 import com.cyan.arcade.common.security.AuthenticatedUser;
 import com.cyan.arcade.common.security.GuestPlayer;
+import com.cyan.arcade.score.GameModes;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Pattern;
 
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -35,13 +37,14 @@ class LeaderboardController {
 
 	@GetMapping("/{gameSlug}")
 	LeaderboardResponse leaderboard(@PathVariable String gameSlug,
+			@RequestParam(defaultValue = GameModes.CLASSIC) @Pattern(regexp = GameModes.FORMAT) String mode,
 			@RequestParam(defaultValue = "ALL_TIME") LeaderboardPeriod period,
 			@RequestParam(defaultValue = "0") @Min(0) int page,
 			@RequestParam(defaultValue = "" + DEFAULT_PAGE_SIZE) @Min(1) @Max(MAX_PAGE_SIZE) int size,
 			@AuthenticationPrincipal AuthenticatedUser user,
 			@RequestHeader(name = GuestPlayer.HEADER, required = false) UUID playerId) {
-		return this.leaderboardService.leaderboard(gameSlug, period, page, size, (user != null) ? user.id() : null,
-				playerId);
+		return this.leaderboardService.leaderboard(gameSlug, mode, period, page, size,
+				(user != null) ? user.id() : null, playerId);
 	}
 
 }

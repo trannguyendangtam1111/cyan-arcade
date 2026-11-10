@@ -5,6 +5,8 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
+import com.cyan.arcade.score.ModeLab;
+
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
@@ -32,7 +34,7 @@ import org.springframework.context.annotation.Import;
 		"app.tcg.daily-pack-limit=5",
 		"app.chess.requests-per-minute=10000", "app.chess.coach.requests-per-minute=5" })
 @AutoConfigureMockMvc
-@Import({ TestcontainersConfiguration.class, MockMvcTestConfiguration.class })
+@Import({ TestcontainersConfiguration.class, MockMvcTestConfiguration.class, ModeLab.class })
 public @interface IntegrationTest {
 
 }

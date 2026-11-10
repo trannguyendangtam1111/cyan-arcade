@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { formatDate, formatDuration, formatScore, formatTimeLeft } from './format'
+import { formatDate, formatDuration, formatGameTime, formatScore, formatTimeLeft } from './format'
 
 describe('formatDuration', () => {
   it.each([
@@ -11,6 +11,29 @@ describe('formatDuration', () => {
     [3_723_000, '1:02:03'],
   ])('formats %i ms as %s', (ms, expected) => {
     expect(formatDuration(ms)).toBe(expected)
+  })
+})
+
+describe('formatGameTime', () => {
+  it.each([
+    [0, '0:00.00'],
+    [40, '0:00.04'],
+    [8_000, '0:08.00'],
+    [48_120, '0:48.12'],
+    [59_960, '0:59.96'],
+    [60_000, '1:00.00'],
+    [65_040, '1:05.04'],
+    [299_960, '4:59.96'],
+    [300_000, '5:00.00'],
+    [600_000, '10:00.00'],
+  ])('formats %i ms as %s', (ms, expected) => {
+    expect(formatGameTime(ms)).toBe(expected)
+  })
+
+  it('rounds down to the hundredth, never shows a time below zero, and leaves formatDuration as it was', () => {
+    expect(formatGameTime(65_049)).toBe('1:05.04')
+    expect(formatGameTime(-40)).toBe('0:00.00')
+    expect(formatDuration(65_040)).toBe('1:05')
   })
 })
 

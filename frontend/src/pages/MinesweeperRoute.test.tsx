@@ -66,7 +66,7 @@ describe('Minesweeper in the arcade', () => {
 
     expect(await screen.findByText(/saved\./)).toBeInTheDocument()
     const sent = posts(fetchSpy)
-    expect(sent[0]).toEqual(['/api/game-sessions', { gameSlug: 'minesweeper' }])
+    expect(sent[0]).toEqual(['/api/game-sessions', { gameSlug: 'minesweeper', mode: 'classic' }])
     expect(sent[1][1]).toEqual({
       score: uncovered * 10,
       details: { rows: 9, columns: 9, mines: 10, revealedCells: uncovered, flagsUsed: 0, won: 0, moves: 2, seconds: 0 },

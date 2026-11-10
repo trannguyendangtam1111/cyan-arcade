@@ -55,6 +55,8 @@ export interface AchievementStatus {
 export interface GameHistoryEntry {
   gameSlug: string
   gameName: string
+  /** The mode the run was played under; absent from an older backend (Classic). */
+  mode?: string
   score: number
   durationMs: number
   playedAt: string

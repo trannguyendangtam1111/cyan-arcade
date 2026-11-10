@@ -82,14 +82,17 @@ public class ProgressionService {
 
 		int coinsEarned = 0;
 		// Only so many games a day pay coins just for being played, so a stream of very short runs
-		// earns XP but cannot be farmed for coins.
-		if (this.coins.countToday(userId, CoinTransactionType.GAME_COMPLETION) < this.rewards.rewardedGamesPerDay()) {
+		// earns XP but cannot be farmed for coins. A run that ended before its mode's own end (an early
+		// top-out in Tetris Ultra) has not finished the game and earns neither.
+		if (run.earnsCompletionReward() && this.coins.countToday(userId,
+				CoinTransactionType.GAME_COMPLETION) < this.rewards.rewardedGamesPerDay()) {
 			coinsEarned += pay(userId, CoinTransactionType.GAME_COMPLETION, this.rewards.gameCompletedCoins(),
 					session, "Finished a game of " + run.gameSlug());
 		}
 		// Likewise for new bests: a string of runs each a little better than the last still earns their
-		// XP, but only so many pay coins in a day.
-		if (run.personalBest() && this.coins.countToday(userId,
+		// XP, but only so many pay coins in a day. Only Classic bests pay: a new mode starts with no
+		// best at all, so its first runs would otherwise be a stream of easy bonuses.
+		if (run.earnsPersonalBestBonus() && this.coins.countToday(userId,
 				CoinTransactionType.HIGH_SCORE) < this.rewards.rewardedPersonalBestsPerDay()) {
 			coinsEarned += pay(userId, CoinTransactionType.HIGH_SCORE, this.rewards.personalBestCoins(), session,
 					"New best score in " + run.gameSlug());

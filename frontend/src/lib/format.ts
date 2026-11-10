@@ -10,6 +10,17 @@ export function formatDuration(ms: number): string {
   return hours > 0 ? `${hours}:${pad(minutes)}:${pad(seconds)}` : `${minutes}:${pad(seconds)}`
 }
 
+/**
+ * Formats a game time to the hundredth, as a race is timed: `0:48.12`, `1:05.04`. Rounded down; a
+ * time in whole 40 ms steps (Tetris) is shown exactly.
+ */
+export function formatGameTime(ms: number): string {
+  const hundredths = Math.max(0, Math.floor(ms / 10))
+  const minutes = Math.floor(hundredths / 6000)
+  const seconds = Math.floor(hundredths / 100) % 60
+  return `${minutes}:${String(seconds).padStart(2, '0')}.${String(hundredths % 100).padStart(2, '0')}`
+}
+
 /** Formats how long is left until something, to the minute: `5h 12m`, `12m`, `under a minute`. */
 export function formatTimeLeft(ms: number): string {
   const totalMinutes = Math.floor(ms / 60_000)

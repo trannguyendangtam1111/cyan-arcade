@@ -15,11 +15,16 @@ import java.util.function.Predicate;
 public record Achievement(String code, String name, String description, Reward reward,
 		Predicate<CompletedRun> rule) {
 
+	/**
+	 * Only a Classic run can unlock an achievement: every rule was written for the Classic game, and
+	 * another mode (a shorter one, an easier one) must not be a way round it. Enforced here, for every
+	 * rule at once.
+	 */
 	boolean isUnlockedBy(CompletedRun run) {
-		return this.rule.test(run);
+		return run.isClassic() && this.rule.test(run);
 	}
 
-	/** Unlocked once the player has finished this many games of any kind. */
+	/** Unlocked once the player has finished this many Classic games, of any game. */
 	static Achievement forGamesPlayed(String code, String name, String description, Reward reward, long games) {
 		return new Achievement(code, name, description, reward, (run) -> run.gamesPlayed() >= games);
 	}

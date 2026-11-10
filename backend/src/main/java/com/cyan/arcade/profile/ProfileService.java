@@ -156,8 +156,8 @@ public class ProfileService {
 
 		List<Entry> entries = history.stream().map((played) -> {
 			GameInfo game = gamesById.get(played.gameId());
-			return new Entry(game.slug(), game.name(), played.score(), played.durationMs(), played.playedAt(),
-					played.xpEarned(), played.personalBest());
+			return new Entry(game.slug(), game.name(), played.mode(), played.score(), played.durationMs(),
+					played.playedAt(), played.xpEarned(), played.personalBest());
 		}).toList();
 		return new GameHistoryResponse(entries, history.getNumber(), history.getSize(), history.getTotalElements(),
 				history.getTotalPages());
