@@ -1,5 +1,5 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CLASSIC, type GameMode } from '@/api/games'
 import { catalogFixture, mockApi, mockJson, mockProblem, type MockHandler } from '@/test/mockApi'
 import { renderRoute } from '@/test/renderWithProviders'
@@ -325,7 +325,14 @@ describe('a timed board, written to the hundredth', () => {
 })
 
 describe('Sudoku Daily boards by puzzle date', () => {
-  beforeEach(() => window.localStorage.clear())
+  beforeEach(() => {
+    window.localStorage.clear()
+    // The fake server's today, at noon UTC: today's board counts down to the next puzzle, whatever the real date.
+    // Only Date is faked, so timers (and waiting for the page) run as usual.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(`${TODAY}T12:00:00Z`)
+  })
+  afterEach(() => vi.useRealTimers())
 
   it("shows Sudoku's Daily board by puzzle date, with the puzzles before it and no periods", async () => {
     const fetchSpy = mockApi({
