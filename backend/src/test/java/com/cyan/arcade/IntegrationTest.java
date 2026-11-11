@@ -8,6 +8,9 @@ import java.lang.annotation.Target;
 import com.cyan.arcade.score.ModeLab;
 
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
+import org.springframework.boot.session.autoconfigure.SessionAutoConfiguration;
+import org.springframework.boot.session.jdbc.autoconfigure.JdbcSessionAutoConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 
@@ -34,6 +37,9 @@ import org.springframework.context.annotation.Import;
 		"app.tcg.daily-pack-limit=5",
 		"app.chess.requests-per-minute=10000", "app.chess.coach.requests-per-minute=5" })
 @AutoConfigureMockMvc
+// These feature tests pass MockHttpSession objects directly. Real cookie/JDBC persistence,
+// including a closed/recreated application context, is covered by PersistentSessionTests.
+@ImportAutoConfiguration(exclude = { SessionAutoConfiguration.class, JdbcSessionAutoConfiguration.class })
 @Import({ TestcontainersConfiguration.class, MockMvcTestConfiguration.class, ModeLab.class })
 public @interface IntegrationTest {
 
