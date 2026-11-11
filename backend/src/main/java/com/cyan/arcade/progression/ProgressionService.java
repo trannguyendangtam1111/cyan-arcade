@@ -132,6 +132,27 @@ public class ProgressionService {
 		this.users.addXp(userId, bonus.xp());
 	}
 
+	/**
+	 * Pays a fixed reward for a game completed outside the game-session flow, such as a won Minesweeper
+	 * Daily Board: its XP, and its coins as a game completion, which count towards the same daily limit
+	 * of paid games as every other finished game (over it, the XP is still paid and the coins are not).
+	 * No achievement, personal best or daily challenge is looked at.
+	 *
+	 * <p>The coins are paid at most once for {@code reference}, but the XP is not: the caller pays each
+	 * completion once, in the transaction that records it.
+	 */
+	@Transactional
+	public CompletionReward rewardCompletion(Long userId, int xp, int coins, CoinReference reference,
+			String description) {
+		lockPlayer(userId);
+		int paid = 0;
+		if (this.coins.countToday(userId, CoinTransactionType.GAME_COMPLETION) < this.rewards.rewardedGamesPerDay()) {
+			paid = pay(userId, CoinTransactionType.GAME_COMPLETION, coins, reference, description);
+		}
+		this.users.addXp(userId, xp);
+		return new CompletionReward(xp, paid);
+	}
+
 	/** Every achievement in the catalog, with whether and when this player unlocked it. */
 	@Transactional(readOnly = true)
 	public List<AchievementStatus> achievementsOf(Long userId) {

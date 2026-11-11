@@ -168,6 +168,11 @@ app:
       # Engine results kept in memory for reuse (keyed by engine version, settings and position).
       max-entries: ${CHESS_ANALYSIS_CACHE_ENTRIES:5000}
       ttl: ${CHESS_ANALYSIS_CACHE_TTL:6h}
+  minesweeper:
+    daily:
+      # The key each date's Daily Board seed is made with (HMAC-SHA256 of the date). Keep it secret
+      # and the same across restarts and instances: unset, the server makes a random one per run.
+      secret: ${MINESWEEPER_DAILY_SECRET:}
   tcg:
     # Packs one player may open per day (UTC). 0 means no limit.
     daily-pack-limit: ${TCG_DAILY_PACK_LIMIT:10}
