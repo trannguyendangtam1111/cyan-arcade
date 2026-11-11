@@ -45,7 +45,8 @@ describe('Sudoku', () => {
     expect(cell(0)).toHaveAccessibleName('Row 1, column 1: empty')
 
     await startDaily()
-    expect(onGameStart).toHaveBeenCalledOnce()
+    // On the Daily leaderboard: the session is opened in its mode.
+    expect(onGameStart).toHaveBeenCalledExactlyOnceWith('daily')
     expect(currentSession).toHaveBeenCalled()
     expect(server.calls.find((call) => call.path === '/api/sudoku/daily/runs')?.body).toEqual({ sessionId: 'session-1' })
     expect(within(board()).getAllByRole('gridcell')).toHaveLength(81)
@@ -284,7 +285,7 @@ describe('Sudoku', () => {
     const { server, onGameStart } = setup({ daily: { values: undefined, paused: true } })
     fireEvent.click(await screen.findByRole('button', { name: 'Continue' }))
     await waitFor(() => expect(cell(0)).toHaveAccessibleName('Row 1, column 1: 5, clue'))
-    expect(onGameStart).toHaveBeenCalledOnce()
+    expect(onGameStart).toHaveBeenCalledExactlyOnceWith('daily')
     expect(server.dailyRun?.sessionId).toBe('session-1')
     expect(server.dailyRun?.paused).toBe(false)
   })
@@ -297,7 +298,8 @@ describe('Sudoku', () => {
     fireEvent.click(screen.getByRole('button', { name: 'New game' }))
     await waitFor(() => expect(server.practiceRun?.difficulty).toBe('EXPERT'))
     expect(server.practiceRun?.sessionId).toBe('session-1')
-    expect(onGameStart).toHaveBeenCalledOnce()
+    // On the Expert leaderboard, not the Daily one or another difficulty's.
+    expect(onGameStart).toHaveBeenCalledExactlyOnceWith('expert')
     expect(await screen.findByText('Practice · Expert')).toBeInTheDocument()
 
     // A new game while one is going needs a yes.
@@ -306,6 +308,7 @@ describe('Sudoku', () => {
     fireEvent.click(await screen.findByRole('checkbox', { name: /Relaxed/ }))
     fireEvent.click(screen.getByRole('button', { name: 'New game' }))
     await waitFor(() => expect(server.practiceRun?.ranked).toBe(false))
+    // A relaxed game opens no session: it is on no leaderboard.
     expect(onGameStart).toHaveBeenCalledOnce()
     expect(await screen.findByText('Conflicts 0')).toBeInTheDocument()
   })

@@ -135,6 +135,75 @@ export function useLeaderboard(
 }
 
 /**
+ * One page of Sudoku's Daily board of one puzzle, as returned by `GET /api/sudoku/daily/leaderboard`:
+ * the scores of that day's puzzle, whenever they were submitted. The server takes each score's puzzle
+ * date from its own record of the run; the browser only asks for a date.
+ */
+export interface SudokuDailyBoardResponse {
+  /** The puzzle's UTC date (`YYYY-MM-DD`), whose board this is. */
+  date: string
+  puzzleNumber: number
+  difficulty: 'EASY' | 'MEDIUM' | 'HARD' | 'EXPERT'
+  /** Today's UTC puzzle date: the latest board there is. */
+  today: string
+  /** When today's puzzle gives way to the next one. */
+  nextPuzzleAt: string
+  entries: LeaderboardEntry[]
+  /** Zero-based. */
+  page: number
+  size: number
+  totalEntries: number
+  totalPages: number
+  myRank: number | null
+  myScore: number | null
+}
+
+/** A UTC calendar date as the API writes it. */
+export const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
+
+/**
+ * Sudoku's Daily board of a puzzle date, or today's for `undefined`. Under the game's key, so a
+ * submitted score refreshes it like the game's other boards.
+ * @param page zero-based page number
+ */
+export function useSudokuDailyBoard(date: string | undefined, page: number) {
+  return useQuery({
+    queryKey: [...leaderboardKeys.game('sudoku'), 'daily-by-date', date ?? 'today', page] as const,
+    queryFn: ({ signal }) => {
+      const query = new URLSearchParams({ page: String(page), size: String(LEADERBOARD_PAGE_SIZE) })
+      if (date) query.set('date', date)
+      return apiFetch<SudokuDailyBoardResponse>(`/api/sudoku/daily/leaderboard?${query}`, {
+        signal,
+        headers: playerHeaders(),
+      })
+    },
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[3] === (date ?? 'today') ? keepPreviousData(previous) : undefined,
+  })
+}
+
+/** A dated Daily board as any other board, so the leaderboard page draws it the same way. */
+export function asBoard(daily: SudokuDailyBoardResponse): LeaderboardResponse {
+  return {
+    gameSlug: 'sudoku',
+    mode: 'daily',
+    order: 'DESC',
+    unit: 'POINTS',
+    period: 'DAILY',
+    periodStart: `${daily.date}T00:00:00Z`,
+    // Only today's board has a next one coming.
+    periodEnd: daily.date === daily.today ? daily.nextPuzzleAt : null,
+    entries: daily.entries,
+    page: daily.page,
+    size: daily.size,
+    totalEntries: daily.totalEntries,
+    totalPages: daily.totalPages,
+    myRank: daily.myRank,
+    myScore: daily.myScore,
+  }
+}
+
+/**
  * How a board ranks and what its scores count: the board's own answer when the server gives one,
  * else its mode's, else Classic's (a backend from before game modes).
  */

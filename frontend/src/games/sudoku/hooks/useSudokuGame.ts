@@ -27,6 +27,18 @@ import { loadNotes, saveNotes, type SudokuSettings } from './useSettings'
 
 export type PlayMode = 'daily' | 'practice'
 
+/** The leaderboard of daily puzzles: a platform mode of Sudoku, like each difficulty's. */
+export const DAILY_BOARD = 'daily'
+
+/**
+ * The leaderboard a ranked run goes on, as the server's mode ID: Daily for the daily puzzle, else its
+ * practice difficulty (`easy` to `expert`). Its session is opened in this mode, and the server ties
+ * the run to no session of any other.
+ */
+export function boardOf(run: Pick<RunView, 'mode' | 'difficulty'>): string {
+  return run.mode === 'DAILY' ? DAILY_BOARD : run.difficulty.toLowerCase()
+}
+
 export interface Message {
   id: number
   text: string
@@ -164,14 +176,23 @@ export function useSudokuGame(
     (over: RunView) => {
       if (!over.ranked || !over.result || over.scored || reported.current.has(over.id)) return
       reported.current.add(over.id)
-      onGameOver({ score: over.result.score, durationMs: over.elapsedMs, metadata: over.result.details })
+      onGameOver({
+        score: over.result.score,
+        durationMs: over.elapsedMs,
+        metadata: over.result.details,
+        // A daily puzzle's board is its date's: the one to open, whenever the run ended.
+        ...(over.mode === 'DAILY' && over.date && { boardDate: over.date }),
+      })
     },
     [onGameOver],
   )
 
-  /** Opens a platform session for a ranked run: the score is submitted with it. */
-  const openSession = useCallback(async (): Promise<string> => {
-    onGameStart()
+  /**
+   * Opens a platform session for a ranked run on its own leaderboard (see `boardOf`): the score is
+   * submitted with it, and the server ties the run only to a session of its board.
+   */
+  const openSession = useCallback(async (board: string): Promise<string> => {
+    onGameStart(board)
     const session = await currentSession?.()
     if (!session) throw new Error('The platform opened no session')
     return session.id
@@ -185,7 +206,7 @@ export function useSudokuGame(
       if (candidate.status !== 'SOLVED' && candidate.status !== 'FAILED') continue
       if (reported.current.has(candidate.id) || bound.current.has(candidate.id)) continue
       reported.current.add(candidate.id)
-      openSession()
+      openSession(boardOf(candidate))
         .then((sessionId) => (candidate.mode === 'DAILY' ? startDaily(sessionId) : bindSession(candidate.id, sessionId)))
         .then((picked) => {
           markBound(picked.id)
@@ -386,10 +407,13 @@ export function useSudokuGame(
       void enqueue(async () => {
         let started: RunView
         if (mode === 'daily') {
-          started = await startDaily(await openSession())
+          started = await startDaily(await openSession(DAILY_BOARD))
         } else {
           const settingsOf = practice ?? { difficulty: 'EASY' as Difficulty, relaxed: false }
-          started = await startPractice(settingsOf.difficulty, settingsOf.relaxed ? null : await openSession())
+          started = await startPractice(
+            settingsOf.difficulty,
+            settingsOf.relaxed ? null : await openSession(boardOf({ mode: 'PRACTICE', difficulty: settingsOf.difficulty })),
+          )
         }
         markBound(started.id)
         adopt(started)
@@ -409,7 +433,7 @@ export function useSudokuGame(
     void enqueue(async () => {
       let picked = current
       if (!bound.current.has(current.id) && current.ranked) {
-        const sessionId = await openSession()
+        const sessionId = await openSession(boardOf(current))
         picked = current.mode === 'DAILY' ? await startDaily(sessionId) : await bindSession(current.id, sessionId)
       }
       markBound(picked.id)

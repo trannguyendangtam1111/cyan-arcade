@@ -100,7 +100,7 @@ class SecurityConfig {
 						"/api/wordle/runs/*/guesses", "/api/wordle/runs/*/hints")
 				.permitAll()
 				// So is Sudoku, which keeps the solution on the server; its AI is under /api/ai below.
-				.requestMatchers(HttpMethod.GET, "/api/sudoku/today", "/api/sudoku/stats")
+				.requestMatchers(HttpMethod.GET, "/api/sudoku/today", "/api/sudoku/stats", "/api/sudoku/daily/leaderboard")
 				.permitAll()
 				.requestMatchers(HttpMethod.POST, "/api/sudoku/daily/runs", "/api/sudoku/practice/runs",
 						"/api/sudoku/runs/*/session", "/api/sudoku/runs/*/moves", "/api/sudoku/runs/*/hints",

@@ -1,12 +1,16 @@
 package com.cyan.arcade.sudoku;
 
 import java.time.Duration;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
+import com.cyan.arcade.score.ModeSpec;
 import com.cyan.arcade.score.RunRules;
+import com.cyan.arcade.sudoku.SudokuRun.Mode;
 import com.cyan.arcade.sudoku.SudokuRun.Status;
 import com.cyan.arcade.sudoku.daily.DailySchedule;
 import com.cyan.arcade.sudoku.engine.Difficulty;
@@ -37,9 +41,22 @@ import org.springframework.stereotype.Component;
  *
  * A session can be finished only once, and a daily run is tied to one session at a time and never
  * to a new one once its score is in, so a day's puzzle is rewarded once.
+ *
+ * <p>Each kind of ranked run has a leaderboard of its own: {@value #DAILY} for daily puzzles, and one
+ * per difficulty for ranked practice ({@code easy} to {@code expert}). A run is started, picked up
+ * again and finished only in the mode of its kind (see {@link #modeOf(Mode, Difficulty)}). These
+ * modes keep Classic's rules and rewards; they only split its leaderboard. Classic itself stays
+ * declared for the scores recorded before the split, and for a run already tied to a Classic
+ * session then; no new run is tied to one.
  */
 @Component
 class SudokuRunRules implements RunRules {
+
+	/** The daily puzzle's leaderboard. */
+	static final String DAILY = "daily";
+
+	private static final List<ModeSpec> MODES = List.of(ModeSpec.CLASSIC, ranked(DAILY, "Daily"),
+			ranked(Difficulty.EASY), ranked(Difficulty.MEDIUM), ranked(Difficulty.HARD), ranked(Difficulty.EXPERT));
 
 	private static final Set<String> DETAILS = Scoring
 		.details(new Scoring.Summary(true, true, Difficulty.EASY, 1, 0, 0, 1))
@@ -59,6 +76,57 @@ class SudokuRunRules implements RunRules {
 	@Override
 	public Set<String> details() {
 		return DETAILS;
+	}
+
+	@Override
+	public List<ModeSpec> modes() {
+		return MODES;
+	}
+
+	/** The mode a ranked run of this kind is played in: {@value #DAILY}, or its practice difficulty. */
+	static String modeOf(Mode mode, Difficulty difficulty) {
+		return (mode == Mode.DAILY) ? DAILY : difficulty.name().toLowerCase(Locale.ROOT);
+	}
+
+	static String modeOf(SudokuRun run) {
+		return modeOf(run.mode(), run.difficulty());
+	}
+
+	/**
+	 * Judged as before, and the run must be of the session's mode: a daily run in Daily, a practice
+	 * run in its own difficulty. A Classic session is one opened before the leaderboards were split,
+	 * whose run is finished as it always was.
+	 */
+	@Override
+	public Optional<String> problemWith(String mode, UUID sessionId, int score, Map<String, Integer> details,
+			Duration elapsed) {
+		if (MODES.stream().noneMatch((spec) -> spec.id().equals(mode))) {
+			return Optional.of(NO_RULES_FOR_MODE + ": " + mode);
+		}
+		Optional<String> problem = problemWith(sessionId, score, details, elapsed);
+		if (problem.isPresent() || ModeSpec.CLASSIC.id().equals(mode)) {
+			return problem;
+		}
+		// Found: the run was just judged against this session.
+		SudokuRun run = this.store.findBySession(sessionId).orElseThrow();
+		if (!modeOf(run).equals(mode)) {
+			return Optional.of("the run is not of the session's mode");
+		}
+		return Optional.empty();
+	}
+
+	/** Every accepted Sudoku run, solved or failed, completes, as Classic runs always have. */
+	@Override
+	public boolean completes(String mode, Map<String, Integer> details) {
+		return MODES.stream().anyMatch((spec) -> spec.id().equals(mode));
+	}
+
+	private static ModeSpec ranked(Difficulty difficulty) {
+		return ranked(modeOf(Mode.PRACTICE, difficulty), difficulty.label());
+	}
+
+	private static ModeSpec ranked(String id, String name) {
+		return new ModeSpec(id, name, true, ModeSpec.Order.DESC, ModeSpec.Unit.POINTS, null, true);
 	}
 
 	/** Without the session, only whether the numbers agree with each other: a Sudoku run must also match its session. */

@@ -62,6 +62,9 @@ class SudokuApiTests {
 	@Autowired
 	private Clock clock;
 
+	@Autowired
+	private DailyPuzzles dailyPuzzles;
+
 	private LocalDate today;
 
 	@BeforeEach
@@ -101,8 +104,8 @@ class SudokuApiTests {
 
 		MockHttpSession one = Players.register(this.mockMvc);
 		MockHttpSession two = Players.register(this.mockMvc);
-		String first = startDaily(one, null, startSession(one, null));
-		String second = startDaily(two, null, startSession(two, null));
+		String first = startDaily(one, null, startSession(one, null, "daily"));
+		String second = startDaily(two, null, startSession(two, null, "daily"));
 		assertThat(JsonPath.<String>read(first, "$.givens")).isEqualTo(JsonPath.read(second, "$.givens"));
 		assertThat(first).doesNotContain(solution);
 		assertThat(JsonPath.<Object>read(first, "$.solution")).isNull();
@@ -124,7 +127,7 @@ class SudokuApiTests {
 	@Test
 	void aPlayerSolvesTheDailyAndItsScoreIsAcceptedOnce() throws Exception {
 		MockHttpSession player = Players.register(this.mockMvc);
-		String session = startSession(player, null);
+		String session = startSession(player, null, "daily");
 		String run = startDaily(player, null, session);
 		String solved = solve(player, null, run);
 		assertThat(JsonPath.<String>read(solved, "$.status")).isEqualTo("SOLVED");
@@ -145,8 +148,10 @@ class SudokuApiTests {
 			.andExpect(jsonPath("$.rewards.achievements[*].code", hasItem("SUDOKU_FIRST_SOLVE")))
 			.andExpect(jsonPath("$.rewards.achievements[*].code", not(hasItem("SUDOKU_DAILY_STREAK"))));
 
-		this.mockMvc.perform(get("/api/leaderboards/sudoku?period=DAILY").session(player))
+		this.mockMvc.perform(get("/api/leaderboards/sudoku?period=DAILY&mode=daily").session(player))
 			.andExpect(jsonPath("$.entries[?(@.you == true)].score").value(score));
+		this.mockMvc.perform(get("/api/leaderboards/sudoku?period=DAILY").session(player))
+			.andExpect(jsonPath("$.entries[?(@.you == true)]").isEmpty());
 		this.mockMvc.perform(get("/api/sudoku/today").session(player))
 			.andExpect(jsonPath("$.daily.id").value(id(run)))
 			.andExpect(jsonPath("$.daily.scored").value(true));
@@ -154,15 +159,15 @@ class SudokuApiTests {
 		// The same session cannot be finished again, and no new session can replay the day.
 		submit(player, null, session, solved).andExpect(status().isConflict())
 			.andExpect(jsonPath("$.code").value("SESSION_ALREADY_FINISHED"));
-		startDailyRequest(player, null, startSession(player, null)).andExpect(status().isConflict())
+		startDailyRequest(player, null, startSession(player, null, "daily")).andExpect(status().isConflict())
 			.andExpect(jsonPath("$.code").value("DAILY_ALREADY_PLAYED"));
-		bind(player, null, id(run), startSession(player, null)).andExpect(status().isConflict());
+		bind(player, null, id(run), startSession(player, null, "daily")).andExpect(status().isConflict());
 	}
 
 	@Test
 	void forgedScoresHintsMistakesAndTimesAreRejected() throws Exception {
 		MockHttpSession player = Players.register(this.mockMvc);
-		String session = startSession(player, null);
+		String session = startSession(player, null, "easy");
 		String run = startPractice(player, null, "EASY", session);
 		// Five minutes of play, one mistake, one hint, then the rest.
 		this.jdbc.update("UPDATE sudoku_runs SET started_at = started_at - interval '5 minutes' WHERE id = ?::uuid", id(run));
@@ -206,7 +211,7 @@ class SudokuApiTests {
 	@Test
 	void aRunCannotBeScoredBeforeItIsOverOrWithoutOne() throws Exception {
 		MockHttpSession player = Players.register(this.mockMvc);
-		String session = startSession(player, null);
+		String session = startSession(player, null, "daily");
 		startDaily(player, null, session);
 		Map<String, Integer> claimed = Scoring.details(new Scoring.Summary(true, true,
 				DailySchedule.difficultyFor(this.today), 60, 0, 0, 1));
@@ -214,14 +219,14 @@ class SudokuApiTests {
 				0, 1));
 		finish(player, session, claimedScore, claimed).andExpect(jsonPath("$.code").value("SCORE_REJECTED"));
 		// A session with no run at all.
-		finish(player, startSession(player, null), claimedScore, claimed)
+		finish(player, startSession(player, null, "daily"), claimedScore, claimed)
 			.andExpect(jsonPath("$.code").value("SCORE_REJECTED"));
 	}
 
 	@Test
 	void aGuestPlaysWithTheirPlayerIdAndGetsNoRewards() throws Exception {
 		UUID guest = UUID.randomUUID();
-		String session = startSession(null, guest);
+		String session = startSession(null, guest, "daily");
 		String run = startDaily(null, guest, session);
 		String solved = solve(null, guest, run);
 		submit(null, guest, session, solved).andExpect(status().isOk()).andExpect(jsonPath("$.rewards").value(nullValue()));
@@ -240,12 +245,12 @@ class SudokuApiTests {
 	void sessionsAndRunsBelongToTheirPlayer() throws Exception {
 		MockHttpSession player = Players.register(this.mockMvc);
 		MockHttpSession other = Players.register(this.mockMvc);
-		startDailyRequest(player, null, startSession(other, null)).andExpect(status().isBadRequest())
+		startDailyRequest(player, null, startSession(other, null, "daily")).andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.code").value("WRONG_SESSION"));
 		String snake = Players.startGame(this.mockMvc, player, "snake");
 		startDailyRequest(player, null, snake).andExpect(jsonPath("$.code").value("WRONG_SESSION"));
 
-		String run = startDaily(player, null, startSession(player, null));
+		String run = startDaily(player, null, startSession(player, null, "daily"));
 		move(other, null, id(run), firstEmpty(run), 1).andExpect(status().isNotFound());
 		hint(other, null, id(run), "FIND", null).andExpect(status().isNotFound());
 		this.mockMvc.perform(post("/api/sudoku/runs/{id}/pause", id(run)).session(other))
@@ -255,7 +260,7 @@ class SudokuApiTests {
 	@Test
 	void cluesAreLockedAndMovesAreChecked() throws Exception {
 		MockHttpSession player = Players.register(this.mockMvc);
-		String run = startPractice(player, null, "MEDIUM", startSession(player, null));
+		String run = startPractice(player, null, "MEDIUM", startSession(player, null, "medium"));
 		int clue = JsonPath.<String>read(run, "$.givens").replace('0', '.').indexOf(firstClueChar(run));
 		move(player, null, id(run), clue, 1).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("CELL_LOCKED"));
 		move(player, null, id(run), clue, 0).andExpect(jsonPath("$.code").value("CELL_LOCKED"));
@@ -269,7 +274,7 @@ class SudokuApiTests {
 	@Test
 	void theThirdWrongDigitEndsTheRunAndItScoresNothing() throws Exception {
 		MockHttpSession player = Players.register(this.mockMvc);
-		String session = startSession(player, null);
+		String session = startSession(player, null, "daily");
 		String run = startDaily(player, null, session);
 		int cell = firstEmpty(run);
 		int right = solutionOf(run)[cell];
@@ -303,7 +308,7 @@ class SudokuApiTests {
 	@Test
 	void threeHintsEachLowerTheScoreAndNeverGiveAwayTheBoard() throws Exception {
 		MockHttpSession player = Players.register(this.mockMvc);
-		String session = startSession(player, null);
+		String session = startSession(player, null, "hard");
 		String run = startPractice(player, null, "HARD", session);
 		int[] solution = solutionOf(run);
 
@@ -337,7 +342,7 @@ class SudokuApiTests {
 	@Test
 	void aHintThatCannotBeGivenCostsNothing() throws Exception {
 		MockHttpSession player = Players.register(this.mockMvc);
-		String run = startPractice(player, null, "EASY", startSession(player, null));
+		String run = startPractice(player, null, "EASY", startSession(player, null, "easy"));
 		int clue = JsonPath.<String>read(run, "$.givens").replace('0', '.').indexOf(firstClueChar(run));
 		hint(player, null, id(run), "REVEAL", clue).andExpect(status().isConflict())
 			.andExpect(jsonPath("$.code").value("HINT_UNAVAILABLE"));
@@ -352,7 +357,7 @@ class SudokuApiTests {
 	@Test
 	void pausedTimeDoesNotCount() throws Exception {
 		MockHttpSession player = Players.register(this.mockMvc);
-		String session = startSession(player, null);
+		String session = startSession(player, null, "easy");
 		String run = startPractice(player, null, "EASY", session);
 		this.mockMvc.perform(post("/api/sudoku/runs/{id}/pause", id(run)).session(player))
 			.andExpect(jsonPath("$.paused").value(true));
@@ -401,8 +406,11 @@ class SudokuApiTests {
 		}
 		String solved = solve(player, null, run);
 		assertThat(JsonPath.<Object>read(solved, "$.result")).isNull();
-		bind(player, null, id(run), startSession(player, null)).andExpect(status().isConflict())
+		bind(player, null, id(run), startSession(player, null, "medium")).andExpect(status().isConflict())
 			.andExpect(jsonPath("$.code").value("RUN_NOT_RANKED"));
+		// Not a score anywhere: relaxed games stay off every board.
+		assertThat(this.jdbc.queryForObject("SELECT count(*) FROM scores WHERE user_id = ?", Integer.class,
+				Players.userId(this.mockMvc, player))).isZero();
 		this.mockMvc.perform(get("/api/sudoku/stats").session(player))
 			.andExpect(jsonPath("$.practice.played").value(0))
 			.andExpect(jsonPath("$.daily.played").value(0));
@@ -413,7 +421,7 @@ class SudokuApiTests {
 		MockHttpSession player = Players.register(this.mockMvc);
 		Long playerId = Players.userId(this.mockMvc, player);
 		giveChallenge("dailyGrade");
-		String session = startSession(player, null);
+		String session = startSession(player, null, "easy");
 		String run = startPractice(player, null, "EASY", session);
 		assertThat(JsonPath.<Boolean>read(run, "$.ranked")).isTrue();
 		assertThat(JsonPath.<Object>read(run, "$.puzzleNumber")).isNull();
@@ -437,10 +445,10 @@ class SudokuApiTests {
 	@Test
 	void aNewPracticeGameLeavesTheOldOneAsPlayedButNotCompleted() throws Exception {
 		MockHttpSession player = Players.register(this.mockMvc);
-		String first = startPractice(player, null, "EASY", startSession(player, null));
+		String first = startPractice(player, null, "EASY", startSession(player, null, "easy"));
 		this.mockMvc.perform(get("/api/sudoku/today").session(player))
 			.andExpect(jsonPath("$.practice.id").value(id(first)));
-		String second = startPractice(player, null, "HARD", startSession(player, null));
+		String second = startPractice(player, null, "HARD", startSession(player, null, "hard"));
 		this.mockMvc.perform(get("/api/sudoku/today").session(player))
 			.andExpect(jsonPath("$.practice.id").value(id(second)))
 			.andExpect(jsonPath("$.practice.difficulty").value("HARD"));
@@ -453,22 +461,344 @@ class SudokuApiTests {
 	@Test
 	void aRunIsPickedUpWithANewSessionAfterAReload() throws Exception {
 		MockHttpSession player = Players.register(this.mockMvc);
-		String run = startDaily(player, null, startSession(player, null));
+		String run = startDaily(player, null, startSession(player, null, "daily"));
 		int cell = firstEmpty(run);
 		move(player, null, id(run), cell, solutionOf(run)[cell]);
 
 		// The page is reloaded: a new session, the same run where it was.
-		String session = startSession(player, null);
+		String session = startSession(player, null, "daily");
 		String picked = startDaily(player, null, session);
 		assertThat(id(picked)).isEqualTo(id(run));
 		assertThat(JsonPath.<String>read(picked, "$.values").charAt(cell)).isEqualTo((char) ('0' + solutionOf(run)[cell]));
 		String solved = solve(player, null, picked);
 		submit(player, null, session, solved).andExpect(status().isOk());
 
-		String practice = startPractice(player, null, "EASY", startSession(player, null));
-		String practiceSession = startSession(player, null);
+		String practice = startPractice(player, null, "EASY", startSession(player, null, "easy"));
+		String practiceSession = startSession(player, null, "easy");
 		bind(player, null, id(practice), practiceSession).andExpect(status().isOk());
 		submit(player, null, practiceSession, solve(player, null, practice)).andExpect(status().isOk());
+	}
+
+	// --- Leaderboards ------------------------------------------------------------------------------------
+
+	@Test
+	void sudokuHasADailyBoardAndOneForEachDifficultyBesidesTheOldOne() throws Exception {
+		this.mockMvc.perform(get("/api/games/sudoku/modes"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$[*].id", contains("classic", "daily", "easy", "medium", "hard", "expert")))
+			.andExpect(jsonPath("$[*].name", contains("Classic", "Daily", "Easy", "Medium", "Hard", "Expert")))
+			.andExpect(jsonPath("$[*].ranked", everyItem(is(true))))
+			.andExpect(jsonPath("$[*].order", everyItem(is("DESC"))))
+			.andExpect(jsonPath("$[*].unit", everyItem(is("POINTS"))));
+		this.mockMvc.perform(post("/api/game-sessions").contentType(MediaType.APPLICATION_JSON)
+			.header(PLAYER_HEADER, UUID.randomUUID())
+			.content("{\"gameSlug\":\"sudoku\",\"mode\":\"relaxed\"}"))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("UNKNOWN_MODE"));
+	}
+
+	@Test
+	void rankedPracticeScoresGoOnTheirOwnDifficultysBoard() throws Exception {
+		MockHttpSession easy = Players.register(this.mockMvc);
+		MockHttpSession hard = Players.register(this.mockMvc);
+		String easySession = startSession(easy, null, "easy");
+		submit(easy, null, easySession, solve(easy, null, startPractice(easy, null, "EASY", easySession)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.mode").value("easy"));
+		String hardSession = startSession(hard, null, "hard");
+		String hardRun = solve(hard, null, startPractice(hard, null, "HARD", hardSession));
+		int hardScore = JsonPath.read(hardRun, "$.result.score");
+		submit(hard, null, hardSession, hardRun).andExpect(jsonPath("$.mode").value("hard"));
+
+		assertThat(this.jdbc.queryForList("SELECT mode FROM scores WHERE user_id = ?", String.class,
+				Players.userId(this.mockMvc, easy))).containsExactly("easy");
+		this.mockMvc.perform(get("/api/leaderboards/sudoku?mode=hard").session(hard))
+			.andExpect(jsonPath("$.mode").value("hard"))
+			.andExpect(jsonPath("$.order").value("DESC"))
+			.andExpect(jsonPath("$.entries[?(@.you == true)].score").value(hardScore));
+		for (String other : List.of("classic", "daily", "easy", "medium", "expert")) {
+			this.mockMvc.perform(get("/api/leaderboards/sudoku?mode={mode}", other).session(hard))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.entries[?(@.you == true)]").isEmpty());
+		}
+		this.mockMvc.perform(get("/api/leaderboards/sudoku?mode=easy").session(easy))
+			.andExpect(jsonPath("$.entries[?(@.you == true)]", hasSize(1)));
+	}
+
+	@Test
+	void higherScoresRankFirstOnADifficultysBoard() throws Exception {
+		MockHttpSession quick = Players.register(this.mockMvc);
+		MockHttpSession slow = Players.register(this.mockMvc);
+		String slowSession = startSession(slow, null, "medium");
+		String slowRun = startPractice(slow, null, "MEDIUM", slowSession);
+		// Twenty minutes over par costs points; the quick player keeps them.
+		this.jdbc.update("UPDATE sudoku_runs SET started_at = started_at - interval '40 minutes' WHERE id = ?::uuid",
+				id(slowRun));
+		String slowSolved = solve(slow, null, slowRun);
+		String quickSession = startSession(quick, null, "medium");
+		String quickSolved = solve(quick, null, startPractice(quick, null, "MEDIUM", quickSession));
+		int slowScore = JsonPath.read(slowSolved, "$.result.score");
+		int quickScore = JsonPath.read(quickSolved, "$.result.score");
+		assertThat(quickScore).isGreaterThan(slowScore);
+		submit(slow, null, slowSession, slowSolved).andExpect(status().isOk());
+		submit(quick, null, quickSession, quickSolved).andExpect(status().isOk());
+
+		String board = this.mockMvc.perform(get("/api/leaderboards/sudoku?mode=medium&size=100"))
+			.andReturn()
+			.getResponse()
+			.getContentAsString();
+		List<Integer> scores = JsonPath.read(board, "$.entries[*].score");
+		assertThat(scores).isSortedAccordingTo((a, b) -> b - a).contains(quickScore, slowScore);
+		assertThat(scores.indexOf(quickScore)).isLessThan(scores.lastIndexOf(slowScore));
+	}
+
+	@Test
+	void aRunIsStartedPickedUpAndFinishedOnlyOnItsOwnBoard() throws Exception {
+		MockHttpSession player = Players.register(this.mockMvc);
+		// Started: a practice game in another difficulty's session, the daily in a practice one, either in Classic.
+		startPracticeRequest(player, "EASY", startSession(player, null, "hard")).andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("WRONG_MODE"));
+		startPracticeRequest(player, "EASY", startSession(player, null, "daily"))
+			.andExpect(jsonPath("$.code").value("WRONG_MODE"));
+		startPracticeRequest(player, "EASY", startSession(player, null, "classic"))
+			.andExpect(jsonPath("$.code").value("WRONG_MODE"));
+		startDailyRequest(player, null, startSession(player, null, "easy")).andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("WRONG_MODE"));
+		startDailyRequest(player, null, startSession(player, null, "classic"))
+			.andExpect(jsonPath("$.code").value("WRONG_MODE"));
+
+		// Picked up after a reload: only with a session of its own board.
+		String session = startSession(player, null, "easy");
+		String run = startPractice(player, null, "EASY", session);
+		bind(player, null, id(run), startSession(player, null, "medium")).andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("WRONG_MODE"));
+		String solved = solve(player, null, run);
+
+		// Finished: a session whose mode no longer matches its run (as if it had been changed) is refused,
+		// and a claim of another difficulty does not add up to the run that was played.
+		this.jdbc.update("UPDATE game_sessions SET mode = 'hard' WHERE id = ?::uuid", session);
+		submit(player, null, session, solved).andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("SCORE_REJECTED"));
+		this.jdbc.update("UPDATE game_sessions SET mode = 'easy' WHERE id = ?::uuid", session);
+		Map<String, Integer> details = JsonPath.read(solved, "$.result.details");
+		Scoring.Summary asHard = new Scoring.Summary(true, false, Difficulty.HARD, details.get("seconds"), 0, 0, 0);
+		finish(player, session, Scoring.score(asHard), Scoring.details(asHard))
+			.andExpect(jsonPath("$.code").value("SCORE_REJECTED"));
+		submit(player, null, session, solved).andExpect(status().isOk()).andExpect(jsonPath("$.mode").value("easy"));
+		assertThat(this.jdbc.queryForList("SELECT mode FROM scores WHERE user_id = ?", String.class,
+				Players.userId(this.mockMvc, player))).containsExactly("easy");
+	}
+
+	@Test
+	void aBoardOfItsOwnEarnsWhatAClassicRunAlwaysHas() throws Exception {
+		MockHttpSession player = Players.register(this.mockMvc);
+		Long playerId = Players.userId(this.mockMvc, player);
+		giveChallenge("dailyGrade");
+		String session = startSession(player, null, "daily");
+		String solved = solve(player, null, startDaily(player, null, session));
+		int score = JsonPath.read(solved, "$.result.score");
+		// Completion and personal-best XP and coins as before, the challenge and the first-solve achievement too.
+		String body = submit(player, null, session, solved).andExpect(status().isOk())
+			.andExpect(jsonPath("$.mode").value("daily"))
+			.andExpect(jsonPath("$.rewards.personalBest").value(true))
+			.andExpect(jsonPath("$.rewards.bonuses[*].type", hasItem("DAILY_CHALLENGE")))
+			.andExpect(jsonPath("$.rewards.achievements[*].code", hasItem("SUDOKU_FIRST_SOLVE")))
+			.andReturn()
+			.getResponse()
+			.getContentAsString();
+		int achievementXp = JsonPath.<List<Integer>>read(body, "$.rewards.achievements[*].xp").stream().mapToInt(Integer::intValue).sum();
+		int bonusXp = JsonPath.<List<Integer>>read(body, "$.rewards.bonuses[*].xp").stream().mapToInt(Integer::intValue).sum();
+		assertThat(JsonPath.<Integer>read(body, "$.rewards.xpEarned")).isEqualTo(10 + 25 + achievementXp + bonusXp);
+		assertThat(coinTypes(playerId, session)).contains("GAME_COMPLETION", "HIGH_SCORE");
+		assertThat(completions(playerId)).isEqualTo(1);
+		assertThat(score).isPositive();
+
+		// The best is kept per board: a first ranked Easy game is a new best there too.
+		String practiceSession = startSession(player, null, "easy");
+		submit(player, null, practiceSession, solve(player, null, startPractice(player, null, "EASY", practiceSession)))
+			.andExpect(jsonPath("$.rewards.personalBest").value(true))
+			.andExpect(jsonPath("$.rewards.achievements[*].code", not(hasItem("SUDOKU_FIRST_SOLVE"))));
+		assertThat(coinTypes(playerId, practiceSession)).contains("GAME_COMPLETION", "HIGH_SCORE");
+		// Both count as games played, as Classic ones always have.
+		assertThat(this.jdbc.queryForObject("SELECT count(*) FROM scores WHERE user_id = ? AND mode IN ('daily', 'easy')",
+				Integer.class, playerId)).isEqualTo(2);
+	}
+
+	@Test
+	void scoresFromBeforeTheSplitStayOnTheClassicBoard() throws Exception {
+		MockHttpSession player = Players.register(this.mockMvc);
+		Long playerId = Players.userId(this.mockMvc, player);
+		// A run tied to a Classic session before the split: finished as it always was, onto the old board.
+		String session = startSession(player, null, "daily");
+		String run = startDaily(player, null, session);
+		this.jdbc.update("UPDATE game_sessions SET mode = 'classic' WHERE id = ?::uuid", session);
+		String solved = solve(player, null, run);
+		int score = JsonPath.read(solved, "$.result.score");
+		submit(player, null, session, solved).andExpect(status().isOk()).andExpect(jsonPath("$.mode").value("classic"));
+		String before = this.jdbc.queryForObject(
+				"SELECT string_agg(id || ':' || mode || ':' || score || ':' || created_at, ',' ORDER BY id) FROM scores WHERE user_id = ?",
+				String.class, playerId);
+
+		this.mockMvc.perform(get("/api/leaderboards/sudoku?mode=classic").session(player))
+			.andExpect(jsonPath("$.entries[?(@.you == true)].score").value(score));
+		this.mockMvc.perform(get("/api/leaderboards/sudoku?mode=daily").session(player))
+			.andExpect(jsonPath("$.entries[?(@.you == true)]").isEmpty());
+		// Nothing moves it, rewrites it or removes it: later games go on the new boards.
+		String practiceSession = startSession(player, null, "expert");
+		submit(player, null, practiceSession, solve(player, null, startPractice(player, null, "EXPERT", practiceSession)))
+			.andExpect(status().isOk());
+		assertThat(this.jdbc.queryForObject(
+				"SELECT string_agg(id || ':' || mode || ':' || score || ':' || created_at, ',' ORDER BY id) FROM scores WHERE user_id = ? AND mode = 'classic'",
+				String.class, playerId)).isEqualTo(before);
+	}
+
+	/**
+	 * A daily started before midnight UTC and finished after it is accepted, and ranked on its puzzle's
+	 * board: the date is the server's record of the run, whenever the score arrives. (The platform's
+	 * period boards still count it on the day it arrived.)
+	 */
+	@Test
+	void aDailyFinishedAfterMidnightRanksUnderItsPuzzleDate() throws Exception {
+		MockHttpSession player = Players.register(this.mockMvc);
+		Long playerId = Players.userId(this.mockMvc, player);
+		LocalDate yesterday = this.today.minusDays(1);
+		var puzzle = this.dailyPuzzles.forDay(yesterday);
+		String session = startSession(player, null, "daily");
+		// Yesterday's daily, still open with this session after midnight: a minute of play is left.
+		UUID runId = UUID.randomUUID();
+		this.jdbc.update("""
+				INSERT INTO sudoku_runs (id, mode, ranked, difficulty, puzzle_date, puzzle_number, seed, givens, solution,
+				                         actions, status, mistakes, hints, streak, session_id, user_id, started_at)
+				VALUES (?, 'DAILY', TRUE, ?, ?, ?, ?, ?, ?, '', 'PLAYING', 0, 0, 0, ?::uuid, ?, now() - interval '1 minute')
+				""", runId, puzzle.difficulty().name(), yesterday, DailySchedule.puzzleNumber(yesterday), puzzle.seed(),
+				puzzle.givens(), puzzle.solution(), session, playerId);
+
+		int[] givens = Grid.parse(puzzle.givens());
+		int[] solution = Grid.parse(puzzle.solution());
+		List<int[]> rest = new ArrayList<>();
+		for (int cell = 0; cell < Grid.CELLS; cell++) {
+			if (givens[cell] == 0) {
+				rest.add(new int[] { cell, solution[cell] });
+			}
+		}
+		String solved = moves(player, null, runId.toString(), rest).andExpect(status().isOk())
+			.andExpect(jsonPath("$.status").value("SOLVED"))
+			.andReturn()
+			.getResponse()
+			.getContentAsString();
+		int score = JsonPath.read(solved, "$.result.score");
+		submit(player, null, session, solved).andExpect(status().isOk()).andExpect(jsonPath("$.mode").value("daily"));
+
+		// Arrived today, ranked on yesterday's puzzle and not on today's.
+		assertThat(this.jdbc.queryForObject("SELECT created_at >= ?::date FROM scores WHERE user_id = ?", Boolean.class,
+				this.today.toString(), playerId)).isTrue();
+		dailyBoard(player, null, yesterday.toString()).andExpect(status().isOk())
+			.andExpect(jsonPath("$.date").value(yesterday.toString()))
+			.andExpect(jsonPath("$.puzzleNumber").value(DailySchedule.puzzleNumber(yesterday)))
+			.andExpect(jsonPath("$.entries[?(@.you == true)].score").value(score))
+			.andExpect(jsonPath("$.myScore").value(score));
+		dailyBoard(player, null, null).andExpect(jsonPath("$.date").value(this.today.toString()))
+			.andExpect(jsonPath("$.entries[?(@.you == true)]").isEmpty())
+			.andExpect(jsonPath("$.myRank").value(nullValue()));
+		// The platform's period boards are as they were: by when the score arrived.
+		this.mockMvc.perform(get("/api/leaderboards/sudoku?period=DAILY&mode=daily").session(player))
+			.andExpect(jsonPath("$.entries[?(@.you == true)].score").value(score));
+
+		// Today's puzzle, played too, is a board of its own: the player is on both, once each.
+		String todaySession = startSession(player, null, "daily");
+		String todaySolved = solve(player, null, startDaily(player, null, todaySession));
+		int todayScore = JsonPath.read(todaySolved, "$.result.score");
+		submit(player, null, todaySession, todaySolved).andExpect(status().isOk());
+		dailyBoard(player, null, null).andExpect(jsonPath("$.myScore").value(todayScore))
+			.andExpect(jsonPath("$.entries[?(@.you == true)]", hasSize(1)));
+		dailyBoard(player, null, yesterday.toString()).andExpect(jsonPath("$.myScore").value(score))
+			.andExpect(jsonPath("$.entries[?(@.you == true)]", hasSize(1)));
+	}
+
+	@Test
+	void todaysDailyBoardRanksItsPuzzlesScoresHighestFirst() throws Exception {
+		MockHttpSession quick = Players.register(this.mockMvc);
+		MockHttpSession slow = Players.register(this.mockMvc);
+		UUID guest = UUID.randomUUID();
+		String slowSession = startSession(slow, null, "daily");
+		String slowRun = startDaily(slow, null, slowSession);
+		this.jdbc.update("UPDATE sudoku_runs SET started_at = started_at - interval '90 minutes' WHERE id = ?::uuid",
+				id(slowRun));
+		String slowSolved = solve(slow, null, slowRun);
+		String quickSession = startSession(quick, null, "daily");
+		String quickSolved = solve(quick, null, startDaily(quick, null, quickSession));
+		String guestSession = startSession(null, guest, "daily");
+		String guestSolved = solve(null, guest, startDaily(null, guest, guestSession));
+		int slowScore = JsonPath.read(slowSolved, "$.result.score");
+		int quickScore = JsonPath.read(quickSolved, "$.result.score");
+		assertThat(quickScore).isGreaterThan(slowScore);
+		submit(slow, null, slowSession, slowSolved).andExpect(status().isOk());
+		submit(quick, null, quickSession, quickSolved).andExpect(status().isOk());
+		submit(null, guest, guestSession, guestSolved).andExpect(status().isOk());
+
+		// No date is today's puzzle.
+		String board = dailyBoard(quick, null, null).andExpect(status().isOk())
+			.andExpect(jsonPath("$.date").value(this.today.toString()))
+			.andExpect(jsonPath("$.today").value(this.today.toString()))
+			.andExpect(jsonPath("$.puzzleNumber").value(DailySchedule.puzzleNumber(this.today)))
+			.andExpect(jsonPath("$.difficulty").value(DailySchedule.difficultyFor(this.today).name()))
+			.andExpect(jsonPath("$.myScore").value(quickScore))
+			.andReturn()
+			.getResponse()
+			.getContentAsString();
+		List<Integer> scores = JsonPath.read(board, "$.entries[*].score");
+		List<Integer> ranks = JsonPath.read(board, "$.entries[*].rank");
+		assertThat(scores).isSortedAccordingTo((a, b) -> b - a).contains(quickScore, slowScore);
+		assertThat(ranks).isEqualTo(java.util.stream.IntStream.rangeClosed(1, ranks.size()).boxed().toList());
+		int myRank = JsonPath.read(board, "$.myRank");
+		assertThat(scores.get(myRank - 1)).isEqualTo(quickScore);
+		dailyBoard(slow, null, this.today.toString()).andExpect(jsonPath("$.myScore").value(slowScore))
+			.andExpect(jsonPath("$.entries[?(@.you == true)].player.username").isNotEmpty());
+		// A guest's score is on it too, without a name; a caller nobody knows is on no entry.
+		dailyBoard(null, guest, null).andExpect(jsonPath("$.entries[?(@.you == true)].player", contains(nullValue())))
+			.andExpect(jsonPath("$.myRank").isNumber());
+		dailyBoard(null, null, null).andExpect(status().isOk())
+			.andExpect(jsonPath("$.entries[?(@.you == true)]").isEmpty())
+			.andExpect(jsonPath("$.myRank").value(nullValue()));
+	}
+
+	@Test
+	void practiceAndLegacyScoresStayOffTheDatedDailyBoard() throws Exception {
+		MockHttpSession player = Players.register(this.mockMvc);
+		// Today's daily, tied to a Classic session before the split: a Legacy score.
+		String legacySession = startSession(player, null, "daily");
+		String legacyRun = startDaily(player, null, legacySession);
+		this.jdbc.update("UPDATE game_sessions SET mode = 'classic' WHERE id = ?::uuid", legacySession);
+		submit(player, null, legacySession, solve(player, null, legacyRun)).andExpect(jsonPath("$.mode").value("classic"));
+		String practiceSession = startSession(player, null, "easy");
+		submit(player, null, practiceSession, solve(player, null, startPractice(player, null, "EASY", practiceSession)))
+			.andExpect(jsonPath("$.mode").value("easy"));
+
+		dailyBoard(player, null, null).andExpect(jsonPath("$.entries[?(@.you == true)]").isEmpty())
+			.andExpect(jsonPath("$.myRank").value(nullValue()));
+		this.mockMvc.perform(get("/api/leaderboards/sudoku?mode=classic").session(player))
+			.andExpect(jsonPath("$.entries[?(@.you == true)]", hasSize(1)));
+		this.mockMvc.perform(get("/api/leaderboards/sudoku?mode=easy").session(player))
+			.andExpect(jsonPath("$.entries[?(@.you == true)]", hasSize(1)));
+	}
+
+	@Test
+	void aDailyBoardIsOnlyForADayThatHadAPuzzle() throws Exception {
+		// The first puzzle's board is there, with nobody on it.
+		dailyBoard(null, null, DailySchedule.FIRST_DAY.toString()).andExpect(status().isOk())
+			.andExpect(jsonPath("$.puzzleNumber").value(1))
+			.andExpect(jsonPath("$.entries", hasSize(0)))
+			.andExpect(jsonPath("$.totalEntries").value(0))
+			.andExpect(jsonPath("$.totalPages").value(0))
+			.andExpect(jsonPath("$.myRank").value(nullValue()));
+		// Before the first puzzle, or a puzzle not come yet: no such board.
+		dailyBoard(null, null, DailySchedule.FIRST_DAY.minusDays(1).toString()).andExpect(status().isNotFound());
+		dailyBoard(null, null, this.today.plusDays(1).toString()).andExpect(status().isNotFound())
+			.andExpect(jsonPath("$.code").value("NOT_FOUND"));
+		dailyBoard(null, null, "yesterday").andExpect(status().isBadRequest());
+		dailyBoard(null, null, "2026-02-30").andExpect(status().isBadRequest());
+		this.mockMvc.perform(get("/api/sudoku/daily/leaderboard?size=101")).andExpect(status().isBadRequest());
+		this.mockMvc.perform(get("/api/sudoku/daily/leaderboard?page=-1")).andExpect(status().isBadRequest());
 	}
 
 	// --- Streaks, challenges, achievements ---------------------------------------------------------------
@@ -483,13 +813,13 @@ class SudokuApiTests {
 			.andExpect(jsonPath("$.currentStreak").value(2))
 			.andExpect(jsonPath("$.bestStreak").value(2));
 
-		String session = startSession(player, null);
+		String session = startSession(player, null, "daily");
 		String solved = solve(player, null, startDaily(player, null, session));
 		assertThat(JsonPath.<Integer>read(solved, "$.result.details.streak")).isEqualTo(3);
 		submit(player, null, session, solved).andExpect(jsonPath("$.rewards.achievements[*].code", hasItem("SUDOKU_DAILY_STREAK")));
 
 		// More games today, of any kind, do not add to it.
-		String practiceSession = startSession(player, null);
+		String practiceSession = startSession(player, null, "easy");
 		submit(player, null, practiceSession, solve(player, null, startPractice(player, null, "EASY", practiceSession)))
 			.andExpect(jsonPath("$.rewards.achievements[*].code", not(hasItem("SUDOKU_DAILY_STREAK"))));
 		this.mockMvc.perform(get("/api/sudoku/stats").session(player))
@@ -505,23 +835,23 @@ class SudokuApiTests {
 		MockHttpSession player = Players.register(this.mockMvc);
 		Long playerId = Players.userId(this.mockMvc, player);
 		giveChallenge("dailyGrade");
-		String session = startSession(player, null);
+		String session = startSession(player, null, "daily");
 		String solved = solve(player, null, startDaily(player, null, session));
 		submit(player, null, session, solved).andExpect(status().isOk())
 			.andExpect(jsonPath("$.rewards.bonuses[?(@.type == 'DAILY_CHALLENGE')].title", contains("Grid of the Day")));
 		assertThat(completions(playerId)).isEqualTo(1);
 		// The day cannot be played again, so the challenge cannot be earned again.
-		startDailyRequest(player, null, startSession(player, null)).andExpect(jsonPath("$.code").value("DAILY_ALREADY_PLAYED"));
+		startDailyRequest(player, null, startSession(player, null, "daily")).andExpect(jsonPath("$.code").value("DAILY_ALREADY_PLAYED"));
 		assertThat(completions(playerId)).isEqualTo(1);
 	}
 
 	@Test
 	void anAchievementIsEarnedOnce() throws Exception {
 		MockHttpSession player = Players.register(this.mockMvc);
-		String first = startSession(player, null);
+		String first = startSession(player, null, "easy");
 		submit(player, null, first, solve(player, null, startPractice(player, null, "EASY", first)))
 			.andExpect(jsonPath("$.rewards.achievements[*].code", hasItem("SUDOKU_FIRST_SOLVE")));
-		String second = startSession(player, null);
+		String second = startSession(player, null, "easy");
 		submit(player, null, second, solve(player, null, startPractice(player, null, "EASY", second)))
 			.andExpect(jsonPath("$.rewards.achievements[*].code", not(hasItem("SUDOKU_FIRST_SOLVE"))));
 		Long playerId = Players.userId(this.mockMvc, player);
@@ -628,9 +958,10 @@ class SudokuApiTests {
 		return request;
 	}
 
-	private String startSession(MockHttpSession session, UUID guest) throws Exception {
+	/** A game session in one of Sudoku's modes: {@code daily}, a difficulty, or {@code classic}. */
+	private String startSession(MockHttpSession session, UUID guest, String mode) throws Exception {
 		String body = this.mockMvc.perform(as(post("/api/game-sessions").contentType(MediaType.APPLICATION_JSON)
-			.content("{\"gameSlug\":\"sudoku\"}"), session, guest))
+			.content("{\"gameSlug\":\"sudoku\",\"mode\":\"%s\"}".formatted(mode)), session, guest))
 			.andExpect(status().isCreated())
 			.andReturn()
 			.getResponse()
@@ -664,6 +995,22 @@ class SudokuApiTests {
 			.andReturn()
 			.getResponse()
 			.getContentAsString();
+	}
+
+	/** The Daily board of a puzzle date, or today's without one; as a guest when both callers are null. */
+	private ResultActions dailyBoard(MockHttpSession session, UUID guest, String date) throws Exception {
+		MockHttpServletRequestBuilder request = get("/api/sudoku/daily/leaderboard?size=100");
+		if (date != null) {
+			request.param("date", date);
+		}
+		return this.mockMvc.perform(as(request, session, guest));
+	}
+
+	private ResultActions startPracticeRequest(MockHttpSession session, String difficulty, String sessionId)
+			throws Exception {
+		return this.mockMvc.perform(post("/api/sudoku/practice/runs").session(session)
+			.contentType(MediaType.APPLICATION_JSON)
+			.content("{\"difficulty\":\"%s\",\"sessionId\":\"%s\"}".formatted(difficulty, sessionId)));
 	}
 
 	private ResultActions bind(MockHttpSession session, UUID guest, String runId, String sessionId) throws Exception {
@@ -811,6 +1158,11 @@ class SudokuApiTests {
 		this.jdbc.update("DELETE FROM daily_challenge_progress WHERE daily_challenge_id IN (" + ids + ")", this.today);
 		this.jdbc.update("DELETE FROM daily_challenges WHERE challenge_date = ? AND game_id = (SELECT id FROM games WHERE slug = 'sudoku')",
 				this.today);
+	}
+
+	private List<String> coinTypes(Long userId, String sessionId) {
+		return this.jdbc.queryForList("SELECT type FROM coin_transactions WHERE user_id = ? AND reference_id = ?", String.class,
+				userId, sessionId);
 	}
 
 	private int completions(Long userId) {

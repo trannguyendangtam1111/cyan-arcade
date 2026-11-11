@@ -13,7 +13,7 @@ import { Suspense, useCallback, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { useSession } from '@/api/auth'
 import { ApiError } from '@/api/client'
-import { CLASSIC, useGameModes } from '@/api/games'
+import { homeBoard, useGameModes } from '@/api/games'
 import { useDailyChallenges } from '@/api/dailyChallenges'
 import type { Rewards } from '@/api/gameSessions'
 import { Badge } from '@/components/ui/Badge'
@@ -24,7 +24,7 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { LoadingState } from '@/components/ui/LoadingState'
 import { categoryLabels } from '@/games/registry'
-import type { GameDefinition, GameModule } from '@/games/types'
+import type { GameDefinition, GameModule, GameResult } from '@/games/types'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useGameAi } from '@/hooks/useGameAi'
 import { useGameDefinition } from '@/hooks/useGameCatalog'
@@ -149,18 +149,29 @@ function GameStage({ game, gameModule }: { game: GameDefinition; gameModule: Gam
   const modes = useMemo(() => declaredModes?.map((mode) => mode.id), [declaredModes])
   // The mode of the latest run, so its result reads as its mode counts: a time (Sprint) or points.
   const [runMode, setRunMode] = useState<string>()
+  // The puzzle date of the latest run, for a board ranked by date (Sudoku's Daily).
+  const [boardDate, setBoardDate] = useState<string>()
   const timedResult = declaredModes?.find((mode) => mode.id === runMode)?.unit === 'MILLISECONDS'
   // An unranked mode (a Tetris Challenge stage) has no leaderboard and earns nothing: its result says only that it was kept.
   const rankedResult = declaredModes?.find((mode) => mode.id === runMode)?.ranked !== false
   const handleGameStart = useCallback(
     (mode?: unknown) => {
       setRunMode(typeof mode === 'string' ? mode : undefined)
+      setBoardDate(undefined)
       // Remembered on this device, for the hub's "Jump back in" row.
       recordRecentGame(game.slug)
       // An unscored game opens no score session: there is nothing to submit.
       if (game.scored) onGameStart(mode)
     },
     [game.slug, game.scored, onGameStart],
+  )
+
+  const handleGameOver = useCallback(
+    (result: GameResult) => {
+      setBoardDate(result.boardDate)
+      onGameOver(result)
+    },
+    [onGameOver],
   )
 
   return (
@@ -170,7 +181,7 @@ function GameStage({ game, gameModule }: { game: GameDefinition; gameModule: Gam
         <gameModule.Component
           onGameStart={handleGameStart}
           modes={game.scored ? modes : undefined}
-          onGameOver={game.scored ? onGameOver : ignoreResult}
+          onGameOver={game.scored ? handleGameOver : ignoreResult}
           currentSession={currentSession}
           ai={ai as (() => never) | undefined}
           cosmetics={cosmetics}
@@ -181,6 +192,7 @@ function GameStage({ game, gameModule }: { game: GameDefinition; gameModule: Gam
         onRetry={retry}
         gameSlug={game.slug}
         mode={runMode}
+        boardDate={boardDate}
         timed={timedResult}
         ranked={rankedResult}
       />
@@ -194,6 +206,8 @@ interface ScoreStatusProps {
   gameSlug: string
   /** The mode of the run, so its leaderboard link opens that mode's board (Classic when unset). */
   mode?: string
+  /** The run's puzzle date, for a board ranked by date: the link opens that day's board. */
+  boardDate?: string
   /** Whether the run's score is a time in milliseconds (a mode ranked by time), shown as one. */
   timed: boolean
   /** Whether the run's mode is ranked: an unranked one has no leaderboard to link and no rewards to show. */
@@ -204,7 +218,7 @@ interface ScoreStatusProps {
 function ignoreResult() {}
 
 /** Tells the player what happened to the score of the run that just ended. */
-function ScoreStatus({ submission, onRetry, gameSlug, mode, timed, ranked }: ScoreStatusProps) {
+function ScoreStatus({ submission, onRetry, gameSlug, mode, boardDate, timed, ranked }: ScoreStatusProps) {
   if (submission.status === 'idle') return null
   const noun = timed ? 'time' : 'score'
   const value = (score: number) => <strong>{timed ? formatGameTime(score) : score}</strong>
@@ -240,8 +254,8 @@ function ScoreStatus({ submission, onRetry, gameSlug, mode, timed, ranked }: Sco
               )}
               <Link
                 to={`/leaderboard?game=${encodeURIComponent(gameSlug)}${
-                  mode && mode !== CLASSIC.id ? `&mode=${encodeURIComponent(mode)}` : ''
-                }`}
+                  mode && mode !== homeBoard(gameSlug).id ? `&mode=${encodeURIComponent(mode)}` : ''
+                }${boardDate ? `&date=${encodeURIComponent(boardDate)}` : ''}`}
                 className="ml-auto rounded font-bold text-brand-700 hover:text-brand-900"
               >
                 View leaderboard →

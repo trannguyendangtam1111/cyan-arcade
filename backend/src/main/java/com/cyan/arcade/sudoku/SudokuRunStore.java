@@ -88,13 +88,17 @@ class SudokuRunStore {
 			.optional();
 	}
 
-	/** Stores a day's puzzle unless one is stored already: the first one stored stays. */
+	/**
+	 * Stores a day's puzzle unless one is stored already: the first one stored stays. The conflict
+	 * has no target because the number is unique too: two requests storing the same day at once
+	 * can meet on either key, and an arbiter on the date alone lets the number's clash through.
+	 */
 	void insertDailyPuzzle(LocalDate date, int puzzleNumber, Puzzle puzzle, int generatorVersion, Instant now) {
 		this.jdbc.sql("""
 				INSERT INTO sudoku_daily_puzzles (puzzle_date, puzzle_number, difficulty, seed, givens, solution,
 				                                  generator_version, created_at)
 				VALUES (:date, :number, :difficulty, :seed, :givens, :solution, :version, :now)
-				ON CONFLICT (puzzle_date) DO NOTHING
+				ON CONFLICT DO NOTHING
 				""")
 			.param("date", date)
 			.param("number", puzzleNumber)

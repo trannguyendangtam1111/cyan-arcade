@@ -170,6 +170,12 @@ export interface GameResult {
   /** Game-specific extras (lines cleared, max tile, ...) kept opaque to the platform. */
   metadata?: Record<string, unknown>
   /**
+   * For a board ranked by the date of its puzzle (Sudoku's Daily): the run's puzzle date (UTC,
+   * `YYYY-MM-DD`), so the way to the leaderboard opens that day's board even after midnight. Only
+   * picks the board shown; the server takes the date from its own record of the run.
+   */
+  boardDate?: string
+  /**
    * Called once the server has recorded this run, only while it is the latest run. A game can use
    * this to keep progress for saved clears (2048 Puzzle: the next stage opens).
    */

@@ -1,6 +1,7 @@
 package com.cyan.arcade.sudoku;
 
 import java.net.URI;
+import java.time.LocalDate;
 import java.util.UUID;
 
 import com.cyan.arcade.common.error.ApiException;
@@ -10,6 +11,7 @@ import com.cyan.arcade.common.security.GuestPlayer;
 import com.cyan.arcade.sudoku.SudokuRun.Owner;
 import com.cyan.arcade.sudoku.SudokuViews.BindSessionRequest;
 import com.cyan.arcade.sudoku.SudokuViews.DailyHistoryResponse;
+import com.cyan.arcade.sudoku.SudokuViews.DailyLeaderboardResponse;
 import com.cyan.arcade.sudoku.SudokuViews.HintRequest;
 import com.cyan.arcade.sudoku.SudokuViews.HintResponse;
 import com.cyan.arcade.sudoku.SudokuViews.MovesRequest;
@@ -19,7 +21,10 @@ import com.cyan.arcade.sudoku.SudokuViews.StartPracticeRequest;
 import com.cyan.arcade.sudoku.SudokuViews.StatsResponse;
 import com.cyan.arcade.sudoku.SudokuViews.TodayResponse;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -29,6 +34,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -41,10 +47,13 @@ class SudokuController {
 
 	private final SudokuService sudoku;
 
+	private final DailyLeaderboard dailyLeaderboard;
+
 	private final DailyHistory dailyHistory;
 
-	SudokuController(SudokuService sudoku, DailyHistory dailyHistory) {
+	SudokuController(SudokuService sudoku, DailyLeaderboard dailyLeaderboard, DailyHistory dailyHistory) {
 		this.sudoku = sudoku;
+		this.dailyLeaderboard = dailyLeaderboard;
 		this.dailyHistory = dailyHistory;
 	}
 
@@ -59,6 +68,17 @@ class SudokuController {
 					"Sign in to see your Daily history");
 		}
 		return this.dailyHistory.of(user.id());
+	}
+
+	/** The Daily leaderboard of one puzzle date (UTC), today's when none is named. Open to everyone. */
+	@GetMapping("/daily/leaderboard")
+	DailyLeaderboardResponse dailyLeaderboard(
+			@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+			@RequestParam(defaultValue = "0") @Min(0) int page,
+			@RequestParam(defaultValue = "20") @Min(1) @Max(DailyLeaderboard.MAX_PAGE_SIZE) int size,
+			@AuthenticationPrincipal AuthenticatedUser user,
+			@RequestHeader(name = GuestPlayer.HEADER, required = false) UUID playerId) {
+		return this.dailyLeaderboard.board(date, page, size, ownerOrNull(user, playerId));
 	}
 
 	@GetMapping("/today")

@@ -130,7 +130,7 @@ class PracticePuzzlesTests {
 	void aPuzzleFromAnyOfThePlayersModesCountsAsHad() {
 		// A Daily run also counts as played when avoiding repeat Practice puzzles.
 		Owner owner = account();
-		UUID sessionId = this.sessions.start("sudoku", "classic", owner.userId(), null).id();
+		UUID sessionId = this.sessions.start("sudoku", "daily", owner.userId(), null).id();
 		RunResponse daily = this.sudoku.startDaily(owner, sessionId);
 		assertThat(this.store.hasPlayed(owner, daily.givens())).isTrue();
 		assertThat(this.store.hasPlayed(new Owner(null, UUID.randomUUID()), daily.givens())).isFalse();

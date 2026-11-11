@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { CLASSIC, type GameMode } from '@/api/games'
-import { mockApi, mockJson } from '@/test/mockApi'
+import { catalogFixture, mockApi, mockJson, mockProblem, type MockHandler } from '@/test/mockApi'
 import { renderRoute } from '@/test/renderWithProviders'
 
 // Test-only declarations exercise the shared board contract independently of game implementations.
@@ -25,6 +25,56 @@ const modeRequests = (fetchSpy: ReturnType<typeof mockApi>) =>
   requests(fetchSpy, '/api/games/').filter((path) => path.endsWith('/modes'))
 
 const status = (code: number) => new Response('{}', { status: code, headers: { 'Content-Type': 'application/json' } })
+
+const sudokuBoard = (id: string, name: string): GameMode => ({ id, name, ranked: true, order: 'DESC', unit: 'POINTS' })
+const sudokuGame = { ...catalogFixture[1], id: 8, slug: 'sudoku', name: 'Sudoku', thumbnailUrl: '/thumbnails/sudoku.svg' }
+const sudokuModes = [
+  CLASSIC,
+  sudokuBoard('daily', 'Daily'),
+  sudokuBoard('easy', 'Easy'),
+  sudokuBoard('medium', 'Medium'),
+  sudokuBoard('hard', 'Hard'),
+  sudokuBoard('expert', 'Expert'),
+]
+const TODAY = '2026-11-07'
+const FIRST_DAY = Date.UTC(2026, 0, 1)
+
+/**
+ * Sudoku's dated Daily boards as the server answers them: today is 2026-11-07, a date after it has no
+ * puzzle (404), and each date's scores are those given for it.
+ */
+function sudokuDailyBoards(scores: Record<string, number[]>): MockHandler {
+  return ({ url }) => {
+    if (url.pathname !== '/api/sudoku/daily/leaderboard') return undefined
+    const date = url.searchParams.get('date') ?? TODAY
+    if (date > TODAY) return mockProblem(404, 'NOT_FOUND', `Daily Sudoku of '${date}' was not found`)
+    const entries = (scores[date] ?? []).map((score, index) => ({
+      rank: index + 1,
+      player: null,
+      score,
+      durationMs: 300_000,
+      achievedAt: `${date}T23:59:00Z`,
+      you: false,
+    }))
+    return mockJson({
+      date,
+      puzzleNumber: (Date.parse(`${date}T00:00:00Z`) - FIRST_DAY) / 86_400_000 + 1,
+      difficulty: 'HARD',
+      today: TODAY,
+      nextPuzzleAt: '2026-11-08T00:00:00Z',
+      entries,
+      page: 0,
+      size: 20,
+      totalEntries: entries.length,
+      totalPages: entries.length > 0 ? 1 : 0,
+      myRank: null,
+      myScore: null,
+    })
+  }
+}
+
+const dailyRequests = (fetchSpy: ReturnType<typeof mockApi>) => requests(fetchSpy, '/api/sudoku/daily/leaderboard')
+const periodGroup = () => screen.queryByRole('group', { name: 'Choose a period' })
 
 describe('leaderboard modes', () => {
   beforeEach(() => window.localStorage.clear())
@@ -234,11 +284,111 @@ describe('a timed board, written to the hundredth', () => {
     expect(boardRequests(fetchSpy).at(-1)).toBe('/api/leaderboards/snake?mode=sprint&period=ALL_TIME&page=0&size=20')
   })
 
+  it('opens Sudoku on its Daily board, offers each difficulty, and keeps the old scores apart as Legacy', async () => {
+    const fetchSpy = mockApi({
+      games: [...catalogFixture, sudokuGame],
+      modes: { sudoku: sudokuModes },
+      scores: { sudoku: [{ score: 700 }], 'sudoku@daily': [{ score: 800 }], 'sudoku@hard': [{ score: 1200 }] },
+      handlers: [sudokuDailyBoards({ [TODAY]: [900] })],
+    })
+    renderRoute('/leaderboard?game=sudoku')
+
+    await waitFor(() => expect(modeGroup()).toBeInTheDocument())
+    expect(modeButtons().map((button) => button.textContent)).toEqual(['Daily', 'Easy', 'Medium', 'Hard', 'Expert', 'Legacy'])
+    expect(screen.getByRole('button', { name: 'Daily' })).toHaveAttribute('aria-pressed', 'true')
+    // Today's puzzle's board, by its date: not the platform's board of scores that arrived today.
+    expect(await screen.findByText('900')).toBeInTheDocument()
+    expect(dailyRequests(fetchSpy)).toEqual(['/api/sudoku/daily/leaderboard?page=0&size=20'])
+    expect(boardRequests(fetchSpy)).toEqual([])
+    expect(screen.queryByText('800')).not.toBeInTheDocument()
+    expect(screen.queryByText(/kept as they were/)).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hard' }))
+    expect(await screen.findByText('1,200')).toBeInTheDocument()
+    expect(boardRequests(fetchSpy).at(-1)).toBe('/api/leaderboards/sudoku?mode=hard&period=ALL_TIME&page=0&size=20')
+
+    // The scores from before the split: Classic on the server, said plainly to be the old ones.
+    fireEvent.click(screen.getByRole('button', { name: 'Legacy' }))
+    expect(await screen.findByText('700')).toBeInTheDocument()
+    expect(boardRequests(fetchSpy).at(-1)).toBe('/api/leaderboards/sudoku?mode=classic&period=ALL_TIME&page=0&size=20')
+    expect(screen.getByText(/Scores from before Sudoku had a Daily board/)).toBeInTheDocument()
+    expect(screen.getByRole('list', { name: 'Top 1 in Sudoku' })).toBeInTheDocument()
+  })
+
   it('leaves a points board written as points', async () => {
     mockApi({ modes: { snake: [CLASSIC, SPRINT] }, scores: { snake: [{ score: 65_040 }] } })
     renderRoute('/leaderboard?game=snake')
 
     expect(await screen.findByText('65,040')).toBeInTheDocument()
     expect(screen.queryByText('1:05.04')).not.toBeInTheDocument()
+  })
+})
+
+describe('Sudoku Daily boards by puzzle date', () => {
+  beforeEach(() => window.localStorage.clear())
+
+  it("shows Sudoku's Daily board by puzzle date, with the puzzles before it and no periods", async () => {
+    const fetchSpy = mockApi({
+      games: [...catalogFixture, sudokuGame],
+      modes: { sudoku: sudokuModes },
+      handlers: [sudokuDailyBoards({ [TODAY]: [900, 640], '2026-11-06': [1_150] })],
+    })
+    renderRoute('/leaderboard?game=sudoku')
+
+    const dates = await screen.findByRole('group', { name: 'Choose a puzzle date' })
+    expect(within(dates).getByText('Daily #311 · Sat 7 Nov 2026')).toBeInTheDocument()
+    expect(screen.getByText(/ranked by the puzzle's date \(UTC\)/)).toBeInTheDocument()
+    expect(await screen.findByText('900')).toBeInTheDocument()
+    // One board per puzzle: no periods to choose, and no puzzle after today's.
+    expect(periodGroup()).not.toBeInTheDocument()
+    expect(within(dates).getByRole('button', { name: 'Next puzzle' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: "Today's puzzle" })).not.toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Your rank' })).getByText(/New board in/)).toBeInTheDocument()
+
+    // Yesterday's puzzle has its own board, scores and all, whenever they were submitted.
+    fireEvent.click(within(dates).getByRole('button', { name: 'Previous puzzle' }))
+    expect(await screen.findByText('Daily #310 · Fri 6 Nov 2026')).toBeInTheDocument()
+    expect(await screen.findByText('1,150')).toBeInTheDocument()
+    expect(screen.queryByText('900')).not.toBeInTheDocument()
+    expect(dailyRequests(fetchSpy).at(-1)).toBe('/api/sudoku/daily/leaderboard?page=0&size=20&date=2026-11-06')
+    expect(screen.queryByText(/New board in/)).not.toBeInTheDocument()
+
+    // A day nobody finished says so; today is one click away.
+    fireEvent.click(within(screen.getByRole('group', { name: 'Choose a puzzle date' })).getByRole('button', { name: 'Previous puzzle' }))
+    expect(await screen.findByText('No scores for Daily #309')).toBeInTheDocument()
+    expect(screen.getByText('Nobody finished this puzzle.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: "Today's puzzle" }))
+    expect(await screen.findByText('Daily #311 · Sat 7 Nov 2026')).toBeInTheDocument()
+    expect(dailyRequests(fetchSpy).at(-1)).toBe('/api/sudoku/daily/leaderboard?page=0&size=20')
+
+    // Another board of Sudoku has its periods again.
+    fireEvent.click(screen.getByRole('button', { name: 'Easy' }))
+    await waitFor(() => expect(periodGroup()).toBeInTheDocument())
+  })
+
+  it('says when a Sudoku puzzle date in the link has no board', async () => {
+    const fetchSpy = mockApi({
+      games: [...catalogFixture, sudokuGame],
+      modes: { sudoku: sudokuModes },
+      handlers: [sudokuDailyBoards({ [TODAY]: [900] })],
+    })
+    renderRoute('/leaderboard?game=sudoku&date=2026-11-09')
+
+    expect(await screen.findByText('No Daily Sudoku that day')).toBeInTheDocument()
+    expect(dailyRequests(fetchSpy)).toEqual(['/api/sudoku/daily/leaderboard?page=0&size=20&date=2026-11-09'])
+    fireEvent.click(screen.getByRole('button', { name: "Today's board" }))
+    expect(await screen.findByText('900')).toBeInTheDocument()
+    expect(dailyRequests(fetchSpy).at(-1)).toBe('/api/sudoku/daily/leaderboard?page=0&size=20')
+  })
+
+  it("asks for today's Sudoku board when the date in the link is not a date", async () => {
+    const fetchSpy = mockApi({
+      games: [...catalogFixture, sudokuGame],
+      modes: { sudoku: sudokuModes },
+      handlers: [sudokuDailyBoards({ [TODAY]: [900] })],
+    })
+    renderRoute('/leaderboard?game=sudoku&date=yesterday')
+    expect(await screen.findByText('900')).toBeInTheDocument()
+    expect(dailyRequests(fetchSpy)).toEqual(['/api/sudoku/daily/leaderboard?page=0&size=20'])
   })
 })

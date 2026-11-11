@@ -106,3 +106,57 @@ export function useGameModes(slug: string, { enabled = true }: { enabled?: boole
 export function rankedModes(modes: GameMode[]): GameMode[] {
   return modes.filter((mode) => mode.ranked)
 }
+
+/**
+ * A game whose Classic board was split into boards of its own: its new scores go on those, and
+ * Classic keeps the scores from before, unchanged, under another name. Sudoku: a Daily board and one
+ * per difficulty.
+ */
+interface SplitBoards {
+  /** The board a game's leaderboard opens on. */
+  home: GameMode
+  /** A board ranked by puzzle date rather than by period, if the game has one. */
+  dated?: string
+  /** What Classic is called there, and what it holds. */
+  legacyName: string
+  legacyNote: string
+}
+
+const SPLIT_BOARDS: Record<string, SplitBoards> = {
+  sudoku: {
+    home: { id: 'daily', name: 'Daily', ranked: true, order: 'DESC', unit: 'POINTS' },
+    dated: 'daily',
+    legacyName: 'Legacy',
+    legacyNote:
+      'Scores from before Sudoku had a Daily board and one for each difficulty, kept as they were. New games go on those boards.',
+  },
+}
+
+/** The board a game's leaderboard opens on: Classic, unless the game's Classic board was split. */
+export function homeBoard(slug: string): GameMode {
+  return SPLIT_BOARDS[slug]?.home ?? CLASSIC
+}
+
+/**
+ * A game's boards as the leaderboard offers them: the server's ranked modes in its order, except that
+ * a split Classic board is renamed and comes last, after the boards that replaced it.
+ */
+export function boardChoices(slug: string, ranked: GameMode[]): GameMode[] {
+  const split = SPLIT_BOARDS[slug]
+  if (!split) return ranked
+  const legacy = ranked.filter((mode) => mode.id === CLASSIC.id).map((mode) => ({ ...mode, name: split.legacyName }))
+  return [...ranked.filter((mode) => mode.id !== CLASSIC.id), ...legacy]
+}
+
+/**
+ * Whether a game's board is ranked by the date of its puzzle (Sudoku's Daily) rather than by when
+ * scores arrived: it is asked for by date, and has no periods.
+ */
+export function isDatedBoard(slug: string, mode: string): boolean {
+  return SPLIT_BOARDS[slug]?.dated === mode
+}
+
+/** What a split game's Classic board holds, or `undefined` for any other board. */
+export function legacyNote(slug: string, mode: string): string | undefined {
+  return mode === CLASSIC.id ? SPLIT_BOARDS[slug]?.legacyNote : undefined
+}

@@ -75,6 +75,8 @@ class SudokuService {
 
 	static final String WRONG_SESSION = "WRONG_SESSION";
 
+	static final String WRONG_MODE = "WRONG_MODE";
+
 	static final String DAILY_ALREADY_PLAYED = "DAILY_ALREADY_PLAYED";
 
 	static final String RUN_OVER = "RUN_OVER";
@@ -137,7 +139,7 @@ class SudokuService {
 	 */
 	@Transactional
 	public RunResponse startDaily(Owner owner, UUID sessionId) {
-		RunSession session = ownSession(owner, sessionId);
+		RunSession session = ownSession(owner, sessionId, SudokuRunRules.DAILY);
 		Optional<SudokuRun> bound = this.store.findBySession(session.id());
 		if (bound.isPresent()) {
 			return view(bound.get());
@@ -168,7 +170,8 @@ class SudokuService {
 		this.store.lockStarts(owner, Mode.PRACTICE);
 		// A start that waited begins after the game it ends and sees a same-session run already stored.
 		Instant now = this.clock.instant();
-		RunSession session = (sessionId != null) ? ownSession(owner, sessionId) : null;
+		RunSession session = (sessionId != null)
+				? ownSession(owner, sessionId, SudokuRunRules.modeOf(Mode.PRACTICE, difficulty)) : null;
 		if (session != null) {
 			Optional<SudokuRun> bound = this.store.findBySession(session.id());
 			if (bound.isPresent()) {
@@ -198,7 +201,7 @@ class SudokuService {
 		if (!run.ranked()) {
 			throw new ConflictException(RUN_NOT_RANKED, "A relaxed game is not scored");
 		}
-		RunSession session = ownSession(owner, sessionId);
+		RunSession session = ownSession(owner, sessionId, SudokuRunRules.modeOf(run));
 		Optional<SudokuRun> bound = this.store.findBySession(session.id());
 		if (bound.isPresent() && !bound.get().id().equals(run.id())) {
 			throw new ApiException(HttpStatus.BAD_REQUEST, WRONG_SESSION, "That session already has a game");
@@ -387,12 +390,21 @@ class SudokuService {
 		return results;
 	}
 
-	private RunSession ownSession(Owner owner, UUID sessionId) {
-		return this.sessions.find(sessionId)
+	/**
+	 * The caller's unfinished Sudoku session, started in the mode of the run it is for: each kind of
+	 * ranked run has a leaderboard of its own, which its score must not leave.
+	 */
+	private RunSession ownSession(Owner owner, UUID sessionId, String mode) {
+		RunSession session = this.sessions.find(sessionId)
 			.filter((candidate) -> GAME_SLUG.equals(candidate.gameSlug()) && !candidate.finished()
 					&& candidate.belongsTo(owner.userId(), owner.playerId()))
 			.orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, WRONG_SESSION,
 					"Start an unfinished Sudoku game session of your own first"));
+		if (!mode.equals(session.mode())) {
+			throw new ApiException(HttpStatus.BAD_REQUEST, WRONG_MODE,
+					"That session is for another Sudoku leaderboard: start one in '" + mode + "'");
+		}
+		return session;
 	}
 
 	private SudokuRun ownedForUpdate(Owner owner, UUID runId) {

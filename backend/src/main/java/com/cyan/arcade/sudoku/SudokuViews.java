@@ -24,6 +24,33 @@ final class SudokuViews {
 	}
 
 	/**
+	 * One page of the Daily leaderboard of one puzzle, ranked as every board: each player once with
+	 * their best score, highest first.
+	 * @param date the puzzle's UTC date, whose board this is
+	 * @param today today's UTC puzzle date, the latest board there is
+	 * @param nextPuzzleAt when today's puzzle gives way to the next one
+	 * @param myRank the caller's rank on this board, or {@code null} when they are not on it
+	 * @param myScore the caller's score on this board, or {@code null} likewise
+	 */
+	record DailyLeaderboardResponse(LocalDate date, int puzzleNumber, Difficulty difficulty, LocalDate today,
+			Instant nextPuzzleAt, List<BoardEntry> entries, int page,
+			int size, long totalEntries, int totalPages, Long myRank, Integer myScore) {
+	}
+
+	/**
+	 * One player on a Daily board, written as on every leaderboard.
+	 * @param rank 1 for the best; no two entries share one (equal scores: whoever set it first)
+	 * @param player who set the score, or {@code null} for a guest
+	 * @param you whether this entry is the caller's
+	 */
+	record BoardEntry(long rank, BoardPlayer player, int score, long durationMs, Instant achievedAt, boolean you) {
+	}
+
+	/** An account as a leaderboard shows it: its username, the name it shows and its avatar. */
+	record BoardPlayer(String username, String displayName, String avatar) {
+	}
+
+	/**
 	 * Today's puzzle (without its digits until a run starts), the rules, and the caller's runs.
 	 * @param daily the caller's run of today's puzzle, or {@code null}
 	 * @param practice the caller's practice game in progress, or {@code null}

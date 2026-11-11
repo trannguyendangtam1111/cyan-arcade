@@ -1,18 +1,26 @@
-import { CalendarClock, Crown, Medal, Sparkles, Trophy } from 'lucide-react'
+import { CalendarClock, ChevronLeft, ChevronRight, Crown, Medal, Sparkles, Trophy } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import {
   CLASSIC,
+  boardChoices,
+  homeBoard,
+  isDatedBoard,
+  legacyNote,
   rankedModes,
   useGameModes,
   type GameMode,
   type ModeUnit,
 } from '@/api/games'
+import { ApiError } from '@/api/client'
 import {
+  ISO_DATE,
   LEADERBOARD_PERIODS,
+  asBoard,
   boardRules,
   periodNames,
   useLeaderboard,
+  useSudokuDailyBoard,
   type LeaderboardEntry,
   type LeaderboardPeriod,
   type LeaderboardResponse,
@@ -51,12 +59,13 @@ const formatterOf = (unit: ModeUnit): ((value: number) => string) =>
 /**
  * The board to show for the mode in the URL, among the game's ranked modes (`undefined` while
  * they are still being asked for). Anything that is not one of them, an unranked mode included,
- * gets the Classic board.
+ * gets the game's home board (Classic, unless its Classic board was split).
  */
-function boardMode(ranked: GameMode[] | undefined, requested: string): GameMode | undefined {
+function boardMode(ranked: GameMode[] | undefined, requested: string, home: string): GameMode | undefined {
   if (!ranked) return requested === CLASSIC.id ? CLASSIC : undefined
   return (
     ranked.find((mode) => mode.id === requested) ??
+    ranked.find((mode) => mode.id === home) ??
     ranked.find((mode) => mode.id === CLASSIC.id) ??
     ranked[0] ??
     CLASSIC
@@ -85,15 +94,30 @@ export function LeaderboardPage() {
 
   // The server says which modes a game has; only the ranked ones have boards. Asked once per game.
   const modes = useGameModes(selected?.slug ?? '', { enabled: selected !== undefined })
-  const ranked = modes.data && rankedModes(modes.data)
-  const requestedMode = params.get('mode') ?? CLASSIC.id
-  const mode = boardMode(ranked, requestedMode)
+  // A game whose Classic board was split (Sudoku) opens on one of the new boards and calls Classic "Legacy".
+  const ranked = modes.data && selected && boardChoices(selected.slug, rankedModes(modes.data))
+  const home = homeBoard(selected?.slug ?? '')
+  const requestedMode = params.get('mode') ?? home.id
+  const mode = boardMode(ranked, requestedMode, home.id)
+  const note = mode && selected && legacyNote(selected.slug, mode.id)
+  // Sudoku's Daily board is one puzzle's: asked for by its UTC date (`&date=`, today's without), no periods.
+  const dated = selected !== undefined && isDatedBoard(selected.slug, mode?.id ?? requestedMode)
+  const dateParam = params.get('date')
+  const date = dateParam && ISO_DATE.test(dateParam) ? dateParam : undefined
 
-  /** Another game starts on its Classic board; another mode or period, on the first page. */
-  const select = (game: string, nextPeriod: LeaderboardPeriod, nextPage?: number, nextMode: string = CLASSIC.id) =>
+  /** Another puzzle date of a dated board, from its first page; today's is left out of the URL. */
+  const selectDate = (game: string, nextDate: string | undefined, nextPage?: number) =>
     setParams({
       game,
-      ...(nextMode !== CLASSIC.id && { mode: nextMode }),
+      ...(nextDate !== undefined && { date: nextDate }),
+      ...(nextPage !== undefined && nextPage > 1 && { page: String(nextPage) }),
+    })
+
+  /** Another game starts on its home board (Classic, mostly); another mode or period, on the first page. */
+  const select = (game: string, nextPeriod: LeaderboardPeriod, nextPage?: number, nextMode: string = homeBoard(game).id) =>
+    setParams({
+      game,
+      ...(nextMode !== homeBoard(game).id && { mode: nextMode }),
       period: periodNames[nextPeriod].param,
       ...(nextPage !== undefined && nextPage > 1 && { page: String(nextPage) }),
     })
@@ -138,6 +162,7 @@ export function LeaderboardPage() {
               })}
             </div>
 
+            {!dated && (
               <div
                 role="group"
                 aria-label="Choose a period"
@@ -158,6 +183,7 @@ export function LeaderboardPage() {
                   </button>
                 ))}
               </div>
+            )}
           </div>
 
           {/* Only a game with more than one board has a choice to make: most have Classic alone. */}
@@ -184,8 +210,20 @@ export function LeaderboardPage() {
             </div>
           )}
 
-          {mode ? (
+          {note && <p className="text-sm text-ink-soft">{note}</p>}
+
+          {mode && dated ? (
+            <SudokuDailyLeaderboard
+              key={`${selected.slug}-${mode.id}-${date ?? 'today'}`}
+              game={selected}
+              mode={mode}
+              date={date}
+              page={page}
+              onSelect={(nextDate, nextPage) => selectDate(selected.slug, nextDate, nextPage)}
+            />
+          ) : mode ? (
             <GameLeaderboard
+              // A different game, mode or period is a different board: start it clean rather than showing stale rows.
               key={`${selected.slug}-${mode.id}-${period}`}
               game={selected}
               mode={mode}
@@ -244,6 +282,134 @@ function PlayLink({ game }: { game: GameDefinition }) {
     <Link to={`/games/${game.slug}`} className={buttonStyles('primary')}>
       Play {game.name}
     </Link>
+  )
+}
+
+/** A UTC calendar date, `days` later (or earlier), as the API writes it. */
+function shiftDate(date: string, days: number): string {
+  const [year, month, day] = date.split('-').map(Number)
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10)
+}
+
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/** A puzzle's UTC date as people read it, whatever this device's time zone: "Fri 6 Nov 2026". */
+function formatPuzzleDate(date: string): string {
+  const day = new Date(`${date}T00:00:00Z`)
+  return `${WEEKDAYS[day.getUTCDay()]} ${day.getUTCDate()} ${MONTHS[day.getUTCMonth()]} ${day.getUTCFullYear()}`
+}
+
+const difficultyNames = { EASY: 'Easy', MEDIUM: 'Medium', HARD: 'Hard', EXPERT: 'Expert' } as const
+
+interface SudokuDailyLeaderboardProps {
+  game: GameDefinition
+  mode: GameMode
+  /** The puzzle's UTC date, or `undefined` for today's. */
+  date: string | undefined
+  /** 1-based. */
+  page: number
+  /** Another date (`undefined`: today's) or page. */
+  onSelect: (date: string | undefined, page?: number) => void
+}
+
+/**
+ * Sudoku's Daily board of one puzzle: the scores of that day's puzzle, whenever they were submitted
+ * (a puzzle finished after midnight UTC still counts on its own day), with a way to the puzzles
+ * before it. The server decides each score's puzzle date and which dates have a puzzle.
+ */
+function SudokuDailyLeaderboard({ game, mode, date, page, onSelect }: SudokuDailyLeaderboardProps) {
+  const { data, isPending, isError, error, isPlaceholderData, refetch } = useSudokuDailyBoard(date, page - 1)
+
+  if (isPending) return <LeaderboardSkeleton />
+  if (isError) {
+    // A date with no puzzle: before the first one, or not come yet.
+    if (error instanceof ApiError && error.status === 404) {
+      return (
+        <EmptyState
+          icon={CalendarClock}
+          title="No Daily Sudoku that day"
+          description={`There is no puzzle for ${date ?? 'that date'} (UTC). Daily boards start with the first puzzle and end with today's.`}
+          action={
+            <Button variant="primary" onClick={() => onSelect(undefined)}>
+              Today's board
+            </Button>
+          }
+        />
+      )
+    }
+    return <ErrorState title="Couldn't load this leaderboard" onRetry={() => void refetch()} />
+  }
+
+  const isToday = data.date === data.today
+  const label = `Daily #${data.puzzleNumber} · ${formatPuzzleDate(data.date)}`
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div
+          role="group"
+          aria-label="Choose a puzzle date"
+          className="flex w-fit max-w-full items-center gap-1 rounded-full bg-surface p-1 shadow-soft ring-1 ring-line"
+        >
+          <button
+            type="button"
+            aria-label="Previous puzzle"
+            disabled={data.puzzleNumber <= 1}
+            onClick={() => onSelect(shiftDate(data.date, -1))}
+            className="rounded-full p-1.5 text-ink-soft transition-all hover:text-ink active:scale-95 disabled:opacity-40"
+          >
+            <ChevronLeft aria-hidden className="size-5" />
+          </button>
+          <span className="px-2 font-display font-medium whitespace-nowrap tabular-nums" aria-live="polite">
+            {label}
+          </span>
+          <button
+            type="button"
+            aria-label="Next puzzle"
+            disabled={isToday}
+            onClick={() => onSelect(shiftDate(data.date, 1) === data.today ? undefined : shiftDate(data.date, 1))}
+            className="rounded-full p-1.5 text-ink-soft transition-all hover:text-ink active:scale-95 disabled:opacity-40"
+          >
+            <ChevronRight aria-hidden className="size-5" />
+          </button>
+        </div>
+        {!isToday && (
+          <Button variant="secondary" size="sm" onClick={() => onSelect(undefined)}>
+            Today's puzzle
+          </Button>
+        )}
+      </div>
+      <p className="text-sm text-ink-soft">
+        {difficultyNames[data.difficulty]} · ranked by the puzzle's date (UTC), so a puzzle finished after midnight
+        still counts here.
+      </p>
+      <BoardView
+        game={game}
+        mode={mode}
+        data={asBoard(data)}
+        title={`${game.name} ${label}`}
+        dimmed={isPlaceholderData}
+        page={page}
+        onPageChange={(next) => onSelect(date, next)}
+        empty={
+          isToday
+            ? {
+                title: `No scores for Daily #${data.puzzleNumber} yet`,
+                description: "Nobody has finished today's puzzle yet. The top spot is yours for the taking.",
+                action: <PlayLink game={game} />,
+              }
+            : {
+                title: `No scores for Daily #${data.puzzleNumber}`,
+                description: 'Nobody finished this puzzle.',
+                action: (
+                  <Button variant="secondary" onClick={() => onSelect(undefined)}>
+                    Today's board
+                  </Button>
+                ),
+              }
+        }
+      />
+    </div>
   )
 }
 

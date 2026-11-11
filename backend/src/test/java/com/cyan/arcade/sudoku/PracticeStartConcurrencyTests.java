@@ -144,7 +144,7 @@ class PracticeStartConcurrencyTests {
 	void startsAtOnceLeaveTheDailyRunAlone() throws Exception {
 		Player player = account();
 		Owner owner = player.owner();
-		String dailySession = gameSession(player.session(), "classic");
+		String dailySession = gameSession(player.session(), "daily");
 		this.mockMvc.perform(post("/api/sudoku/daily/runs").session(player.session())
 			.contentType(MediaType.APPLICATION_JSON)
 			.content("{\"sessionId\":\"%s\"}".formatted(dailySession))).andExpect(status().isOk());
@@ -160,7 +160,7 @@ class PracticeStartConcurrencyTests {
 	void rankedStartsAtOnceWithTheSameSessionGiveTheOneGameOfThatSession() throws Exception {
 		Player player = account();
 		Owner owner = player.owner();
-		UUID session = UUID.fromString(gameSession(player.session(), "classic"));
+		UUID session = UUID.fromString(gameSession(player.session(), "easy"));
 		List<RunResponse> runs = all(List.of(owner, owner, owner), Difficulty.EASY, session);
 		assertThat(runs.stream().map(RunResponse::id).distinct()).hasSize(1);
 		assertThat(runs.get(0).ranked()).isTrue();
