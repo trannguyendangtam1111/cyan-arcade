@@ -47,6 +47,37 @@ class SudokuRunStore {
 			LocalDate puzzleDate) {
 	}
 
+	/**
+	 * An account's daily run of one puzzle date, for its history.
+	 * @param activeMs playing time, for a run that is over; {@code null} while it is still being played
+	 */
+	record DailyRun(LocalDate puzzleDate, Difficulty difficulty, Status status, int mistakes, int hints, int streak,
+			Long activeMs) {
+	}
+
+	/**
+	 * An account's daily runs of the puzzle dates from {@code from} to {@code to}, both included: at
+	 * most one a date (a unique index says so). One query, on that index, whatever the number of days.
+	 */
+	List<DailyRun> dailyRuns(long userId, LocalDate from, LocalDate to) {
+		return this.jdbc.sql("""
+				SELECT puzzle_date, difficulty, status, mistakes, hints, streak,
+				       CASE WHEN finished_at IS NULL THEN NULL
+				            ELSE GREATEST(0, (EXTRACT(EPOCH FROM (finished_at - started_at)) * 1000)::BIGINT - paused_ms)
+				       END AS active_ms
+				FROM sudoku_runs
+				WHERE mode = 'DAILY' AND user_id = :userId AND puzzle_date BETWEEN :from AND :to
+				ORDER BY puzzle_date""")
+			.param("userId", userId)
+			.param("from", from)
+			.param("to", to)
+			.query((row, index) -> new DailyRun(row.getObject("puzzle_date", LocalDate.class),
+					Difficulty.valueOf(row.getString("difficulty")), Status.valueOf(row.getString("status")),
+					row.getInt("mistakes"), row.getInt("hints"), row.getInt("streak"),
+					row.getObject("active_ms", Long.class)))
+			.list();
+	}
+
 	// --- Daily puzzles -------------------------------------------------------------------------------
 
 	Optional<Puzzle> findDailyPuzzle(LocalDate date) {

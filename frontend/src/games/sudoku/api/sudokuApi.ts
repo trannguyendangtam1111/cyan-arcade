@@ -1,6 +1,6 @@
 import { apiFetch } from '@/api/client'
 import { playerHeaders } from '@/lib/playerId'
-import type { AiSolution, Difficulty, HintResponse, HintType, RunView, StatsView, Strategy, TodayView } from '../types/sudokuTypes'
+import type { AiSolution, DailyHistoryView, Difficulty, HintResponse, HintType, RunView, StatsView, Strategy, TodayView } from '../types/sudokuTypes'
 
 /**
  * Sudoku's own endpoints. Like Word Guess it is played on the server, which keeps the solution and
@@ -62,6 +62,11 @@ export function resumeRun(runId: string): Promise<RunView> {
 
 export function fetchStats(signal?: AbortSignal): Promise<StatsView> {
   return apiFetch<StatsView>('/api/sudoku/stats', { headers: playerHeaders(), signal })
+}
+
+/** The signed-in player's last 30 UTC dates of Daily Sudoku; 401 for guests. */
+export function fetchDailyHistory(signal?: AbortSignal): Promise<DailyHistoryView> {
+  return apiFetch<DailyHistoryView>('/api/sudoku/daily/history', { signal })
 }
 
 /**

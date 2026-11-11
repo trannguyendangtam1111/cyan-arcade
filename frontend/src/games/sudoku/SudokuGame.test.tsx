@@ -8,7 +8,7 @@ import { createSudokuAiPlayer, type SudokuAiPlayer } from './ai/sudokuAiPlayer'
 import { SETTINGS_KEY } from './hooks/useSettings'
 import SudokuGame from './SudokuGame'
 
-function setup(options: SudokuServerOptions = {}, props: Partial<GameProps<SudokuAiPlayer>> = {}, user = pixel) {
+function setup(options: SudokuServerOptions = {}, props: Partial<GameProps<SudokuAiPlayer>> = {}, user: typeof pixel | null = pixel) {
   const server = sudokuServer(options)
   const fetchSpy = mockApi({ user, handlers: [server.handler] })
   const onGameStart = vi.fn()
@@ -319,6 +319,33 @@ describe('Sudoku', () => {
     expect(within(dialog).getByText('3:35')).toBeInTheDocument()
     fireEvent.click(within(dialog).getByRole('tab', { name: 'Practice' }))
     expect(within(dialog).getByText('50')).toBeInTheDocument()
+  })
+
+  it('shows the Daily history calendar beside the streaks, from the signed-in player\'s own history', async () => {
+    const { fetchSpy } = setup()
+    fireEvent.click(await screen.findByRole('button', { name: 'Statistics' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Your Sudoku' })
+    const calendar = await within(dialog).findByRole('radiogroup', { name: 'Daily history, UTC dates' })
+    expect(within(calendar).getAllByRole('radio')).toHaveLength(30)
+    expect(within(calendar).getByRole('radio', { name: 'Thursday 8 October 2026: Completed' })).toBeInTheDocument()
+    // The streaks are still the statistics' own.
+    expect(within(dialog).getByText('Current streak').nextSibling).toHaveTextContent('2')
+    expect(within(dialog).getByText('Best streak').nextSibling).toHaveTextContent('5')
+    expect(within(dialog).getByText(/Days follow UTC dates/)).toBeInTheDocument()
+    // The history is asked for once, with nothing that names a player but the session.
+    const asked = fetchSpy.mock.calls.filter(([url]) => String(url).includes('/api/sudoku/daily/history'))
+    expect(asked).toHaveLength(1)
+    expect(String(asked[0][0])).not.toContain('?')
+  })
+
+  it('asks a guest to sign in for the Daily history and still shows their statistics', async () => {
+    setup({}, {}, null)
+    fireEvent.click(await screen.findByRole('button', { name: 'Statistics' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Your Sudoku' })
+    expect(await within(dialog).findByText('Sign in to see your Daily history for the last 30 days.')).toBeInTheDocument()
+    expect(within(dialog).queryByRole('radiogroup')).not.toBeInTheDocument()
+    expect(within(dialog).getByText('Best streak')).toBeInTheDocument()
+    expect(within(dialog).getByText('75')).toBeInTheDocument()
   })
 
   it('keeps settings in the browser and follows them', async () => {

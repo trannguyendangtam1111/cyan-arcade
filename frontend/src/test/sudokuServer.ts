@@ -36,6 +36,33 @@ export interface SudokuServerOptions {
   /** A practice game in progress. */
   practice?: { values?: string; ranked?: boolean } | null
   stats?: Record<string, unknown>
+  /**
+   * The Daily history: 30 UTC dates ending `today` (2026-10-09 unless named), each not attempted
+   * unless `days` says otherwise. Left out: a solve two days back and yesterday, and a failure four
+   * days back. Guests get 401.
+   */
+  history?: { today?: string; days?: Record<string, Record<string, unknown>> }
+}
+
+const FIRST_DAILY = Date.UTC(2026, 0, 1)
+const DAY_MS = 24 * 60 * 60_000
+
+const DEFAULT_HISTORY: Record<string, Record<string, unknown>> = {
+  '2026-10-05': { status: 'FAILED', difficulty: 'EXPERT', seconds: 1312, mistakes: 3, hints: 2 },
+  '2026-10-07': { status: 'COMPLETED', difficulty: 'MEDIUM', seconds: 498, mistakes: 1, hints: 0, streak: 1 },
+  '2026-10-08': { status: 'COMPLETED', difficulty: 'EASY', seconds: 215, mistakes: 0, hints: 1, streak: 2 },
+}
+
+export function dailyHistory({ today = '2026-10-09', days = DEFAULT_HISTORY }: NonNullable<SudokuServerOptions['history']>) {
+  const end = Date.parse(`${today}T00:00:00Z`)
+  const list = Array.from({ length: 30 }, (_, index) => {
+    const time = end - (29 - index) * DAY_MS
+    const date = new Date(time).toISOString().slice(0, 10)
+    const number = time < FIRST_DAILY ? null : Math.round((time - FIRST_DAILY) / DAY_MS) + 1
+    const base = { date, puzzleNumber: number, difficulty: number === null ? null : 'MEDIUM', status: number === null ? 'NO_PUZZLE' : 'NOT_ATTEMPTED', seconds: null, mistakes: null, hints: null, streak: null }
+    return { ...base, ...days[date] }
+  })
+  return { from: list[0].date, today, days: list }
 }
 
 const PERCENTS = [100, 90, 75, 60]
@@ -56,7 +83,7 @@ const modeStats = (played: number, completed: number) => ({
   bestSeconds: { EASY: completed ? 215 : null, MEDIUM: null, HARD: completed ? 380 : null, EXPERT: null },
 })
 
-export function sudokuServer({ givens = PUZZLE, daily = null, practice = null, stats = {} }: SudokuServerOptions = {}) {
+export function sudokuServer({ givens = PUZZLE, daily = null, practice = null, stats = {}, history = {} }: SudokuServerOptions = {}) {
   const runs = new Map<string, FakeRun>()
   const calls: { method: string; path: string; body: Record<string, unknown> | undefined }[] = []
   let practiceCount = 0
@@ -191,6 +218,10 @@ export function sudokuServer({ givens = PUZZLE, daily = null, practice = null, s
     if (method === 'GET' && path === '/api/sudoku/today') return mockJson(today())
     if (method === 'GET' && path === '/api/sudoku/stats') {
       return mockJson({ daily: modeStats(4, 3), practice: modeStats(2, 1), currentStreak: 2, bestStreak: 5, lastDaily: '2026-10-08', ...stats })
+    }
+    if (method === 'GET' && path === '/api/sudoku/daily/history') {
+      if (!user) return mockProblem(401, 'UNAUTHORIZED', 'Authentication is required')
+      return mockJson(dailyHistory(history))
     }
     if (method === 'POST' && path === '/api/sudoku/daily/runs') {
       if (dailyRun?.scored) return mockProblem(409, 'DAILY_ALREADY_PLAYED', "You have played today's puzzle.")

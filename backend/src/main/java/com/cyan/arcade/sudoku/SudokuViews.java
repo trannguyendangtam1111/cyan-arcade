@@ -83,6 +83,43 @@ final class SudokuViews {
 	}
 
 	/**
+	 * A signed-in player's Daily Sudoku over the last {@value DailyHistory#DAYS} UTC dates, from the
+	 * server's own records of their runs.
+	 * @param from the first date shown
+	 * @param today today's UTC date, the last one shown
+	 * @param days one a date, oldest first, from {@code from} to {@code today}
+	 */
+	record DailyHistoryResponse(LocalDate from, LocalDate today, List<HistoryDay> days) {
+	}
+
+	/**
+	 * One UTC date of a player's Daily history.
+	 * @param puzzleNumber the Daily's number; {@code null} for a date before the first Daily
+	 * @param difficulty the day's puzzle's; {@code null} for a date with no Daily
+	 * @param seconds playing time of a completed or failed run; {@code null} otherwise
+	 * @param mistakes of the player's run, {@code null} without one (also {@code hints})
+	 * @param streak for a completed run, the Daily streak it made; {@code null} otherwise
+	 */
+	record HistoryDay(LocalDate date, Integer puzzleNumber, Difficulty difficulty, DayStatus status, Integer seconds,
+			Integer mistakes, Integer hints, Integer streak) {
+	}
+
+	/** What a player did with a date's Daily. */
+	enum DayStatus {
+
+		COMPLETED, FAILED,
+
+		/** Started and not over yet: it can still be finished. */
+		IN_PROGRESS,
+
+		NOT_ATTEMPTED,
+
+		/** A date before the first Daily Sudoku. */
+		NO_PUZZLE
+
+	}
+
+	/**
 	 * A player's ranked games. Relaxed practice does not count.
 	 * @param currentStreak daily puzzles solved on consecutive UTC days, up to today or yesterday
 	 */

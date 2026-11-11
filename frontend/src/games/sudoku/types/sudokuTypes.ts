@@ -110,6 +110,32 @@ export interface StatsView {
   lastDaily: string | null
 }
 
+/** What a signed-in player did with one UTC date's Daily puzzle. */
+export type DayStatus = 'COMPLETED' | 'FAILED' | 'IN_PROGRESS' | 'NOT_ATTEMPTED' | 'NO_PUZZLE'
+
+export interface HistoryDayView {
+  /** The UTC date, `YYYY-MM-DD`. */
+  date: string
+  /** Null before the first Daily (with `difficulty`). */
+  puzzleNumber: number | null
+  difficulty: Difficulty | null
+  status: DayStatus
+  /** Playing time of a completed or failed run. */
+  seconds: number | null
+  /** Of the player's run, null without one (also `hints`). */
+  mistakes: number | null
+  hints: number | null
+  /** For a completed run, the streak it made. */
+  streak: number | null
+}
+
+/** The last 30 UTC dates of the player's Daily Sudoku, oldest first, ending today. */
+export interface DailyHistoryView {
+  from: string
+  today: string
+  days: HistoryDayView[]
+}
+
 // --- AI (admins) ---------------------------------------------------------------------------------
 
 export type Strategy = 'STEP_BY_STEP' | 'FAST' | 'TEACHING'

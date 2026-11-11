@@ -4,10 +4,12 @@ import java.net.URI;
 import java.util.UUID;
 
 import com.cyan.arcade.common.error.ApiException;
+import com.cyan.arcade.common.error.ErrorCodes;
 import com.cyan.arcade.common.security.AuthenticatedUser;
 import com.cyan.arcade.common.security.GuestPlayer;
 import com.cyan.arcade.sudoku.SudokuRun.Owner;
 import com.cyan.arcade.sudoku.SudokuViews.BindSessionRequest;
+import com.cyan.arcade.sudoku.SudokuViews.DailyHistoryResponse;
 import com.cyan.arcade.sudoku.SudokuViews.HintRequest;
 import com.cyan.arcade.sudoku.SudokuViews.HintResponse;
 import com.cyan.arcade.sudoku.SudokuViews.MovesRequest;
@@ -39,8 +41,24 @@ class SudokuController {
 
 	private final SudokuService sudoku;
 
-	SudokuController(SudokuService sudoku) {
+	private final DailyHistory dailyHistory;
+
+	SudokuController(SudokuService sudoku, DailyHistory dailyHistory) {
 		this.sudoku = sudoku;
+		this.dailyHistory = dailyHistory;
+	}
+
+	/**
+	 * The caller's Daily Sudoku over the last 30 UTC dates. Signed-in players only (security answers
+	 * anyone else with 401): a guest's id is not proof enough to show their history.
+	 */
+	@GetMapping("/daily/history")
+	DailyHistoryResponse dailyHistory(@AuthenticationPrincipal AuthenticatedUser user) {
+		if (user == null) {
+			throw new ApiException(HttpStatus.UNAUTHORIZED, ErrorCodes.UNAUTHORIZED,
+					"Sign in to see your Daily history");
+		}
+		return this.dailyHistory.of(user.id());
 	}
 
 	@GetMapping("/today")
