@@ -14,7 +14,10 @@ export const NEARLY_DONE = '530' + '0' + SOLVED.slice(4)
 
 interface FakeRun {
   id: string
-  mode: 'DAILY' | 'PRACTICE'
+  mode: 'DAILY' | 'PRACTICE' | 'ARCHIVE'
+  /** An archive replay's puzzle date and number. */
+  date?: string
+  puzzleNumber?: number
   ranked: boolean
   difficulty: string
   givens: string
@@ -42,7 +45,16 @@ export interface SudokuServerOptions {
    * days back. Guests get 401.
    */
   history?: { today?: string; days?: Record<string, Record<string, unknown>> }
+  /**
+   * The archive: past Daily puzzles from 2026-01-01 to yesterday (2026-10-08), each Hard with these
+   * clues (default PUZZLE), and a replay in progress if `archive` is set.
+   */
+  archiveGivens?: string
+  archive?: { date: string; values?: string } | null
 }
+
+/** The fake's puzzle number of a date, as the server counts: 2026-01-01 is #1. */
+export const archiveNumber = (date: string) => Math.round((Date.parse(`${date}T00:00:00Z`) - Date.UTC(2026, 0, 1)) / (24 * 60 * 60_000)) + 1
 
 const FIRST_DAILY = Date.UTC(2026, 0, 1)
 const DAY_MS = 24 * 60 * 60_000
@@ -83,10 +95,11 @@ const modeStats = (played: number, completed: number) => ({
   bestSeconds: { EASY: completed ? 215 : null, MEDIUM: null, HARD: completed ? 380 : null, EXPERT: null },
 })
 
-export function sudokuServer({ givens = PUZZLE, daily = null, practice = null, stats = {}, history = {} }: SudokuServerOptions = {}) {
+export function sudokuServer({ givens = PUZZLE, daily = null, practice = null, stats = {}, history = {}, archiveGivens = PUZZLE, archive = null }: SudokuServerOptions = {}) {
   const runs = new Map<string, FakeRun>()
   const calls: { method: string; path: string; body: Record<string, unknown> | undefined }[] = []
   let practiceCount = 0
+  let archiveCount = 0
 
   const make = (id: string, mode: FakeRun['mode'], ranked: boolean, difficulty: string, clues: string, values?: string): FakeRun => ({
     id,
@@ -108,6 +121,11 @@ export function sudokuServer({ givens = PUZZLE, daily = null, practice = null, s
   if (dailyRun) runs.set(dailyRun.id, dailyRun)
   let practiceRun: FakeRun | null = practice ? make('practice-0', 'PRACTICE', practice.ranked ?? true, 'MEDIUM', PUZZLE, practice.values) : null
   if (practiceRun) runs.set(practiceRun.id, practiceRun)
+  let archiveRun: FakeRun | null = archive
+    ? { ...make('archive-0', 'ARCHIVE', false, 'HARD', archiveGivens, archive.values), date: archive.date, puzzleNumber: archiveNumber(archive.date) }
+    : null
+  if (archiveRun) runs.set(archiveRun.id, archiveRun)
+  const inArchive = (date: string) => /^\d{4}-\d{2}-\d{2}$/.test(date) && date >= '2026-01-01' && date < '2026-10-09'
 
   const status = (run: FakeRun) => {
     if (run.abandoned) return 'ABANDONED'
@@ -127,8 +145,8 @@ export function sudokuServer({ givens = PUZZLE, daily = null, practice = null, s
       mode: run.mode,
       ranked: run.ranked,
       difficulty: run.difficulty,
-      puzzleNumber: run.mode === 'DAILY' ? 282 : null,
-      date: run.mode === 'DAILY' ? '2026-10-09' : null,
+      puzzleNumber: run.puzzleNumber ?? (run.mode === 'DAILY' ? 282 : null),
+      date: run.date ?? (run.mode === 'DAILY' ? '2026-10-09' : null),
       status: state,
       givens: run.givens,
       values: run.values.join(''),
@@ -180,6 +198,7 @@ export function sudokuServer({ givens = PUZZLE, daily = null, practice = null, s
     difficulties: DIFFICULTIES,
     daily: dailyRun ? view(dailyRun) : null,
     practice: practiceRun && status(practiceRun) === 'PLAYING' ? view(practiceRun) : null,
+    archive: archiveRun && status(archiveRun) === 'PLAYING' ? view(archiveRun) : null,
   })
 
   const solution = (strategy: string, puzzle: Record<string, unknown> | undefined) => ({
@@ -218,6 +237,20 @@ export function sudokuServer({ givens = PUZZLE, daily = null, practice = null, s
     if (method === 'GET' && path === '/api/sudoku/today') return mockJson(today())
     if (method === 'GET' && path === '/api/sudoku/stats') {
       return mockJson({ daily: modeStats(4, 3), practice: modeStats(2, 1), currentStreak: 2, bestStreak: 5, lastDaily: '2026-10-08', ...stats })
+    }
+    const archiveDate = path.match(/^\/api\/sudoku\/archive\/([^/]+)$/)
+    if (method === 'GET' && archiveDate) {
+      const date = decodeURIComponent(archiveDate[1])
+      if (!inArchive(date)) return mockProblem(404, 'NOT_IN_ARCHIVE', date >= '2026-10-09' ? 'That Daily puzzle has not come out yet' : 'The Daily Sudoku began on 2026-01-01: there is no puzzle before')
+      return mockJson({ date, puzzleNumber: archiveNumber(date), difficulty: 'HARD', givens: archiveGivens })
+    }
+    if (method === 'POST' && path === '/api/sudoku/archive/runs') {
+      const date = String(body?.date)
+      if (!inArchive(date)) return mockProblem(404, 'NOT_IN_ARCHIVE', 'That Daily puzzle is not in the archive')
+      if (archiveRun && status(archiveRun) === 'PLAYING') archiveRun.abandoned = true
+      archiveRun = { ...make(`archive-${++archiveCount}`, 'ARCHIVE', false, 'HARD', archiveGivens), date, puzzleNumber: archiveNumber(date) }
+      runs.set(archiveRun.id, archiveRun)
+      return mockJson(view(archiveRun), 201)
     }
     if (method === 'GET' && path === '/api/sudoku/daily/history') {
       if (!user) return mockProblem(401, 'UNAUTHORIZED', 'Authentication is required')
@@ -303,6 +336,9 @@ export function sudokuServer({ givens = PUZZLE, daily = null, practice = null, s
     },
     get practiceRun() {
       return practiceRun
+    },
+    get archiveRun() {
+      return archiveRun
     },
     /** The moves the browser sent, in order, flattened. */
     moves: () => calls.filter((call) => call.path.endsWith('/moves')).flatMap((call) => (call.body?.moves as { cell: number; digit: number }[]) ?? []),

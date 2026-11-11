@@ -3,12 +3,14 @@ import { useId, useState } from 'react'
 import { Button } from '@/components/ui/Button'
 import { cn } from '@/lib/cn'
 import { formatClock } from '../engine/format'
+import { ArchivePicker } from './ArchivePicker'
 import { DIFFICULTIES, DIFFICULTY_LABELS, type Difficulty, type DifficultyInfo } from '../types/sudokuTypes'
 
 /** What covers the board when it cannot be played yet: a start, a pick-up after a reload, or a pause. */
 export type Cover =
   | { kind: 'daily'; puzzleNumber: number; difficulty: Difficulty }
   | { kind: 'practice'; difficulties: DifficultyInfo[]; cancellable: boolean }
+  | { kind: 'archive'; today: string; puzzleNumber: number; initialDate: string | null; cancellable: boolean }
   | { kind: 'continue'; elapsedMs: number }
   | { kind: 'paused' }
 
@@ -16,8 +18,10 @@ interface StartPanelProps {
   cover: Cover
   busy: boolean
   onStart: (practice?: { difficulty: Difficulty; relaxed: boolean }) => void
+  /** Replays the past Daily puzzle of a UTC date, unranked. */
+  onArchive: (date: string) => void
   onResume: () => void
-  /** Back to the game in progress, from the practice picker. */
+  /** Back to the game in progress, from the practice or archive picker. */
   onCancel: () => void
 }
 
@@ -25,10 +29,12 @@ interface StartPanelProps {
  * Sits over the hidden board. The clock only starts when the player does, so the puzzle is not shown
  * before: a daily puzzle cannot be studied for free.
  */
-export function StartPanel({ cover, busy, onStart, onResume, onCancel }: StartPanelProps) {
+export function StartPanel({ cover, busy, onStart, onArchive, onResume, onCancel }: StartPanelProps) {
   return (
-    <div className="absolute inset-0 z-20 grid place-items-center rounded-[1rem] bg-surface/85 p-4 backdrop-blur-sm">
-      <div className="flex w-full max-w-[19rem] flex-col items-center gap-3 text-center">
+    // Auto margins centre the content and, unlike centring the grid, keep its top reachable when a
+    // picker is taller than a small board: the cover scrolls instead.
+    <div className="absolute inset-0 z-20 flex overflow-y-auto rounded-[1rem] bg-surface/85 p-4 backdrop-blur-sm">
+      <div className="m-auto flex w-full max-w-[19rem] flex-col items-center gap-3 text-center">
         {cover.kind === 'daily' && (
           <>
             <Sparkles aria-hidden className="size-8 text-brand-600" />
@@ -45,6 +51,16 @@ export function StartPanel({ cover, busy, onStart, onResume, onCancel }: StartPa
         {cover.kind === 'practice' && (
           <>
             <PracticePicker difficulties={cover.difficulties} busy={busy} onStart={onStart} />
+            {cover.cancellable && (
+              <Button size="sm" variant="ghost" onClick={onCancel}>
+                Back to my game
+              </Button>
+            )}
+          </>
+        )}
+        {cover.kind === 'archive' && (
+          <>
+            <ArchivePicker today={cover.today} puzzleNumber={cover.puzzleNumber} initialDate={cover.initialDate} busy={busy} onPlay={onArchive} />
             {cover.cancellable && (
               <Button size="sm" variant="ghost" onClick={onCancel}>
                 Back to my game

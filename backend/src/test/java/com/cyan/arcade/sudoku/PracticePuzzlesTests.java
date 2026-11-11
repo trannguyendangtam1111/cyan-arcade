@@ -128,12 +128,11 @@ class PracticePuzzlesTests {
 
 	@Test
 	void aPuzzleFromAnyOfThePlayersModesCountsAsHad() {
-		// A Daily run also counts as played when avoiding repeat Practice puzzles.
+		// The archive replay of a day is a run with that day's clues: practice never hands them out again.
 		Owner owner = account();
-		UUID sessionId = this.sessions.start("sudoku", "daily", owner.userId(), null).id();
-		RunResponse daily = this.sudoku.startDaily(owner, sessionId);
-		assertThat(this.store.hasPlayed(owner, daily.givens())).isTrue();
-		assertThat(this.store.hasPlayed(new Owner(null, UUID.randomUUID()), daily.givens())).isFalse();
+		RunResponse replay = this.sudoku.startArchive(owner, java.time.LocalDate.of(2026, 3, 14));
+		assertThat(this.store.hasPlayed(owner, replay.givens())).isTrue();
+		assertThat(this.store.hasPlayed(new Owner(null, UUID.randomUUID()), replay.givens())).isFalse();
 	}
 
 	@Test

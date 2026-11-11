@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { GameProps } from '@/games/types'
-import { admin, mockApi, pixel } from '@/test/mockApi'
+import { admin, mockApi, mockProblem, pixel } from '@/test/mockApi'
 import { NEARLY_DONE, sudokuServer, type SudokuServerOptions } from '@/test/sudokuServer'
 import { createSudokuAiPlayer, type SudokuAiPlayer } from './ai/sudokuAiPlayer'
 import { SETTINGS_KEY } from './hooks/useSettings'
@@ -401,5 +401,219 @@ describe('Sudoku', () => {
     expect(server.calls.at(-1)?.body).toEqual({ strategy: 'FAST', date: '2026-10-09' })
     expect(onGameStart).not.toHaveBeenCalled()
     expect(onGameOver).not.toHaveBeenCalled()
+  })
+})
+
+describe('Sudoku Daily archive', () => {
+  const dateInput = () => screen.getByLabelText('Puzzle date (UTC)') as HTMLInputElement
+  const play = () => screen.getByRole('button', { name: 'Play unranked' })
+  /** Nothing that could rank, score or reward a run: no platform session, no ranked Daily. */
+  const rankedCalls = (server: ReturnType<typeof setup>['server']) =>
+    server.calls.filter((call) => call.path === '/api/sudoku/daily/runs' || call.path.endsWith('/session'))
+
+  async function openArchive() {
+    await screen.findByRole('heading', { name: 'Daily Sudoku #282' })
+    fireEvent.click(screen.getByRole('tab', { name: /Archive/ }))
+  }
+
+  async function playYesterday() {
+    await openArchive()
+    await screen.findByText('Daily Sudoku #281 · Hard')
+    fireEvent.click(play())
+    await waitFor(() => expect(cell(0)).toHaveAccessibleName('Row 1, column 1: 5, clue'))
+  }
+
+  it('picks a past UTC date, showing its number and difficulty but not its board', async () => {
+    const { server } = setup()
+    await openArchive()
+    expect(screen.getByRole('tab', { name: 'Archive' })).toHaveAttribute('aria-selected', 'true')
+    // The Daily tab keeps its full name on a narrow screen too.
+    expect(screen.getByRole('tab', { name: 'Daily Sudoku' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Daily archive' })).toBeInTheDocument()
+    expect(screen.getAllByText('Practice / Unranked').length).toBeGreaterThan(0)
+
+    // Yesterday by default, between the first Daily and yesterday.
+    expect(dateInput().value).toBe('2026-10-08')
+    expect(dateInput()).toHaveAttribute('min', '2026-01-01')
+    expect(dateInput()).toHaveAttribute('max', '2026-10-08')
+    expect(await screen.findByText('Daily Sudoku #281 · Hard')).toBeInTheDocument()
+    expect(screen.getByText('Thu, 8 Oct 2026 (UTC)')).toBeInTheDocument()
+    expect(cell(0)).toHaveAccessibleName('Row 1, column 1: empty')
+    expect(screen.getByRole('button', { name: 'Next day' })).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Previous day' }))
+    expect(dateInput().value).toBe('2026-10-07')
+    expect(await screen.findByText('Daily Sudoku #280 · Hard')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Next day' })).toBeEnabled()
+
+    // Touch-sized controls; on the narrowest phones the three tabs drop their icons to keep their labels.
+    for (const tab of screen.getAllByRole('tab')) expect(tab.querySelector('svg')).toHaveClass('hidden', '@min-[19rem]:block')
+    expect(screen.getByRole('button', { name: 'Previous day' })).toHaveClass('size-11')
+    expect(dateInput()).toHaveClass('h-11')
+
+    // Today, a future date or an empty field cannot be played.
+    for (const date of ['2026-10-09', '2026-12-01', '2025-12-31', '']) {
+      fireEvent.change(dateInput(), { target: { value: date } })
+      expect(screen.getByText(/Pick a date from Thu, 1 Jan 2026 to Thu, 8 Oct 2026/)).toBeInTheDocument()
+      expect(play()).toBeDisabled()
+    }
+    fireEvent.change(dateInput(), { target: { value: '2026-01-01' } })
+    expect(await screen.findByText('Daily Sudoku #1 · Hard')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Previous day' })).toBeDisabled()
+    expect(play()).toBeEnabled()
+    // Only the puzzle's public part was asked for; nothing was started.
+    expect(server.calls.filter((call) => call.method === 'POST')).toHaveLength(0)
+    expect(server.calls.some((call) => call.path === '/api/sudoku/archive/2026-10-09')).toBe(false)
+  })
+
+  it('shows the server\'s answer when it has no puzzle for a date, and cannot play it', async () => {
+    // Around midnight UTC the browser's yesterday can be the server's today: the server wins.
+    const server = sudokuServer()
+    mockApi({
+      user: pixel,
+      handlers: [
+        ({ path }) => (path === '/api/sudoku/archive/2026-10-08' ? mockProblem(404, 'NOT_IN_ARCHIVE', "Today's puzzle is not in the archive yet: play it as the Daily") : undefined),
+        server.handler,
+      ],
+    })
+    render(
+      <MemoryRouter>
+        <SudokuGame onGameStart={vi.fn()} onGameOver={vi.fn()} currentSession={vi.fn(() => Promise.resolve({ id: 'session-1' }))} />
+      </MemoryRouter>,
+    )
+    await openArchive()
+    expect(await screen.findByText("Today's puzzle is not in the archive yet: play it as the Daily")).toBeInTheDocument()
+    expect(play()).toBeDisabled()
+    // Another day still works.
+    fireEvent.click(screen.getByRole('button', { name: 'Previous day' }))
+    expect(await screen.findByText('Daily Sudoku #280 · Hard')).toBeInTheDocument()
+    expect(play()).toBeEnabled()
+  })
+
+  it('replays a past Daily unranked: no session, no ranked Daily run, clearly labelled', async () => {
+    const { server, onGameStart, currentSession } = setup()
+    await playYesterday()
+    expect(server.calls.find((call) => call.method === 'POST' && call.path === '/api/sudoku/archive/runs')?.body).toEqual({ date: '2026-10-08' })
+    expect(onGameStart).not.toHaveBeenCalled()
+    expect(currentSession).not.toHaveBeenCalled()
+    expect(rankedCalls(server)).toHaveLength(0)
+    expect(server.dailyRun).toBeNull()
+
+    expect(screen.getByText('Archive #281 · Hard')).toBeInTheDocument()
+    expect(screen.getByText('Replaying Daily Sudoku #281 of 2026-10-08 (UTC)')).toBeInTheDocument()
+    expect(screen.getByText('Practice / Unranked')).toBeInTheDocument()
+    // The relaxed rule: repeats count, with no limit.
+    expect(screen.getByText('Conflicts 0')).toBeInTheDocument()
+  })
+
+  it('plays an archive replay with the same controls: digits, notes, undo, hints and pause', async () => {
+    const { server, onGameStart } = setup()
+    await playYesterday()
+    fireEvent.click(cell(2))
+    key('4')
+    expect(cell(2)).toHaveAccessibleName('Row 1, column 3: 4')
+    await waitFor(() => expect(server.moves()).toEqual([{ cell: 2, digit: 4 }]))
+    expect(server.calls.filter((call) => call.path.endsWith('/moves')).every((call) => call.path.includes('/runs/archive-1/'))).toBe(true)
+
+    fireEvent.click(cell(3))
+    key('n')
+    key('2')
+    expect(cell(3)).toHaveAccessibleName('Row 1, column 4: empty, notes 2')
+    key('n')
+    fireEvent.click(tool('Undo'))
+    expect(cell(3)).toHaveAccessibleName('Row 1, column 4: empty')
+    fireEvent.click(tool('Redo'))
+    expect(cell(3)).toHaveAccessibleName('Row 1, column 4: empty, notes 2')
+
+    fireEvent.click(cell(5))
+    fireEvent.click(tool('Hint'))
+    fireEvent.click(within(screen.getByRole('region', { name: 'Hints' })).getByRole('button', { name: /Reveal a cell/ }))
+    await waitFor(() => expect(tool('Hint')).toHaveTextContent('2'))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pause' }))
+    expect(await screen.findByRole('heading', { name: 'Paused' })).toBeInTheDocument()
+    fireEvent.click(screen.getAllByRole('button', { name: 'Resume' })[1])
+    await waitFor(() => expect(cell(0)).toHaveAccessibleName('Row 1, column 1: 5, clue'))
+    expect(screen.getByRole('timer')).toBeInTheDocument()
+    expect(onGameStart).not.toHaveBeenCalled()
+    expect(rankedCalls(server)).toHaveLength(0)
+  })
+
+  it('finishes a replay without reporting anything, then replays the same date again', async () => {
+    const { server, onGameOver, onGameStart } = setup({ archiveGivens: NEARLY_DONE })
+    await openArchive()
+    await screen.findByText('Daily Sudoku #281 · Hard')
+    fireEvent.click(play())
+    await waitFor(() => expect(cell(0)).toHaveAccessibleName('Row 1, column 1: 5, clue'))
+    fireEvent.click(cell(2))
+    key('4')
+    key('ArrowRight')
+    key('6')
+
+    const dialog = await screen.findByRole('dialog', { name: 'Solved!' })
+    expect(within(dialog).getByText(/Archive · Daily Sudoku #281 · Hard · practice \/ unranked/)).toBeInTheDocument()
+    expect(within(dialog).getByText(/Archive replays are practice: no score, rewards or streak/)).toBeInTheDocument()
+    expect(onGameOver).not.toHaveBeenCalled()
+    expect(onGameStart).not.toHaveBeenCalled()
+
+    // Back to the picker on the same date, and again.
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Replay or pick a date' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(dateInput().value).toBe('2026-10-08')
+    await waitFor(() => expect(play()).toBeEnabled())
+    fireEvent.click(play())
+    await waitFor(() => expect(server.archiveRun?.id).toBe('archive-2'))
+    await waitFor(() => expect(cell(2)).toHaveAccessibleName('Row 1, column 3: empty'))
+    expect(screen.getByText('Archive #281 · Hard')).toBeInTheDocument()
+    expect(onGameOver).not.toHaveBeenCalled()
+    expect(rankedCalls(server)).toHaveLength(0)
+  })
+
+  it('asks before leaving a replay in progress for another date', async () => {
+    const { server } = setup()
+    await playYesterday()
+    fireEvent.click(screen.getByRole('button', { name: 'Pick a date' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Leave this replay?' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Pick a date' }))
+    expect(await screen.findByRole('heading', { name: 'Daily archive' })).toBeInTheDocument()
+    // Back to the replay, untouched.
+    fireEvent.click(screen.getByRole('button', { name: 'Back to my game' }))
+    await waitFor(() => expect(cell(0)).toHaveAccessibleName('Row 1, column 1: 5, clue'))
+    expect(server.archiveRun?.abandoned).toBe(false)
+  })
+
+  it('keeps today\'s ranked Daily apart: it still starts with a session, and the replay waits', async () => {
+    const { server, onGameStart } = setup()
+    await playYesterday()
+    fireEvent.click(cell(2))
+    key('4')
+    await waitFor(() => expect(server.moves()).toHaveLength(1))
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Daily Sudoku' }))
+    expect(await screen.findByRole('heading', { name: 'Daily Sudoku #282' })).toBeInTheDocument()
+    await startDaily()
+    expect(onGameStart).toHaveBeenCalledExactlyOnceWith('daily')
+    expect(server.calls.find((call) => call.path === '/api/sudoku/daily/runs')?.body).toEqual({ sessionId: 'session-1' })
+    expect(screen.getByText('Daily #282 · Hard')).toBeInTheDocument()
+    expect(screen.getByText('Mistakes 0/3')).toBeInTheDocument()
+    expect(cell(2)).toHaveAccessibleName('Row 1, column 3: empty')
+
+    // The replay is where it was.
+    fireEvent.click(screen.getByRole('tab', { name: 'Archive' }))
+    await waitFor(() => expect(screen.getByText('Archive #281 · Hard')).toBeInTheDocument())
+    expect(cell(2)).toHaveAccessibleName('Row 1, column 3: 4')
+    expect(server.archiveRun?.abandoned).toBe(false)
+  })
+
+  it('picks a replay in progress up again after a reload, still without a session', async () => {
+    const { server, onGameStart, currentSession } = setup({ archive: { date: '2026-03-14' } })
+    await openArchive()
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue' }))
+    await waitFor(() => expect(cell(0)).toHaveAccessibleName('Row 1, column 1: 5, clue'))
+    expect(screen.getByText('Archive #73 · Hard')).toBeInTheDocument()
+    expect(screen.getByText('Replaying Daily Sudoku #73 of 2026-03-14 (UTC)')).toBeInTheDocument()
+    expect(onGameStart).not.toHaveBeenCalled()
+    expect(currentSession).not.toHaveBeenCalled()
+    expect(rankedCalls(server)).toHaveLength(0)
   })
 })

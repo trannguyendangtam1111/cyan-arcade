@@ -1,4 +1,4 @@
-import { BarChart3, Plus, Settings2 } from 'lucide-react'
+import { BarChart3, History, Plus, Settings2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/Button'
 import { ErrorState } from '@/components/ui/ErrorState'
@@ -10,6 +10,7 @@ import { cn } from '@/lib/cn'
 import { formatScore } from '@/lib/format'
 import type { SudokuAiPlayer } from './ai/sudokuAiPlayer'
 import { AiControls } from './components/AiControls'
+import { UnrankedBadge } from './components/ArchivePicker'
 import { Board } from './components/Board'
 import { CompletionDialog, ConfirmDialog, SettingsDialog, StatsDialog } from './components/Dialogs'
 import { HintCard, HintMenu } from './components/HintMenu'
@@ -26,7 +27,7 @@ import { keyCommand } from './engine/keys'
 import { useLook } from './hooks/useLook'
 import { useSettings } from './hooks/useSettings'
 import { useSudokuAi } from './hooks/useSudokuAi'
-import { useSudokuGame } from './hooks/useSudokuGame'
+import { useSudokuGame, type PlayMode } from './hooks/useSudokuGame'
 import { DIFFICULTY_LABELS, type RunView } from './types/sudokuTypes'
 import './sudoku.css'
 
@@ -50,16 +51,16 @@ export default function SudokuGame(props: GameProps<SudokuAiPlayer>) {
   const [hintOpen, setHintOpen] = useState(false)
   const [confirm, setConfirm] = useState<null | 'restart' | 'new'>(null)
   // Both belong to the run they were asked for: a new run starts without them.
-  const [pickingFor, setPickingFor] = useState<string | null | undefined>(undefined)
+  const [pickingFor, setPickingFor] = useState<{ mode: PlayMode; runId: string | null; date: string | null } | undefined>(undefined)
   const [solutionFor, setSolutionFor] = useState<string | null>(null)
   const dialogOpen = statsOpen || settingsOpen || confirm !== null || game.finished !== null
 
   const run = game.run
   const today = game.today
-  // Picking a new practice puzzle, over the practice game it was asked from (if any).
-  const practiceId = game.runs.practice?.id ?? null
-  const picking = pickingFor !== undefined && pickingFor === practiceId
-  const setPicking = (on: boolean) => setPickingFor(on ? practiceId : undefined)
+  // Picking a new practice puzzle or archive date, over the game of that mode it was asked from (if any).
+  const picking = pickingFor !== undefined && pickingFor.mode === game.mode && pickingFor.runId === (game.runs[game.mode]?.id ?? null)
+  const startPicking = (mode: PlayMode, date: string | null = null) => setPickingFor({ mode, runId: game.runs[mode]?.id ?? null, date })
+  const stopPicking = () => setPickingFor(undefined)
   const showSolution = run !== null && solutionFor === run.id
 
   // The clock between the server's answers.
@@ -77,6 +78,14 @@ export default function SudokuGame(props: GameProps<SudokuAiPlayer>) {
   if (!isAi && today) {
     if (game.mode === 'practice' && (picking || !run)) {
       cover = { kind: 'practice', difficulties: today.difficulties, cancellable: picking && run !== null }
+    } else if (game.mode === 'archive' && (picking || !run)) {
+      cover = {
+        kind: 'archive',
+        today: today.date,
+        puzzleNumber: today.puzzleNumber,
+        initialDate: (picking ? pickingFor?.date : null) ?? run?.date ?? null,
+        cancellable: picking && run !== null,
+      }
     } else if (!run) {
       cover = game.mode === 'daily' ? { kind: 'daily', puzzleNumber: today.puzzleNumber, difficulty: today.difficulty } : null
     } else if (run.status === 'PLAYING' && !game.active) {
@@ -163,10 +172,12 @@ export default function SudokuGame(props: GameProps<SudokuAiPlayer>) {
       ? `${solution.date ? `Daily #${solution.puzzleNumber}` : 'Practice'} · ${DIFFICULTY_LABELS[solution.difficulty]}`
       : 'AI solver'
     : run
-      ? `${run.mode === 'DAILY' ? `Daily #${run.puzzleNumber}` : run.ranked ? 'Practice' : 'Relaxed'} · ${DIFFICULTY_LABELS[run.difficulty]}`
+      ? `${run.mode === 'DAILY' ? `Daily #${run.puzzleNumber}` : run.mode === 'ARCHIVE' ? `Archive #${run.puzzleNumber}` : run.ranked ? 'Practice' : 'Relaxed'} · ${DIFFICULTY_LABELS[run.difficulty]}`
       : game.mode === 'daily' && today
         ? `Daily #${today.puzzleNumber} · ${DIFFICULTY_LABELS[today.difficulty]}`
-        : 'Practice'
+        : game.mode === 'archive'
+          ? 'Daily archive'
+          : 'Practice'
   const rule =
     run && !run.ranked ? 'Relaxed: a digit that repeats in its row, column or box counts, with no limit' : 'A digit that is not the solution is a mistake; three end the game'
 
@@ -175,13 +186,22 @@ export default function SudokuGame(props: GameProps<SudokuAiPlayer>) {
       {!isAi && (
         <div className="flex w-full flex-wrap items-center justify-between gap-2">
           <ModeBar mode={game.mode} onChange={game.setMode} />
-          {game.mode === 'practice' && run && !cover && (
-            <Button size="sm" variant="secondary" onClick={() => (run.status === 'PLAYING' ? setConfirm('new') : setPicking(true))}>
-              <Plus aria-hidden className="size-4" />
-              New game
+          {game.mode !== 'daily' && run && !cover && (
+            <Button size="sm" variant="secondary" onClick={() => (run.status === 'PLAYING' ? setConfirm('new') : startPicking(game.mode, run.date))}>
+              {game.mode === 'archive' ? <History aria-hidden className="size-4" /> : <Plus aria-hidden className="size-4" />}
+              {game.mode === 'archive' ? 'Pick a date' : 'New game'}
             </Button>
           )}
         </div>
+      )}
+
+      {!isAi && game.mode === 'archive' && run?.mode === 'ARCHIVE' && (
+        <p className="flex w-full flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-soft">
+          <UnrankedBadge />
+          <span>
+            Replaying Daily Sudoku #{run.puzzleNumber} of {run.date} (UTC)
+          </span>
+        </p>
       )}
 
       {isAi ? (
@@ -235,7 +255,14 @@ export default function SudokuGame(props: GameProps<SudokuAiPlayer>) {
             hidden={!isAi && cover !== null}
           />
           {cover && (
-            <StartPanel cover={cover} busy={game.busy} onStart={(practice) => game.start(practice)} onResume={game.resume} onCancel={() => setPicking(false)} />
+            <StartPanel
+              cover={cover}
+              busy={game.busy}
+              onStart={(practice) => game.start(practice)}
+              onArchive={game.startArchive}
+              onResume={game.resume}
+              onCancel={stopPicking}
+            />
           )}
         </div>
       )}
@@ -367,9 +394,15 @@ export default function SudokuGame(props: GameProps<SudokuAiPlayer>) {
           setStatsOpen(true)
         }}
         onNewGame={() => {
+          const finished = game.finished
           game.closeFinished()
-          game.setMode('practice')
-          setPicking(true)
+          if (finished?.mode === 'ARCHIVE') {
+            game.setMode('archive')
+            startPicking('archive', finished.date)
+          } else {
+            game.setMode('practice')
+            startPicking('practice')
+          }
         }}
         onShowSolution={() => {
           game.closeFinished()
@@ -386,10 +419,14 @@ export default function SudokuGame(props: GameProps<SudokuAiPlayer>) {
       />
       <ConfirmDialog
         open={confirm === 'new'}
-        title="Start a new puzzle?"
-        text="This game ends here. A ranked game counts as played but not solved."
-        confirm="New puzzle"
-        onConfirm={() => setPicking(true)}
+        title={game.mode === 'archive' ? 'Leave this replay?' : 'Start a new puzzle?'}
+        text={
+          game.mode === 'archive'
+            ? 'It ends when you start another. Replays are unranked, so nothing counts: pick any date, this one included.'
+            : 'This game ends here. A ranked game counts as played but not solved.'
+        }
+        confirm={game.mode === 'archive' ? 'Pick a date' : 'New puzzle'}
+        onConfirm={() => startPicking(game.mode, run?.date ?? null)}
         onClose={() => setConfirm(null)}
       />
     </>
@@ -403,7 +440,7 @@ function ResultBanner({ run, onStats }: { run: RunView; onStats: () => void }) {
       <p>
         <strong className="text-ink">{solved ? 'Solved' : run.status === 'FAILED' ? 'Out of mistakes' : 'Left unfinished'}</strong>
         {run.result && ` in ${formatClock(run.result.seconds * 1000)} · ${formatScore(run.result.score)} points`}
-        {!run.ranked && solved && ' · relaxed, no score'}
+        {!run.ranked && solved && (run.mode === 'ARCHIVE' ? ' · practice / unranked, no score' : ' · relaxed, no score')}
       </p>
       <Button size="sm" variant="secondary" onClick={onStats}>
         <BarChart3 aria-hidden className="size-4" />
@@ -458,6 +495,10 @@ function HowToPlay() {
       <p>
         Everyone gets the same <strong className="text-ink">Daily Sudoku</strong> (UTC); practice puzzles come in four difficulties. In a ranked game a
         wrong digit is a mistake and three end it. Faster solves score more; each mistake and hint costs a share.
+      </p>
+      <p>
+        The <strong className="text-ink">Archive</strong> replays any past Daily by its UTC date, as practice: unranked, with no mistake limit, score,
+        rewards or streak, and as often as you like.
       </p>
     </div>
   )

@@ -54,11 +54,25 @@ final class SudokuViews {
 	 * Today's puzzle (without its digits until a run starts), the rules, and the caller's runs.
 	 * @param daily the caller's run of today's puzzle, or {@code null}
 	 * @param practice the caller's practice game in progress, or {@code null}
+	 * @param archive the caller's replay of a past daily puzzle in progress, or {@code null}
 	 * @param hintPercents the score multiplier, in percent, by hints taken (0 to 3)
 	 */
 	record TodayResponse(int puzzleNumber, LocalDate date, Difficulty difficulty, Instant nextPuzzleAt, int maxHints,
 			int mistakeLimit, List<Integer> hintPercents, List<DifficultyView> difficulties, RunResponse daily,
-			RunResponse practice) {
+			RunResponse practice, RunResponse archive) {
+	}
+
+	/**
+	 * A past Daily puzzle as the archive shows it: the public part only. Its solution stays on the
+	 * server, as for every run, until a replay of it is over.
+	 * @param date its UTC date, before today
+	 * @param givens the clues, 81 characters, {@code 0} for an empty cell
+	 */
+	record ArchivePuzzleResponse(LocalDate date, int puzzleNumber, Difficulty difficulty, String givens) {
+	}
+
+	/** @param date the UTC date of the past Daily puzzle to replay, unranked */
+	record StartArchiveRequest(@NotNull LocalDate date) {
 	}
 
 	record DifficultyView(Difficulty id, String label, int level, int baseScore, int parSeconds) {

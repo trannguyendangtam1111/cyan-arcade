@@ -24,6 +24,7 @@ import com.cyan.arcade.sudoku.SudokuRun.Mode;
 import com.cyan.arcade.sudoku.SudokuRun.Owner;
 import com.cyan.arcade.sudoku.SudokuRun.Status;
 import com.cyan.arcade.sudoku.SudokuRunStore.Result;
+import com.cyan.arcade.sudoku.SudokuViews.ArchivePuzzleResponse;
 import com.cyan.arcade.sudoku.SudokuViews.DifficultyView;
 import com.cyan.arcade.sudoku.SudokuViews.HintResponse;
 import com.cyan.arcade.sudoku.SudokuViews.HintTaken;
@@ -91,6 +92,10 @@ class SudokuService {
 
 	static final String RUN_TOO_LONG = "RUN_TOO_LONG";
 
+	static final String NOT_IN_ARCHIVE = "NOT_IN_ARCHIVE";
+
+	static final String DAILY_IN_PROGRESS = "DAILY_IN_PROGRESS";
+
 	/** Relaxed games left alone this long are forgotten. */
 	static final Duration RELAXED_KEPT_FOR = Duration.ofDays(2);
 
@@ -120,9 +125,11 @@ class SudokuService {
 		Puzzle puzzle = this.dailyPuzzles.forDay(today);
 		RunResponse daily = null;
 		RunResponse practice = null;
+		RunResponse archive = null;
 		if (owner != null) {
 			daily = this.store.findDaily(owner, today, false).map(this::view).orElse(null);
-			practice = this.store.findPracticeInProgress(owner).map(this::view).orElse(null);
+			practice = this.store.findInProgress(owner, Mode.PRACTICE).map(this::view).orElse(null);
+			archive = this.store.findInProgress(owner, Mode.ARCHIVE).map(this::view).orElse(null);
 		}
 		List<DifficultyView> difficulties = Arrays.stream(Difficulty.values())
 			.map((difficulty) -> new DifficultyView(difficulty, difficulty.label(), difficulty.level(),
@@ -130,7 +137,69 @@ class SudokuService {
 			.toList();
 		return new TodayResponse(DailySchedule.puzzleNumber(today), today, puzzle.difficulty(),
 				DailySchedule.nextPuzzleAt(this.clock), SudokuGame.MAX_HINTS, SudokuGame.RANKED_MISTAKE_LIMIT,
-				Scoring.HINT_PERCENTS, difficulties, daily, practice);
+				Scoring.HINT_PERCENTS, difficulties, daily, practice, archive);
+	}
+
+	/**
+	 * A past Daily puzzle's public part, for the archive: the stored puzzle of that date, made and
+	 * stored now (as {@link DailyPuzzles} always does) if nobody has asked for it before. Today's
+	 * puzzle is not in the archive: it is the Daily, played ranked.
+	 */
+	@Transactional
+	public ArchivePuzzleResponse archivePuzzle(LocalDate date) {
+		LocalDate day = archiveDay(date);
+		Puzzle puzzle = this.dailyPuzzles.forDay(day);
+		return new ArchivePuzzleResponse(day, DailySchedule.puzzleNumber(day), puzzle.difficulty(), puzzle.givens());
+	}
+
+	/**
+	 * Replays a past Daily puzzle for practice: a new unranked run of the archive, with no session, so
+	 * no score, leaderboard place, rewards or streak, and no use of that day's official attempt. Any
+	 * replay the player had going is left; a practice game or a daily run is not touched. A day's
+	 * puzzle can be replayed as often as the player likes, except while their official run of that day
+	 * is still being played (it would show them the puzzle they are being ranked on). A player's
+	 * replay starts run one after another (others' are not held up, nor the player's practice starts),
+	 * so however many arrive at once, one replay is left in play: the last to start.
+	 */
+	@Transactional
+	public RunResponse startArchive(Owner owner, LocalDate date) {
+		LocalDate day = archiveDay(date);
+		this.store.lockStarts(owner, Mode.ARCHIVE);
+		boolean officialInPlay = this.store.findDaily(owner, day, false)
+			.filter((official) -> official.status() == Status.PLAYING)
+			.isPresent();
+		if (officialInPlay) {
+			throw new ConflictException(DAILY_IN_PROGRESS,
+					"Your ranked Daily Sudoku of that day is still in play: finish it first.");
+		}
+		// Read once the lock is held: a start that waited begins after the replay it ends.
+		Instant now = this.clock.instant();
+		this.store.deleteRelaxedStartedBefore(now.minus(RELAXED_KEPT_FOR));
+		this.store.abandon(owner, Mode.ARCHIVE, now);
+		Puzzle puzzle = this.dailyPuzzles.forDay(day);
+		SudokuRun run = newRun(owner, Mode.ARCHIVE, false, puzzle, null, day, DailySchedule.puzzleNumber(day));
+		if (!this.store.insert(run)) {
+			// Never hand back a run that was not stored.
+			throw new IllegalStateException("The replay " + run.id() + " could not be stored");
+		}
+		return view(run);
+	}
+
+	/** The date, if the archive has its puzzle: from the first Daily up to yesterday (UTC). */
+	private LocalDate archiveDay(LocalDate date) {
+		LocalDate today = DailySchedule.today(this.clock);
+		if (!DailySchedule.hasPuzzle(date)) {
+			throw new ApiException(HttpStatus.NOT_FOUND, NOT_IN_ARCHIVE,
+					"The Daily Sudoku began on " + DailySchedule.FIRST_DAY + ": there is no puzzle before");
+		}
+		if (date.equals(today)) {
+			throw new ApiException(HttpStatus.NOT_FOUND, NOT_IN_ARCHIVE,
+					"Today's puzzle is not in the archive yet: play it as the Daily");
+		}
+		if (date.isAfter(today)) {
+			throw new ApiException(HttpStatus.NOT_FOUND, NOT_IN_ARCHIVE, "That Daily puzzle has not come out yet");
+		}
+		return date;
 	}
 
 	/**
@@ -179,7 +248,7 @@ class SudokuService {
 			}
 		}
 		this.store.deleteRelaxedStartedBefore(now.minus(RELAXED_KEPT_FOR));
-		this.store.abandonPractice(owner, now);
+		this.store.abandon(owner, Mode.PRACTICE, now);
 		Puzzle puzzle;
 		try {
 			puzzle = this.practicePuzzles.next(owner, difficulty);

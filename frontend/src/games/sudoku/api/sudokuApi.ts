@@ -1,6 +1,6 @@
 import { apiFetch } from '@/api/client'
 import { playerHeaders } from '@/lib/playerId'
-import type { AiSolution, DailyHistoryView, Difficulty, HintResponse, HintType, RunView, StatsView, Strategy, TodayView } from '../types/sudokuTypes'
+import type { AiSolution, ArchivePuzzleView, DailyHistoryView, Difficulty, HintResponse, HintType, RunView, StatsView, Strategy, TodayView } from '../types/sudokuTypes'
 
 /**
  * Sudoku's own endpoints. Like Word Guess it is played on the server, which keeps the solution and
@@ -22,6 +22,19 @@ export function fetchToday(signal?: AbortSignal): Promise<TodayView> {
 /** Starts today's puzzle with the platform session just opened, or picks the player's run of it up again. */
 export function startDaily(sessionId: string): Promise<RunView> {
   return apiFetch<RunView>('/api/sudoku/daily/runs', { method: 'POST', body: { sessionId }, headers: playerHeaders() })
+}
+
+/** A past Daily puzzle's number, difficulty and clues, by UTC date (`YYYY-MM-DD`). 404 `NOT_IN_ARCHIVE` outside the archive. */
+export function fetchArchivePuzzle(date: string, signal?: AbortSignal): Promise<ArchivePuzzleView> {
+  return apiFetch<ArchivePuzzleView>(`/api/sudoku/archive/${encodeURIComponent(date)}`, { signal })
+}
+
+/**
+ * Replays a past Daily puzzle, unranked: no platform session, so no score, rewards or streak, and
+ * nothing to do with that day's official run. Leaves any replay in progress.
+ */
+export function startArchive(date: string): Promise<RunView> {
+  return apiFetch<RunView>('/api/sudoku/archive/runs', { method: 'POST', body: { date }, headers: playerHeaders() })
 }
 
 /** A practice game: ranked with a session, relaxed without one. */

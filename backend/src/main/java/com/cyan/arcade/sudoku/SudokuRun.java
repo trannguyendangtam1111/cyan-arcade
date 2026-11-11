@@ -34,7 +34,13 @@ record SudokuRun(UUID id, Mode mode, boolean ranked, Difficulty difficulty, Loca
 
 	enum Mode {
 
-		DAILY, PRACTICE
+		DAILY, PRACTICE,
+
+		/**
+		 * A past daily puzzle replayed for practice: it carries the puzzle's date and number, but it is
+		 * never ranked and never has a session, so it is no official attempt of that day.
+		 */
+		ARCHIVE
 
 	}
 

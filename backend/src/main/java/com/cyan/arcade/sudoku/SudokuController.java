@@ -9,6 +9,7 @@ import com.cyan.arcade.common.error.ErrorCodes;
 import com.cyan.arcade.common.security.AuthenticatedUser;
 import com.cyan.arcade.common.security.GuestPlayer;
 import com.cyan.arcade.sudoku.SudokuRun.Owner;
+import com.cyan.arcade.sudoku.SudokuViews.ArchivePuzzleResponse;
 import com.cyan.arcade.sudoku.SudokuViews.BindSessionRequest;
 import com.cyan.arcade.sudoku.SudokuViews.DailyHistoryResponse;
 import com.cyan.arcade.sudoku.SudokuViews.DailyLeaderboardResponse;
@@ -16,6 +17,7 @@ import com.cyan.arcade.sudoku.SudokuViews.HintRequest;
 import com.cyan.arcade.sudoku.SudokuViews.HintResponse;
 import com.cyan.arcade.sudoku.SudokuViews.MovesRequest;
 import com.cyan.arcade.sudoku.SudokuViews.RunResponse;
+import com.cyan.arcade.sudoku.SudokuViews.StartArchiveRequest;
 import com.cyan.arcade.sudoku.SudokuViews.StartDailyRequest;
 import com.cyan.arcade.sudoku.SudokuViews.StartPracticeRequest;
 import com.cyan.arcade.sudoku.SudokuViews.StatsResponse;
@@ -98,6 +100,24 @@ class SudokuController {
 			@AuthenticationPrincipal AuthenticatedUser user,
 			@RequestHeader(name = GuestPlayer.HEADER, required = false) UUID playerId) {
 		RunResponse run = this.sudoku.startPractice(owner(user, playerId), request.difficulty(), request.sessionId());
+		return ResponseEntity.created(URI.create("/api/sudoku/runs/" + run.id())).body(run);
+	}
+
+	/**
+	 * A past Daily puzzle by its UTC date: number, difficulty and clues, never the solution. Open to
+	 * everyone; 404 {@code NOT_IN_ARCHIVE} for today, a later date or one before the first Daily.
+	 */
+	@GetMapping("/archive/{date}")
+	ArchivePuzzleResponse archivePuzzle(@PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+		return this.sudoku.archivePuzzle(date);
+	}
+
+	/** Replays a past Daily puzzle, unranked: no session, score, rewards or streak. */
+	@PostMapping("/archive/runs")
+	ResponseEntity<RunResponse> startArchive(@Valid @RequestBody StartArchiveRequest request,
+			@AuthenticationPrincipal AuthenticatedUser user,
+			@RequestHeader(name = GuestPlayer.HEADER, required = false) UUID playerId) {
+		RunResponse run = this.sudoku.startArchive(owner(user, playerId), request.date());
 		return ResponseEntity.created(URI.create("/api/sudoku/runs/" + run.id())).body(run);
 	}
 

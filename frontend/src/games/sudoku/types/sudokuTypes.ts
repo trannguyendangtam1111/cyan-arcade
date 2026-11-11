@@ -34,8 +34,9 @@ export interface ResultView {
 
 export interface RunView {
   id: string
-  mode: 'DAILY' | 'PRACTICE'
-  /** Ranked runs are scored and counted; relaxed practice is just for fun. */
+  /** `ARCHIVE`: a past Daily puzzle replayed for practice, always unranked. */
+  mode: 'DAILY' | 'PRACTICE' | 'ARCHIVE'
+  /** Ranked runs are scored and counted; relaxed practice and archive replays are just for fun. */
   ranked: boolean
   difficulty: Difficulty
   puzzleNumber: number | null
@@ -73,6 +74,17 @@ export interface TodayView {
   difficulties: DifficultyInfo[]
   daily: RunView | null
   practice: RunView | null
+  /** The player's replay of a past Daily puzzle in progress. */
+  archive: RunView | null
+}
+
+/** A past Daily puzzle as the archive lists it: its public part, never its solution. */
+export interface ArchivePuzzleView {
+  /** The UTC date, `YYYY-MM-DD`. */
+  date: string
+  puzzleNumber: number
+  difficulty: Difficulty
+  givens: string
 }
 
 export interface HintView {

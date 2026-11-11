@@ -173,24 +173,32 @@ class SudokuRunStore {
 			.optional();
 	}
 
-	/** The player's practice game in progress, if any: the latest one. */
-	Optional<SudokuRun> findPracticeInProgress(Owner owner) {
-		return this.jdbc.sql("SELECT " + COLUMNS + " FROM sudoku_runs WHERE mode = 'PRACTICE' AND status = 'PLAYING' AND "
+	/** The player's practice (or archive) game in progress, if any: the latest one. */
+	Optional<SudokuRun> findInProgress(Owner owner, Mode mode) {
+		return this.jdbc.sql("SELECT " + COLUMNS + " FROM sudoku_runs WHERE mode = :mode AND status = 'PLAYING' AND "
 				+ ownerCondition(owner) + " ORDER BY started_at DESC LIMIT 1")
+			.param("mode", mode.name())
 			.params(ownerParams(owner))
 			.query(SudokuRunStore::map)
 			.optional();
 	}
 
-	/** Leaves the player's practice games in progress: they count as played, never as completed. */
-	int abandonPractice(Owner owner, Instant now) {
+	/**
+	 * Leaves the player's practice (or archive) games in progress: a ranked practice game counts as
+	 * played, never as completed. Daily runs are never left this way.
+	 */
+	int abandon(Owner owner, Mode mode, Instant now) {
+		if (mode == Mode.DAILY) {
+			throw new IllegalArgumentException("A daily run is never abandoned");
+		}
 		return this.jdbc.sql("""
 				UPDATE sudoku_runs
 				SET status = 'ABANDONED', finished_at = :now,
 				    paused_ms = paused_ms + CASE WHEN paused_at IS NULL THEN 0
 				                                 ELSE (EXTRACT(EPOCH FROM (:now - paused_at)) * 1000)::BIGINT END,
 				    paused_at = NULL
-				WHERE mode = 'PRACTICE' AND status = 'PLAYING' AND""" + " " + ownerCondition(owner))
+				WHERE mode = :mode AND status = 'PLAYING' AND""" + " " + ownerCondition(owner))
+			.param("mode", mode.name())
 			.param("now", timestamp(now))
 			.params(ownerParams(owner))
 			.update();
@@ -240,10 +248,10 @@ class SudokuRunStore {
 	}
 
 	/**
-	 * Makes one player's Practice starts wait for each other until the current transaction
+	 * Makes one player's Practice (or Archive) starts wait for each other until the current transaction
 	 * ends, so two starts at once cannot both find no game in play and both leave one in play. A
 	 * transaction-scoped advisory lock on the player and the mode alone (account or guest): other
-	 * players and Daily starts are never held up, and there is no row to lock
+	 * players, and the player's starts of the other mode, are never held up, and there is no row to lock
 	 * before the player's first game.
 	 */
 	void lockStarts(Owner owner, Mode mode) {

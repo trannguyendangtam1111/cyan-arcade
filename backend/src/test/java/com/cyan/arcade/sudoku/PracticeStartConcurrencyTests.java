@@ -1,5 +1,6 @@
 package com.cyan.arcade.sudoku;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -32,7 +33,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * Practice starts arriving at the same moment: a player ends up with exactly one Practice game in
- * play (the last one started), whatever the timing; other players and the player's Daily
+ * play (the last one started), whatever the timing; other players and the player's Daily and Archive
  * runs are not held up or touched.
  */
 @IntegrationTest
@@ -141,15 +142,16 @@ class PracticeStartConcurrencyTests {
 	}
 
 	@Test
-	void startsAtOnceLeaveTheDailyRunAlone() throws Exception {
+	void startsAtOnceLeaveTheDailyAndArchiveRunsAlone() throws Exception {
 		Player player = account();
 		Owner owner = player.owner();
 		String dailySession = gameSession(player.session(), "daily");
 		this.mockMvc.perform(post("/api/sudoku/daily/runs").session(player.session())
 			.contentType(MediaType.APPLICATION_JSON)
 			.content("{\"sessionId\":\"%s\"}".formatted(dailySession))).andExpect(status().isOk());
+		this.sudoku.startArchive(owner, LocalDate.of(2026, 3, 14));
 		String others = otherRuns(owner);
-		assertThat(others).contains("DAILY,PLAYING");
+		assertThat(others).contains("DAILY,PLAYING").contains("ARCHIVE,PLAYING");
 
 		all(List.of(owner, owner, owner, owner), Difficulty.EASY);
 		assertThat(playing(owner)).hasSize(1);
@@ -219,7 +221,7 @@ class PracticeStartConcurrencyTests {
 			.list();
 	}
 
-	/** The player's non-Practice runs, whole. */
+	/** The player's Daily and Archive runs, whole. */
 	private String otherRuns(Owner owner) {
 		return this.jdbc.sql("SELECT string_agg(mode || ',' || status || ',' || r::text, '|' ORDER BY mode) FROM sudoku_runs r "
 				+ "WHERE mode <> 'PRACTICE' AND " + owned(owner))

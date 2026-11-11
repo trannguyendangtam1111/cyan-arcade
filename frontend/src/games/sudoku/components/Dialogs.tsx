@@ -214,7 +214,7 @@ export function CompletionDialog({
           <Button variant="secondary" onClick={onStats}>
             Statistics
           </Button>
-          <Button onClick={onNewGame}>New practice game</Button>
+          <Button onClick={onNewGame}>{run?.mode === 'ARCHIVE' ? 'Replay or pick a date' : 'New practice game'}</Button>
         </>
       }
     >
@@ -223,8 +223,9 @@ export function CompletionDialog({
           <div className="flex items-center gap-3">
             {solved ? <Trophy aria-hidden className="size-10 text-amber-500" /> : <XCircle aria-hidden className="size-10 text-danger" />}
             <p>
-              {run.mode === 'DAILY' ? `Daily Sudoku #${run.puzzleNumber}` : 'Practice'} · {DIFFICULTY_LABELS[run.difficulty]}
-              {!run.ranked && ' · relaxed'}
+              {run.mode === 'DAILY' ? `Daily Sudoku #${run.puzzleNumber}` : run.mode === 'ARCHIVE' ? `Archive · Daily Sudoku #${run.puzzleNumber}` : 'Practice'} ·{' '}
+              {DIFFICULTY_LABELS[run.difficulty]}
+              {run.mode === 'ARCHIVE' ? ' · practice / unranked' : !run.ranked && ' · relaxed'}
             </p>
           </div>
           <dl className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
@@ -239,7 +240,11 @@ export function CompletionDialog({
               {result.hintPercent}%.
             </p>
           )}
-          {!run.ranked && <p className="text-sm">Relaxed games are just for fun: no score, no rewards.</p>}
+          {run.mode === 'ARCHIVE' ? (
+            <p className="text-sm">Archive replays are practice: no score, rewards or streak, and that day&apos;s Daily result stays as it was. Replay it as often as you like.</p>
+          ) : (
+            !run.ranked && <p className="text-sm">Relaxed games are just for fun: no score, no rewards.</p>
+          )}
         </div>
       )}
     </Modal>
