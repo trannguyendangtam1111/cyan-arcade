@@ -297,7 +297,7 @@ describe('Chess', () => {
     click('e2')
     click('e4')
 
-    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't reach the server")
+    expect(await screen.findByText(/The latest game was loaded. No action was repeated/)).toBeInTheDocument()
     expect(square('e2')).toHaveAccessibleName('e2, white pawn')
     // The next try goes through.
     await play('e2e4')

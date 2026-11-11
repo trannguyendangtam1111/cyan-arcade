@@ -161,7 +161,7 @@ describe('AI mode (admins)', () => {
     server.engineFailures = 1
     await screen.findByRole('grid', { name: /Chess board/ })
 
-    expect(await screen.findByText("Stockfish could not move. The game is unchanged.")).toBeInTheDocument()
+    expect(await screen.findByText('Stockfish has not completed its turn on this board. Sync before retrying its move.')).toBeInTheDocument()
     // White is Stockfish's: nothing can be picked up for it.
     fireEvent.click(square('e2'))
     expect(square('e2')).toHaveAttribute('aria-selected', 'false')
@@ -169,7 +169,7 @@ describe('AI mode (admins)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: "Retry Stockfish's move" }))
     await waitFor(() => expect(square('e4')).toHaveAccessibleName('e4, white pawn, last move'))
-    expect(screen.queryByText("Stockfish could not move. The game is unchanged.")).not.toBeInTheDocument()
+    expect(screen.queryByText('Stockfish has not completed its turn on this board. Sync before retrying its move.')).not.toBeInTheDocument()
   })
 
   it('evaluates the position from White\'s side with a bar, the best move and its lines', async () => {
