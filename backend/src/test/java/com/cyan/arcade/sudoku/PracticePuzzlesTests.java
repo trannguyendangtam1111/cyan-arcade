@@ -201,7 +201,7 @@ class PracticePuzzlesTests {
 		// No puzzle store of any kind: the Sudoku tables are the ones there were.
 		assertThat(this.jdbc.sql("SELECT string_agg(table_name, ',' ORDER BY table_name) FROM information_schema.tables "
 				+ "WHERE table_schema = 'public' AND table_name LIKE 'sudoku%'").query(String.class).single())
-			.isEqualTo("sudoku_daily_puzzles,sudoku_runs");
+			.isEqualTo("sudoku_daily_puzzles,sudoku_run_notes,sudoku_runs");
 	}
 
 	// --- Helpers ---------------------------------------------------------------------------------------

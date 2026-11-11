@@ -24,6 +24,7 @@ import com.cyan.arcade.sudoku.SudokuRun.Mode;
 import com.cyan.arcade.sudoku.SudokuRun.Owner;
 import com.cyan.arcade.sudoku.SudokuRun.Status;
 import com.cyan.arcade.sudoku.SudokuRunStore.Result;
+import com.cyan.arcade.sudoku.SudokuRunStore.RunNotesRow;
 import com.cyan.arcade.sudoku.SudokuViews.ArchivePuzzleResponse;
 import com.cyan.arcade.sudoku.SudokuViews.DifficultyView;
 import com.cyan.arcade.sudoku.SudokuViews.HintResponse;
@@ -31,6 +32,8 @@ import com.cyan.arcade.sudoku.SudokuViews.HintTaken;
 import com.cyan.arcade.sudoku.SudokuViews.HintView;
 import com.cyan.arcade.sudoku.SudokuViews.ModeStats;
 import com.cyan.arcade.sudoku.SudokuViews.MoveRequest;
+import com.cyan.arcade.sudoku.SudokuViews.NoteCell;
+import com.cyan.arcade.sudoku.SudokuViews.NotesResponse;
 import com.cyan.arcade.sudoku.SudokuViews.ResultView;
 import com.cyan.arcade.sudoku.SudokuViews.RunResponse;
 import com.cyan.arcade.sudoku.SudokuViews.StatsResponse;
@@ -95,6 +98,9 @@ class SudokuService {
 	static final String NOT_IN_ARCHIVE = "NOT_IN_ARCHIVE";
 
 	static final String DAILY_IN_PROGRESS = "DAILY_IN_PROGRESS";
+
+	/** Another device saved the run's notes since the revision a save was based on. */
+	static final String NOTES_STALE = "NOTES_STALE";
 
 	/** Relaxed games left alone this long are forgotten. */
 	static final Duration RELAXED_KEPT_FOR = Duration.ofDays(2);
@@ -367,6 +373,46 @@ class SudokuService {
 		return view(resumed);
 	}
 
+	/**
+	 * A signed-in player's pencil marks for one of their runs, as last saved (revision 0 and none while
+	 * nothing is). Someone else's run is as good as missing. Notes never touch the game itself.
+	 */
+	@Transactional(readOnly = true)
+	public NotesResponse notes(long userId, UUID runId) {
+		RunNotesRow row = this.store.findNotes(runId)
+			.filter((found) -> Long.valueOf(userId).equals(found.userId()))
+			.orElseThrow(() -> new NotFoundException("Sudoku run", runId));
+		return (row.revision() == null) ? new NotesResponse(0, List.of())
+				: new NotesResponse(row.revision(), RunNotes.decode(row.notes()));
+	}
+
+	/**
+	 * Replaces the pencil marks of a signed-in player's run in play, if no other device has saved since
+	 * {@code baseRevision}: otherwise 409 {@code NOTES_STALE}, and the caller loads them first. The run
+	 * is locked meanwhile, so two saves cannot both pass the check. Digits, mistakes, hints, the clock
+	 * and the score are not touched.
+	 * @param baseCells when given, the marks the caller expects at {@code baseRevision}: anything else
+	 * there is stale too. A page being left sends its newest marks over the revision its earlier save,
+	 * still unanswered, would have made; this tells that save apart from another device's.
+	 */
+	@Transactional
+	public NotesResponse saveNotes(long userId, UUID runId, int baseRevision, List<NoteCell> cells,
+			List<NoteCell> baseCells) {
+		String stored = RunNotes.encode(cells);
+		String expected = (baseCells != null) ? RunNotes.encode(baseCells) : null;
+		SudokuRun run = ownedForUpdate(new Owner(userId, null), runId);
+		requirePlaying(run);
+		Optional<RunNotesRow> row = this.store.findNotes(runId);
+		Integer saved = row.map(RunNotesRow::revision).orElse(null);
+		int current = (saved != null) ? saved : 0;
+		String held = (saved != null) ? row.get().notes() : RunNotes.EMPTY;
+		if (baseRevision != current || (expected != null && !expected.equals(held))) {
+			throw new ConflictException(NOTES_STALE, "These notes were changed on another device: load them first");
+		}
+		this.store.saveNotes(run.id(), stored, current + 1, this.clock.instant());
+		return new NotesResponse(current + 1, RunNotes.decode(stored));
+	}
+
 	/** The caller's ranked games ({@code owner} is {@code null} for an unknown guest: nothing yet). */
 	@Transactional(readOnly = true)
 	public StatsResponse stats(Owner owner) {
@@ -526,7 +572,8 @@ class SudokuService {
 				Grid.format(game.values()), new ArrayList<>(game.revealedCells()),
 				new ArrayList<>(game.wrongCells()), game.mistakes(), game.rule().name(), game.mistakeLimit(),
 				game.hints(), game.hintsLeft(), hints, run.played(now).toMillis(), run.isPaused(),
-				run.status().isOver() ? run.solution() : null, result, run.ranked() && isScored(run));
+				run.status().isOver() ? run.solution() : null, result, run.ranked() && isScored(run),
+				run.userId() != null);
 	}
 
 	private static HintView hintView(Advice advice) {

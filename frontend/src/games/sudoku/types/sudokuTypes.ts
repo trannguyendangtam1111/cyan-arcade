@@ -61,6 +61,20 @@ export interface RunView {
   solution: string | null
   result: ResultView | null
   scored: boolean
+  /** The run's pencil marks are kept on the server too (a signed-in player's run); a guest's stay in this browser. */
+  notesSync: boolean
+}
+
+/** One cell's pencil marks as the server keeps them: its candidate digits, ascending. */
+export interface NoteCellView {
+  cell: number
+  digits: number[]
+}
+
+/** A run's saved pencil marks. `revision` is 0 while none are saved, and goes up by one with each save. */
+export interface NotesView {
+  revision: number
+  cells: NoteCellView[]
 }
 
 export interface TodayView {

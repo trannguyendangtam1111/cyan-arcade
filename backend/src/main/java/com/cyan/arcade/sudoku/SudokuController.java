@@ -16,7 +16,9 @@ import com.cyan.arcade.sudoku.SudokuViews.DailyLeaderboardResponse;
 import com.cyan.arcade.sudoku.SudokuViews.HintRequest;
 import com.cyan.arcade.sudoku.SudokuViews.HintResponse;
 import com.cyan.arcade.sudoku.SudokuViews.MovesRequest;
+import com.cyan.arcade.sudoku.SudokuViews.NotesResponse;
 import com.cyan.arcade.sudoku.SudokuViews.RunResponse;
+import com.cyan.arcade.sudoku.SudokuViews.SaveNotesRequest;
 import com.cyan.arcade.sudoku.SudokuViews.StartArchiveRequest;
 import com.cyan.arcade.sudoku.SudokuViews.StartDailyRequest;
 import com.cyan.arcade.sudoku.SudokuViews.StartPracticeRequest;
@@ -33,6 +35,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -154,10 +157,35 @@ class SudokuController {
 		return this.sudoku.resume(owner(user, playerId), id);
 	}
 
+	/**
+	 * The pencil marks saved for one of the signed-in player's runs, so another device can pick them up.
+	 * Signed-in players only (security answers anyone else with 401): a guest's notes stay in their
+	 * browser.
+	 */
+	@GetMapping("/runs/{id}/notes")
+	NotesResponse notes(@PathVariable UUID id, @AuthenticationPrincipal AuthenticatedUser user) {
+		return this.sudoku.notes(signedIn(user).id(), id);
+	}
+
+	/** Saves the pencil marks of a run in play, if still at {@code baseRevision}; 409 {@code NOTES_STALE} if not. */
+	@PutMapping("/runs/{id}/notes")
+	NotesResponse saveNotes(@PathVariable UUID id, @Valid @RequestBody SaveNotesRequest request,
+			@AuthenticationPrincipal AuthenticatedUser user) {
+		return this.sudoku.saveNotes(signedIn(user).id(), id, request.baseRevision(), request.cells(),
+				request.baseCells());
+	}
+
 	@GetMapping("/stats")
 	StatsResponse stats(@AuthenticationPrincipal AuthenticatedUser user,
 			@RequestHeader(name = GuestPlayer.HEADER, required = false) UUID playerId) {
 		return this.sudoku.stats(ownerOrNull(user, playerId));
+	}
+
+	private static AuthenticatedUser signedIn(AuthenticatedUser user) {
+		if (user == null) {
+			throw new ApiException(HttpStatus.UNAUTHORIZED, ErrorCodes.UNAUTHORIZED, "Sign in to keep notes across devices");
+		}
+		return user;
 	}
 
 	private static Owner ownerOrNull(AuthenticatedUser user, UUID playerId) {

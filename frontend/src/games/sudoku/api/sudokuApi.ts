@@ -1,6 +1,6 @@
 import { apiFetch } from '@/api/client'
 import { playerHeaders } from '@/lib/playerId'
-import type { AiSolution, ArchivePuzzleView, DailyHistoryView, Difficulty, HintResponse, HintType, RunView, StatsView, Strategy, TodayView } from '../types/sudokuTypes'
+import type { AiSolution, ArchivePuzzleView, DailyHistoryView, Difficulty, HintResponse, HintType, NoteCellView, NotesView, RunView, StatsView, Strategy, TodayView } from '../types/sudokuTypes'
 
 /**
  * Sudoku's own endpoints. Like Word Guess it is played on the server, which keeps the solution and
@@ -12,6 +12,7 @@ export const DAILY_ALREADY_PLAYED = 'DAILY_ALREADY_PLAYED'
 export const HINT_UNAVAILABLE = 'HINT_UNAVAILABLE'
 export const RUN_OVER = 'RUN_OVER'
 export const CELL_LOCKED = 'CELL_LOCKED'
+export const NOTES_STALE = 'NOTES_STALE'
 
 const runPath = (runId: string, action: string) => `/api/sudoku/runs/${encodeURIComponent(runId)}/${action}`
 
@@ -71,6 +72,21 @@ export function pauseRun(runId: string, keepalive = false): Promise<RunView> {
 
 export function resumeRun(runId: string): Promise<RunView> {
   return apiFetch<RunView>(runPath(runId, 'resume'), { method: 'POST', headers: playerHeaders() })
+}
+
+/** A signed-in player's saved pencil marks for one of their runs; 401 for guests, 404 for someone else's run. */
+export function fetchNotes(runId: string): Promise<NotesView> {
+  return apiFetch<NotesView>(runPath(runId, 'notes'))
+}
+
+/**
+ * Saves a run's pencil marks over the revision this page last saw: 409 `NOTES_STALE` when another
+ * device has saved since, `RUN_OVER` once the run is over. `keepalive` lets it go out while the page is being left.
+ * `baseCells`, when given, are the marks expected at `baseRevision`: any others there make the save stale too.
+ */
+export function saveRunNotes(runId: string, baseRevision: number, cells: NoteCellView[], keepalive = false, baseCells?: NoteCellView[]): Promise<NotesView> {
+  const body = baseCells ? { baseRevision, cells, baseCells } : { baseRevision, cells }
+  return apiFetch<NotesView>(runPath(runId, 'notes'), { method: 'PUT', body, keepalive })
 }
 
 export function fetchStats(signal?: AbortSignal): Promise<StatsView> {

@@ -90,11 +90,13 @@ final class SudokuViews {
 	 * @param solution the solution, once the run is over; {@code null} before
 	 * @param result once solved or failed: the score and what the run reports with it
 	 * @param scored for a ranked run, whether its score has been submitted
+	 * @param notesSync whether the run's pencil marks are kept on the server ({@code /runs/{id}/notes}):
+	 * for a signed-in player's runs; a guest's stay in their browser
 	 */
 	record RunResponse(UUID id, String mode, boolean ranked, Difficulty difficulty, Integer puzzleNumber,
 			LocalDate date, String status, String givens, String values, List<Integer> revealed, List<Integer> wrong,
 			int mistakes, String mistakeRule, int mistakeLimit, int hintsUsed, int hintsLeft, List<HintTaken> hints,
-			long elapsedMs, boolean paused, String solution, ResultView result, boolean scored) {
+			long elapsedMs, boolean paused, String solution, ResultView result, boolean scored, boolean notesSync) {
 	}
 
 	record HintTaken(HintType type, int cell) {
@@ -194,6 +196,29 @@ final class SudokuViews {
 	}
 
 	record MovesRequest(@NotEmpty @Size(max = 81) List<@Valid @NotNull MoveRequest> moves) {
+	}
+
+	/** One cell's pencil marks: its candidate digits, 1-9, each once. */
+	record NoteCell(@NotNull @Min(0) @Max(80) Integer cell,
+			@NotNull @Size(min = 1, max = 9) List<@NotNull @Min(1) @Max(9) Integer> digits) {
+	}
+
+	/**
+	 * A run's pencil marks as saved for its signed-in player: the cells that have any, in order.
+	 * @param revision 1 for the first save, one more for each after; 0 while nothing is saved
+	 */
+	record NotesResponse(int revision, List<NoteCell> cells) {
+	}
+
+	/**
+	 * Replaces a run's pencil marks with these, if they are still at {@code baseRevision} (the revision
+	 * the device last saw); otherwise 409 {@code NOTES_STALE} and nothing changes.
+	 * @param baseCells optional: the marks the device expects at {@code baseRevision}; when the server
+	 * holds others there, the save is stale too
+	 */
+	record SaveNotesRequest(@NotNull @Min(0) Integer baseRevision,
+			@NotNull @Size(max = 81) List<@Valid @NotNull NoteCell> cells,
+			@Size(max = 81) List<@Valid @NotNull NoteCell> baseCells) {
 	}
 
 	/** @param cell for a reveal, the chosen cell; leave out to let the hint choose */

@@ -14,12 +14,15 @@ function setup(options: SudokuServerOptions = {}, props: Partial<GameProps<Sudok
   const onGameStart = vi.fn()
   const onGameOver = vi.fn()
   const currentSession = vi.fn(() => Promise.resolve({ id: 'session-1' }))
-  render(
+  const page = () => (
     <MemoryRouter>
       <SudokuGame onGameStart={onGameStart} onGameOver={onGameOver} currentSession={currentSession} {...props} />
-    </MemoryRouter>,
+    </MemoryRouter>
   )
-  return { server, fetchSpy, onGameStart, onGameOver, currentSession }
+  const { unmount } = render(page())
+  /** The page opened again in this browser, against the same server: a reload, or the next visit. */
+  const reopen = () => render(page())
+  return { server, fetchSpy, onGameStart, onGameOver, currentSession, unmount, reopen }
 }
 
 const board = () => screen.getByRole('grid', { name: /Sudoku board|AI board/ })
@@ -135,8 +138,8 @@ describe('Sudoku', () => {
     key('9')
     key('n')
     expect(cell(3)).toHaveAccessibleName('Row 1, column 4: empty, notes 9')
-    /** Candidate notes are local: no server requests belong to this action. */
-    const gameCalls = () => server.calls
+    /** Calls that are about the game: a signed-in player's notes are saved too, but they are no move. */
+    const gameCalls = () => server.calls.filter((call) => !call.path.endsWith('/notes'))
     const sent = gameCalls().length
 
     key('c')
@@ -615,5 +618,302 @@ describe('Sudoku Daily archive', () => {
     expect(onGameStart).not.toHaveBeenCalled()
     expect(currentSession).not.toHaveBeenCalled()
     expect(rankedCalls(server)).toHaveLength(0)
+  })
+})
+
+describe('Sudoku notes across devices', () => {
+  const NOTES_KEY = 'cyan-arcade:sudoku-notes'
+  const SYNCED_KEY = 'cyan-arcade:sudoku-notes-synced'
+  const SENT_KEY = 'cyan-arcade:sudoku-notes-sent'
+  /** A mask per cell from `{ cell: digits }`. */
+  const masks = (notes: Record<number, number[]>) => Array.from({ length: 81 }, (_, index) => (notes[index] ?? []).reduce((mask, digit) => mask | (1 << digit), 0))
+  const saves = (server: ReturnType<typeof setup>['server']) => server.noteCalls().filter((call) => call.method === 'PUT')
+  const reads = (server: ReturnType<typeof setup>['server']) => server.noteCalls().filter((call) => call.method === 'GET')
+  /** Real time passing, for what must not happen within it. */
+  const wait = (ms: number) => act(() => new Promise<void>((resolve) => window.setTimeout(resolve, ms)))
+
+  it("saves a signed-in player's notes once they rest, in one request for many toggles, and Undo saves too", async () => {
+    const { server, onGameOver } = setup()
+    await startDaily()
+    await waitFor(() => expect(reads(server)).toHaveLength(1))
+    expect(reads(server)[0].path).toBe('/api/sudoku/runs/daily-run/notes')
+
+    fireEvent.click(cell(2))
+    key('n')
+    key('1')
+    key('2')
+    key('4')
+    key('2')
+    fireEvent.click(cell(3))
+    key('9')
+    expect(cell(2)).toHaveAccessibleName('Row 1, column 3: empty, notes 1, 4')
+    expect(saves(server)).toHaveLength(0)
+
+    await waitFor(() => expect(saves(server)).toHaveLength(1))
+    expect(saves(server)[0].body).toEqual({ baseRevision: 0, cells: [{ cell: 2, digits: [1, 4] }, { cell: 3, digits: [9] }] })
+    expect(server.notes('daily-run').revision).toBe(1)
+
+    // Undo is an edit of the notes like any other: saved over the revision just made.
+    key('z', { ctrlKey: true })
+    expect(cell(3)).toHaveAccessibleName('Row 1, column 4: empty')
+    await waitFor(() => expect(saves(server)).toHaveLength(2))
+    expect(saves(server)[1].body).toEqual({ baseRevision: 1, cells: [{ cell: 2, digits: [1, 4] }] })
+    key('y', { ctrlKey: true })
+    await waitFor(() => expect(server.notes('daily-run')).toEqual({ revision: 3, cells: [{ cell: 2, digits: [1, 4] }, { cell: 3, digits: [9] }] }))
+
+    // Nothing about the game: no moves, no mistakes, the same hints, no result.
+    expect(server.moves()).toEqual([])
+    expect(screen.getByText('Mistakes 0/3')).toBeInTheDocument()
+    expect(tool('Hint')).toHaveTextContent('3')
+    expect(onGameOver).not.toHaveBeenCalled()
+  })
+
+  it('restores the notes saved on another device, without saving them back', async () => {
+    const { server } = setup({ daily: { paused: true }, notes: { 'daily-run': { revision: 3, cells: [{ cell: 2, digits: [1, 4] }, { cell: 3, digits: [2] }] } } })
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue' }))
+    await waitFor(() => expect(cell(2)).toHaveAccessibleName('Row 1, column 3: empty, notes 1, 4'))
+    expect(cell(3)).toHaveAccessibleName('Row 1, column 4: empty, notes 2')
+    await wait(1200)
+    expect(saves(server)).toHaveLength(0)
+
+    // Carrying on here saves over the other device's revision.
+    fireEvent.click(cell(3))
+    key('n')
+    key('6')
+    await waitFor(() => expect(saves(server)).toHaveLength(1))
+    expect(saves(server)[0].body).toEqual({ baseRevision: 3, cells: [{ cell: 2, digits: [1, 4] }, { cell: 3, digits: [2, 6] }] })
+  })
+
+  it("after a reload, brings this browser's unsaved notes and the server's newer ones together", async () => {
+    // Last agreed with the server: 1 at r1c3. Since then, offline here: 7 at r1c6. And another device
+    // added 4 at r1c3 and 6 at r1c4.
+    window.localStorage.setItem(SYNCED_KEY, JSON.stringify({ 'daily-run': masks({ 2: [1] }) }))
+    window.localStorage.setItem(NOTES_KEY, JSON.stringify({ 'daily-run': masks({ 2: [1], 5: [7] }) }))
+    const { server } = setup({ daily: { paused: true }, notes: { 'daily-run': { revision: 2, cells: [{ cell: 2, digits: [1, 4] }, { cell: 3, digits: [6] }] } } })
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue' }))
+    await waitFor(() => expect(cell(2)).toHaveAccessibleName('Row 1, column 3: empty, notes 1, 4'))
+    expect(cell(3)).toHaveAccessibleName('Row 1, column 4: empty, notes 6')
+    expect(cell(5)).toHaveAccessibleName('Row 1, column 6: empty, notes 7')
+    await waitFor(() => expect(saves(server)).toHaveLength(1))
+    expect(saves(server)[0].body).toEqual({ baseRevision: 2, cells: [{ cell: 2, digits: [1, 4] }, { cell: 3, digits: [6] }, { cell: 5, digits: [7] }] })
+    expect(server.notes('daily-run').revision).toBe(3)
+  })
+
+  it('never overwrites newer notes from another device: a stale save merges them in and saves again', async () => {
+    const { server } = setup()
+    await startDaily()
+    await waitFor(() => expect(reads(server)).toHaveLength(1))
+    // Meanwhile, on the phone: 9 at r1c3 and 6 at r1c4.
+    server.saveElsewhere('daily-run', [{ cell: 2, digits: [9] }, { cell: 3, digits: [6] }])
+
+    fireEvent.click(cell(2))
+    key('n')
+    key('1')
+    fireEvent.click(cell(5))
+    key('7')
+    await waitFor(() => expect(saves(server)).toHaveLength(2))
+    expect(saves(server)[0].body).toMatchObject({ baseRevision: 0 })
+    expect(saves(server)[1].body).toMatchObject({ baseRevision: 1 })
+    // Both changed r1c3: the phone's, the newer, stays. The rest of both comes together.
+    expect(server.notes('daily-run')).toEqual({ revision: 2, cells: [{ cell: 2, digits: [9] }, { cell: 3, digits: [6] }, { cell: 5, digits: [7] }] })
+    expect(cell(2)).toHaveAccessibleName('Row 1, column 3: empty, notes 9')
+    expect(cell(3)).toHaveAccessibleName('Row 1, column 4: empty, notes 6')
+    expect(cell(5)).toHaveAccessibleName('Row 1, column 6: empty, notes 7')
+    expect(await screen.findByText('Notes updated from another device.')).toBeInTheDocument()
+    expect(server.moves()).toEqual([])
+  })
+
+  it('keeps the notes when the network is down, and saves them once it is back', async () => {
+    const { server } = setup()
+    await startDaily()
+    await waitFor(() => expect(reads(server)).toHaveLength(1))
+    server.notesOffline = true
+    fireEvent.click(cell(2))
+    key('n')
+    key('3')
+    key('8')
+    await waitFor(() => expect(saves(server)).toHaveLength(1))
+    // Nothing lost: on the board, and in this browser.
+    await wait(50)
+    expect(cell(2)).toHaveAccessibleName('Row 1, column 3: empty, notes 3, 8')
+    expect(JSON.parse(window.localStorage.getItem(NOTES_KEY) ?? '{}')['daily-run']).toEqual(masks({ 2: [3, 8] }))
+    expect(screen.queryByText("Couldn't reach the arcade. Try again.")).not.toBeInTheDocument()
+    expect(server.notes('daily-run').revision).toBe(0)
+
+    server.notesOffline = false
+    await waitFor(() => expect(server.notes('daily-run')).toEqual({ revision: 1, cells: [{ cell: 2, digits: [3, 8] }] }))
+    expect(cell(2)).toHaveAccessibleName('Row 1, column 3: empty, notes 3, 8')
+  })
+
+  it('never puts notes read for one run on another', async () => {
+    const { server } = setup({ practice: { ranked: false }, notes: { 'practice-0': { revision: 1, cells: [{ cell: 2, digits: [8] }] } }, holdNotes: true })
+    await screen.findByRole('heading', { name: 'Daily Sudoku #282' })
+    fireEvent.click(screen.getByRole('tab', { name: /Practice/ }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue' }))
+    await waitFor(() => expect(cell(0)).toHaveAccessibleName('Row 1, column 1: 5, clue'))
+    // A new game before the old one's notes have come back.
+    fireEvent.click(await screen.findByRole('button', { name: 'New game' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'New puzzle' }))
+    fireEvent.click(await screen.findByRole('checkbox'))
+    fireEvent.click(screen.getByRole('button', { name: 'New game' }))
+    await waitFor(() => expect(server.practiceRun?.id).toBe('practice-1'))
+    await waitFor(() => expect(cell(0)).toHaveAccessibleName('Row 1, column 1: 5, clue'))
+
+    server.releaseNotes()
+    await waitFor(() => expect(reads(server).map((call) => call.path)).toContain('/api/sudoku/runs/practice-1/notes'))
+    await wait(1200)
+    expect(cell(2)).toHaveAccessibleName('Row 1, column 3: empty')
+    expect(saves(server)).toHaveLength(0)
+  })
+
+  /** The page is hidden: the last moment a closing page is sure to have. */
+  const hide = () =>
+    act(() => {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' })
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+  const shown = () => Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' })
+  afterEach(shown)
+  /** The page opened again: today's game, picked up where it was. */
+  async function reopened(reopen: () => unknown) {
+    shown()
+    reopen()
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue' }))
+    await waitFor(() => expect(cell(0)).toHaveAccessibleName('Row 1, column 1: 5, clue'))
+  }
+  /** Marks 1 at r1c3 and waits for its save to reach the server; its answer is held. */
+  async function saveOnItsWay(server: ReturnType<typeof setup>['server']) {
+    await startDaily()
+    await waitFor(() => expect(reads(server)).toHaveLength(1))
+    server.holdSaves()
+    fireEvent.click(cell(2))
+    key('n')
+    key('1')
+    await waitFor(() => expect(saves(server)).toHaveLength(1))
+    // While it is on its way: 1 taken off r1c3 again, 7 at r1c6.
+    key('1')
+    fireEvent.click(cell(5))
+    key('7')
+    expect(cell(2)).toHaveAccessibleName('Row 1, column 3: empty')
+  }
+
+  it('sends an edit made while a save is on its way as the page is left, after that save', async () => {
+    const { server, unmount, reopen } = setup()
+    await saveOnItsWay(server)
+    expect(server.notes('daily-run')).toEqual({ revision: 1, cells: [{ cell: 2, digits: [1] }] })
+
+    hide()
+    unmount()
+    // Over the revision the first save made, and only if that save is what the server holds there.
+    await waitFor(() => expect(saves(server)).toHaveLength(2))
+    expect(saves(server)[1].body).toEqual({ baseRevision: 1, cells: [{ cell: 5, digits: [7] }], baseCells: [{ cell: 2, digits: [1] }] })
+    expect(server.notes('daily-run')).toEqual({ revision: 2, cells: [{ cell: 5, digits: [7] }] })
+    // The page is gone: the answers never reach it.
+    server.dropSaves()
+
+    // The next visit finds exactly that, with nothing left to save.
+    await reopened(reopen)
+    await waitFor(() => expect(cell(5)).toHaveAccessibleName('Row 1, column 6: empty, notes 7'))
+    expect(cell(2)).toHaveAccessibleName('Row 1, column 3: empty')
+    await wait(1200)
+    expect(saves(server)).toHaveLength(2)
+    expect(window.localStorage.getItem(SENT_KEY)).toBeNull()
+  })
+
+  it('restores edits that never reached the server on the next visit, and saves them, without bringing back a mark taken off', async () => {
+    const { server, unmount, reopen } = setup()
+    await saveOnItsWay(server)
+    // The page closes with the network gone: the edit made during the first save never leaves.
+    server.notesOffline = true
+    hide()
+    unmount()
+    await waitFor(() => expect(saves(server)).toHaveLength(2))
+    server.notesOffline = false
+    server.dropSaves()
+    expect(server.notes('daily-run')).toEqual({ revision: 1, cells: [{ cell: 2, digits: [1] }] })
+    // Kept in this browser, and so is what was sent.
+    expect(JSON.parse(window.localStorage.getItem(NOTES_KEY) ?? '{}')['daily-run']).toEqual(masks({ 5: [7] }))
+    expect(JSON.parse(window.localStorage.getItem(SENT_KEY) ?? '{}')['daily-run']).toEqual([masks({ 2: [1] }), masks({ 5: [7] })])
+
+    await reopened(reopen)
+    await waitFor(() => expect(cell(5)).toHaveAccessibleName('Row 1, column 6: empty, notes 7'))
+    // The server's 1 at r1c3 is this browser's own earlier save, taken off since: it stays off.
+    expect(cell(2)).toHaveAccessibleName('Row 1, column 3: empty')
+    await waitFor(() => expect(server.notes('daily-run')).toEqual({ revision: 2, cells: [{ cell: 5, digits: [7] }] }))
+    expect(saves(server).at(-1)?.body).toEqual({ baseRevision: 1, cells: [{ cell: 5, digits: [7] }] })
+    await wait(1000)
+    expect(window.localStorage.getItem(SENT_KEY)).toBeNull()
+  })
+
+  it('never lets a save sent as the page is left overwrite another device', async () => {
+    const { server, unmount, reopen } = setup()
+    await startDaily()
+    await waitFor(() => expect(reads(server)).toHaveLength(1))
+    // The phone saves first: this page's save, on its way, is refused (its answer held).
+    server.saveElsewhere('daily-run', [{ cell: 3, digits: [6] }])
+    server.holdSaves()
+    fireEvent.click(cell(2))
+    key('n')
+    key('1')
+    await waitFor(() => expect(saves(server)).toHaveLength(1))
+    fireEvent.click(cell(5))
+    key('7')
+
+    hide()
+    unmount()
+    // Sent over revision 1, but revision 1 is the phone's marks, not this page's save: refused.
+    await waitFor(() => expect(saves(server)).toHaveLength(2))
+    expect(saves(server)[1].body).toMatchObject({ baseRevision: 1, baseCells: [{ cell: 2, digits: [1] }] })
+    expect(server.notes('daily-run')).toEqual({ revision: 1, cells: [{ cell: 3, digits: [6] }] })
+    server.dropSaves()
+
+    // The next visit merges both, and saves them over the phone's.
+    await reopened(reopen)
+    await waitFor(() => expect(server.notes('daily-run')).toEqual({ revision: 2, cells: [{ cell: 2, digits: [1] }, { cell: 3, digits: [6] }, { cell: 5, digits: [7] }] }))
+    expect(cell(3)).toHaveAccessibleName('Row 1, column 4: empty, notes 6')
+  })
+
+  it('tries a failed save again as soon as the browser is back online, and sends nothing when nothing waits', async () => {
+    const { server } = setup()
+    await startDaily()
+    await waitFor(() => expect(reads(server)).toHaveLength(1))
+    server.notesOffline = true
+    fireEvent.click(cell(2))
+    key('n')
+    key('3')
+    await waitFor(() => expect(saves(server)).toHaveLength(1))
+    server.notesOffline = false
+    // Well inside the first wait (2 s) before trying again.
+    act(() => {
+      window.dispatchEvent(new Event('online'))
+    })
+    await waitFor(() => expect(server.notes('daily-run')).toEqual({ revision: 1, cells: [{ cell: 2, digits: [3] }] }), { timeout: 1000 })
+    expect(saves(server)).toHaveLength(2)
+
+    const before = server.noteCalls().length
+    act(() => {
+      window.dispatchEvent(new Event('online'))
+    })
+    await wait(2500)
+    expect(server.noteCalls()).toHaveLength(before)
+  })
+
+  it("keeps a guest's notes in the browser only", async () => {
+    const { server } = setup({}, {}, null)
+    await startDaily()
+    fireEvent.click(cell(2))
+    key('n')
+    key('5')
+    expect(cell(2)).toHaveAccessibleName('Row 1, column 3: empty, notes 5')
+    await wait(1200)
+    // Leaving the page, or coming back online, sends nothing either.
+    hide()
+    act(() => {
+      window.dispatchEvent(new Event('online'))
+    })
+    await wait(100)
+    expect(server.noteCalls()).toHaveLength(0)
+    expect(JSON.parse(window.localStorage.getItem(NOTES_KEY) ?? '{}')['daily-run']).toEqual(masks({ 2: [5] }))
+    expect(window.localStorage.getItem(SENT_KEY)).toBeNull()
   })
 })

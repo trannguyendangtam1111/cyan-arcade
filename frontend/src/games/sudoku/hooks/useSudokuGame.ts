@@ -23,6 +23,7 @@ import {
   type PlayBoard,
 } from '../engine/play'
 import type { Difficulty, HintType, HintView, RunView, StatsView, TodayView } from '../types/sudokuTypes'
+import { useNotesSync } from './useNotesSync'
 import { loadNotes, saveNotes, type SudokuSettings } from './useSettings'
 
 /** Today's ranked Daily, practice games, or the archive of past Daily puzzles (unranked replays). */
@@ -168,10 +169,23 @@ export function useSudokuGame(
     return () => controller.abort()
   }, [load])
 
-  // Notes are kept in this browser, per run, so a reload does not lose them.
+  // Notes are kept in this browser, per run, so a reload does not lose them; a signed-in player's
+  // are kept on the server too, so another device finds them.
   useEffect(() => {
     if (local) saveNotes(local.runId, local.board.notes)
   }, [local])
+
+  /** Puts marks read from the server on the board of their run, if it is still on the page. Not an edit: nothing to undo. */
+  const replaceNotes = useCallback((runId: string, notes: number[]) => {
+    setLocals((current) => {
+      const key = (Object.keys(current) as PlayMode[]).find((candidate) => current[candidate]?.runId === runId)
+      const mine = key && current[key]
+      if (!key || !mine) return current
+      const board = { ...mine.board, notes: mine.board.values.map((value, cell) => (value === 0 ? (notes[cell] ?? 0) : 0)) }
+      return { ...current, [key]: { ...mine, board } }
+    })
+  }, [])
+  useNotesSync(runs, locals, replaceNotes, say)
 
   /** Hands a finished ranked run's result to the platform, which submits the score. Once per run. */
   const report = useCallback(
@@ -331,7 +345,12 @@ export function useSudokuGame(
     sync(run.id, valueMoves(local.board, result.board))
   }, [run, local, active, paused, mode, sync])
 
-  /** Fills every empty cell's candidates as one local edit, without sending a move or changing score. */
+  /**
+   * Pencils in every empty cell's candidates from the board as it stands, replacing its notes: one
+   * undo step. Notes are no part of the game: no digit goes to the server, and nothing about the score
+   * changes (a signed-in player's notes are saved like any others). Like every edit, only while the
+   * run is in play and not paused.
+   */
   const fillCandidates = useCallback(() => {
     edit((board) => fillCandidatesEdit(board))
   }, [edit])

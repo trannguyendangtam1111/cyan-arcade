@@ -51,6 +51,16 @@ export interface SudokuServerOptions {
    */
   archiveGivens?: string
   archive?: { date: string; values?: string } | null
+  /** Pencil marks already saved on the server, by run id (as from another device). */
+  notes?: Record<string, FakeNotes>
+  /** Notes reads wait for `releaseNotes()` before they answer, as on a slow network. */
+  holdNotes?: boolean
+}
+
+/** A run's saved pencil marks, as the server keeps them for a signed-in player. */
+export interface FakeNotes {
+  revision: number
+  cells: { cell: number; digits: number[] }[]
 }
 
 /** The fake's puzzle number of a date, as the server counts: 2026-01-01 is #1. */
@@ -95,9 +105,19 @@ const modeStats = (played: number, completed: number) => ({
   bestSeconds: { EASY: completed ? 215 : null, MEDIUM: null, HARD: completed ? 380 : null, EXPERT: null },
 })
 
-export function sudokuServer({ givens = PUZZLE, daily = null, practice = null, stats = {}, history = {}, archiveGivens = PUZZLE, archive = null }: SudokuServerOptions = {}) {
+export function sudokuServer({ givens = PUZZLE, daily = null, practice = null, stats = {}, history = {}, archiveGivens = PUZZLE, archive = null, notes = {}, holdNotes = false }: SudokuServerOptions = {}) {
   const runs = new Map<string, FakeRun>()
   const calls: { method: string; path: string; body: Record<string, unknown> | undefined }[] = []
+  const savedNotes = new Map<string, FakeNotes>(Object.entries(notes))
+  /** Whoever is asking: a signed-in player's runs keep their notes on the server. */
+  let signedIn = false
+  /** While set, notes requests fail as if the network were down. */
+  let notesOffline = false
+  let releaseNotes = () => {}
+  const notesHeld = holdNotes ? new Promise<void>((resolve) => (releaseNotes = resolve)) : null
+  /** While set, notes saves are done at once but their answers wait for `releaseSaves()`. */
+  let savesHeld: Promise<void> | null = null
+  let releaseSaves = () => {}
   let practiceCount = 0
   let archiveCount = 0
 
@@ -184,6 +204,7 @@ export function sudokuServer({ givens = PUZZLE, daily = null, practice = null, s
             }
           : null,
       scored: run.scored,
+      notesSync: signedIn,
     }
   }
 
@@ -228,6 +249,7 @@ export function sudokuServer({ givens = PUZZLE, daily = null, practice = null, s
   const handler: MockHandler = ({ path, method, body, user }) => {
     if (!path.startsWith('/api/sudoku/') && !path.startsWith('/api/ai/sudoku/')) return undefined
     calls.push({ method, path, body })
+    signedIn = user !== null
 
     if (path.startsWith('/api/ai/sudoku/')) {
       if (!user) return mockProblem(401, 'UNAUTHORIZED', 'Authentication is required')
@@ -269,6 +291,29 @@ export function sudokuServer({ givens = PUZZLE, daily = null, practice = null, s
       practiceRun.sessionId = (body?.sessionId as string) ?? null
       runs.set(practiceRun.id, practiceRun)
       return mockJson(view(practiceRun), 201)
+    }
+    const notesOf = path.match(/^\/api\/sudoku\/runs\/([^/]+)\/notes$/)
+    if (notesOf) {
+      if (notesOffline) throw new TypeError('Failed to fetch')
+      if (!user) return mockProblem(401, 'UNAUTHORIZED', 'Authentication is required')
+      const id = decodeURIComponent(notesOf[1])
+      const run = runs.get(id)
+      if (!run) return mockProblem(404, 'NOT_FOUND', 'Sudoku run was not found')
+      const saved = savedNotes.get(id) ?? { revision: 0, cells: [] }
+      if (method === 'GET') return notesHeld ? notesHeld.then(() => mockJson(saved)) : mockJson(saved)
+      if (method !== 'PUT') return mockProblem(405, 'METHOD_NOT_ALLOWED', 'Not allowed')
+      if (status(run) !== 'PLAYING') return mockProblem(409, 'RUN_OVER', 'This game is over')
+      const cells = body?.cells as FakeNotes['cells']
+      const valid = Array.isArray(cells) && cells.every((entry) => entry.cell >= 0 && entry.cell <= 80 && entry.digits.length > 0 && entry.digits.every((digit) => digit >= 1 && digit <= 9))
+      if (!valid || typeof body?.baseRevision !== 'number') return mockProblem(400, 'VALIDATION_FAILED', 'Request validation failed')
+      const canonical = (list: FakeNotes['cells']) => [...list].sort((a, b) => a.cell - b.cell).map((entry) => ({ cell: entry.cell, digits: [...entry.digits].sort() }))
+      const baseCells = body.baseCells as FakeNotes['cells'] | undefined
+      const otherBase = baseCells !== undefined && JSON.stringify(canonical(baseCells)) !== JSON.stringify(canonical(saved.cells))
+      const answer = <T>(response: T) => (savesHeld ? savesHeld.then(() => response) : response)
+      if (body.baseRevision !== saved.revision || otherBase) return answer(mockProblem(409, 'NOTES_STALE', 'These notes were changed on another device: load them first'))
+      const next = { revision: saved.revision + 1, cells: canonical(cells) }
+      savedNotes.set(id, next)
+      return answer(mockJson(next))
     }
     const action = path.match(/^\/api\/sudoku\/runs\/([^/]+)\/(session|moves|hints|pause|resume)$/)
     if (method === 'POST' && action) {
@@ -339,6 +384,32 @@ export function sudokuServer({ givens = PUZZLE, daily = null, practice = null, s
     },
     get archiveRun() {
       return archiveRun
+    },
+    /** A run's notes as the server has them. */
+    notes: (id: string): FakeNotes => savedNotes.get(id) ?? { revision: 0, cells: [] },
+    /** Another device saves these notes for a run. */
+    saveElsewhere(id: string, cells: FakeNotes['cells']) {
+      savedNotes.set(id, { revision: (savedNotes.get(id)?.revision ?? 0) + 1, cells })
+    },
+    /** Notes requests the browser sent, in order. */
+    noteCalls: () => calls.filter((call) => call.path.endsWith('/notes')),
+    /** Lets held notes reads answer, with the notes as they were asked for. */
+    releaseNotes: () => releaseNotes(),
+    /** From now on, notes saves are done at once but answered only on `releaseSaves()`: a save still on its way. */
+    holdSaves() {
+      savesHeld = new Promise<void>((resolve) => (releaseSaves = resolve))
+    },
+    /** Answers the held saves, and holds no more. */
+    releaseSaves() {
+      savesHeld = null
+      releaseSaves()
+    },
+    /** The page that sent the held saves is gone: their answers never reach it. Later saves are answered. */
+    dropSaves() {
+      savesHeld = null
+    },
+    set notesOffline(offline: boolean) {
+      notesOffline = offline
     },
     /** The moves the browser sent, in order, flattened. */
     moves: () => calls.filter((call) => call.path.endsWith('/moves')).flatMap((call) => (call.body?.moves as { cell: number; digit: number }[]) ?? []),

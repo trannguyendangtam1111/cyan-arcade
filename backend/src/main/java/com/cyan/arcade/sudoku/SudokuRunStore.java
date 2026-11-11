@@ -157,6 +157,40 @@ class SudokuRunStore {
 			.optional();
 	}
 
+	/**
+	 * A run's owner and its saved pencil marks, if the run exists.
+	 * @return {@code notes} and {@code revision} are {@code null} while nothing is saved
+	 */
+	Optional<RunNotesRow> findNotes(UUID runId) {
+		return this.jdbc.sql("""
+				SELECT r.user_id, n.notes, n.revision
+				FROM sudoku_runs r LEFT JOIN sudoku_run_notes n ON n.run_id = r.id
+				WHERE r.id = :id
+				""")
+			.param("id", runId)
+			.query((row, number) -> new RunNotesRow(row.getObject("user_id", Long.class), row.getString("notes"),
+					row.getObject("revision", Integer.class)))
+			.optional();
+	}
+
+	/** Saves a run's pencil marks at a revision (the caller holds the run's lock and checked the last one). */
+	void saveNotes(UUID runId, String notes, int revision, Instant now) {
+		this.jdbc.sql("""
+				INSERT INTO sudoku_run_notes (run_id, notes, revision, updated_at)
+				VALUES (:id, :notes, :revision, :now)
+				ON CONFLICT (run_id) DO UPDATE SET notes = EXCLUDED.notes, revision = EXCLUDED.revision,
+				                                   updated_at = EXCLUDED.updated_at
+				""")
+			.param("id", runId)
+			.param("notes", notes)
+			.param("revision", revision)
+			.param("now", timestamp(now))
+			.update();
+	}
+
+	record RunNotesRow(Long userId, String notes, Integer revision) {
+	}
+
 	Optional<SudokuRun> findBySession(UUID sessionId) {
 		return this.jdbc.sql("SELECT " + COLUMNS + " FROM sudoku_runs WHERE session_id = :sessionId")
 			.param("sessionId", sessionId)
