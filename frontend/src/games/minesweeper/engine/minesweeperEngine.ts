@@ -11,13 +11,31 @@ import type { Cell, MinesweeperAction, MinesweeperConfig, MinesweeperState } fro
 
 export type { Cell, MinesweeperAction, MinesweeperConfig, MinesweeperState } from '../types/minesweeperTypes'
 
-/** The one board the arcade plays: 9 × 9 with 10 mines. */
+/** 9 × 9 with 10 mines: Classic's board, and the one every game is played on today. */
 export const BEGINNER: MinesweeperConfig = { rows: 9, columns: 9, mines: 10 }
+/** 16 × 16 with 40 mines. */
+export const INTERMEDIATE: MinesweeperConfig = { rows: 16, columns: 16, mines: 40 }
+/** 16 rows of 30 columns with 99 mines. */
+export const EXPERT: MinesweeperConfig = { rows: 16, columns: 30, mines: 99 }
+
+/**
+ * The standard boards, by name. Classic and the timed Beginner are played on Beginner's; the timed
+ * Intermediate and Expert on theirs (`modes.ts`). Mirrored by `gamerules.MinesweeperBoard`.
+ */
+export const BOARDS = { beginner: BEGINNER, intermediate: INTERMEDIATE, expert: EXPERT } as const
+
+export type BoardName = keyof typeof BOARDS
 
 export const POINTS_PER_CELL = 10
 export const WIN_BONUS = 500
 /** A cleared board earns a point for every second under this. */
 export const TIME_BONUS_SECONDS = 600
+
+/**
+ * The longest a timed game can take and still count, in milliseconds: the 999 seconds of the
+ * classic counter. A timed run still going then has timed out.
+ */
+export const TIMED_LIMIT_MS = 999_999
 
 const emptyCell = (): Cell => ({ mine: false, adjacent: 0, revealed: false, flagged: false })
 
@@ -27,6 +45,8 @@ export function createMinesweeper(seed: number, config: MinesweeperConfig = BEGI
     cells: Array.from({ length: config.rows * config.columns }, emptyCell),
     status: 'ready',
     seed,
+    startSeed: seed,
+    firstCell: null,
     revealed: 0,
     flags: 0,
     moves: 0,
@@ -84,7 +104,45 @@ export function layMines(state: MinesweeperState, firstIndex: number): Minesweep
     mine: mines.has(index),
     adjacent: neighbours(state, index).filter((other) => mines.has(other)).length,
   }))
-  return { ...state, cells, seed, status: 'playing' }
+  return { ...state, cells, seed, firstCell: firstIndex, status: 'playing' }
+}
+
+/**
+ * Where the mines of a board go, from the seed it was created with and its first reveal: the
+ * indexes, lowest first. The server's `gamerules.MinesweeperLayout` lays the same ones (pinned by
+ * the shared vectors in `minesweeperVectors.json`).
+ */
+export function replayMines(config: MinesweeperConfig, seed: number, firstCell: number): number[] {
+  return layMines(createMinesweeper(seed, config), firstCell).cells.flatMap((cell, index) => (cell.mine ? [index] : []))
+}
+
+/**
+ * The board's 3BV: the fewest reveals that clear it without chording. Each opening (a connected
+ * area of cells with no mine around them, with the numbers on its edge) takes one reveal, and every
+ * numbered cell on no opening's edge takes one more. A cleared board took at least this many moves.
+ * Only means something once the mines are laid.
+ */
+export function threeBV(state: MinesweeperState): number {
+  const counted = new Uint8Array(state.cells.length)
+  let clicks = 0
+  state.cells.forEach((cell, start) => {
+    if (cell.mine || cell.adjacent !== 0 || counted[start]) return
+    clicks++
+    counted[start] = 1
+    const stack = [start]
+    while (stack.length > 0) {
+      const next = stack.pop() as number
+      for (const other of neighbours(state, next)) {
+        if (counted[other] || state.cells[other].mine) continue
+        counted[other] = 1
+        if (state.cells[other].adjacent === 0) stack.push(other)
+      }
+    }
+  })
+  state.cells.forEach((cell, index) => {
+    if (!cell.mine && !counted[index]) clicks++
+  })
+  return clicks
 }
 
 /**
@@ -170,5 +228,28 @@ export function minesweeperDetails(state: MinesweeperState, seconds: number) {
     won: state.status === 'won' ? 1 : 0,
     moves: state.moves,
     seconds,
+  }
+}
+
+/**
+ * What a finished run of a timed mode will report: Classic's numbers, the game time in whole
+ * milliseconds instead of seconds, and the seed and first cell, from which the server lays the same
+ * mines again and works out the board's 3BV. The seed is sent as a signed 32-bit number: the
+ * generator only ever uses those 32 bits, so it lays the same mines. A timed game's seed is below
+ * 2^31 (`createTimedSeed`), so it is sent unchanged: the platform takes no negative detail.
+ * @param gameMs whole milliseconds from the first reveal to the last, by the player's clock
+ */
+export function minesweeperTimedDetails(state: MinesweeperState, gameMs: number) {
+  return {
+    rows: state.rows,
+    columns: state.columns,
+    mines: state.mines,
+    seed: state.startSeed | 0,
+    firstCell: state.firstCell ?? -1,
+    revealedCells: state.revealed,
+    flagsUsed: state.flags,
+    won: state.status === 'won' ? 1 : 0,
+    moves: state.moves,
+    gameMs: Math.floor(gameMs),
   }
 }

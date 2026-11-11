@@ -9,9 +9,10 @@ import {
   Target,
   Trophy,
 } from 'lucide-react'
+import { useQueryClient } from '@tanstack/react-query'
 import { Suspense, useCallback, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router'
-import { useSession } from '@/api/auth'
+import { useSession, userKeys } from '@/api/auth'
 import { ApiError } from '@/api/client'
 import { homeBoard, useGameModes } from '@/api/games'
 import { useDailyChallenges } from '@/api/dailyChallenges'
@@ -154,6 +155,11 @@ function GameStage({ game, gameModule }: { game: GameDefinition; gameModule: Gam
   const timedResult = declaredModes?.find((mode) => mode.id === runMode)?.unit === 'MILLISECONDS'
   // An unranked mode (a Tetris Challenge stage) has no leaderboard and earns nothing: its result says only that it was kept.
   const rankedResult = declaredModes?.find((mode) => mode.id === runMode)?.ranked !== false
+  // A reward paid outside a score session (a won Daily Board): the player's coins, XP and history
+  // are read again, as after a submitted run.
+  const queryClient = useQueryClient()
+  const onRewarded = useCallback(() => void queryClient.invalidateQueries({ queryKey: userKeys.all }), [queryClient])
+
   const handleGameStart = useCallback(
     (mode?: unknown) => {
       setRunMode(typeof mode === 'string' ? mode : undefined)
@@ -183,6 +189,7 @@ function GameStage({ game, gameModule }: { game: GameDefinition; gameModule: Gam
           modes={game.scored ? modes : undefined}
           onGameOver={game.scored ? handleGameOver : ignoreResult}
           currentSession={currentSession}
+          onRewarded={onRewarded}
           ai={ai as (() => never) | undefined}
           cosmetics={cosmetics}
         />

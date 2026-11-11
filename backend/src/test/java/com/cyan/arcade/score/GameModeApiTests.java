@@ -162,6 +162,7 @@ class GameModeApiTests {
 					case "tetris" -> 9;
 					case "snake" -> 10;
 					case "2048" -> 9;
+					case "minesweeper" -> 4;
 					case "sudoku" -> 6;
 					default -> 1;
 				}))

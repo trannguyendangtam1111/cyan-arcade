@@ -92,6 +92,12 @@ export interface GameProps<Ai = unknown> {
   /** Call once when that run ends. The platform submits the score. */
   onGameOver: (result: GameResult) => void
   /**
+   * Call when the server has just paid the player outside a score session (a won Minesweeper Daily
+   * Board), so the platform shows the player's new coins and XP. Optional: a game that only reports
+   * runs through `onGameOver` never needs it.
+   */
+  onRewarded?: () => void
+  /**
    * The platform session of the human run started last, as the server opens it; `undefined` before
    * a run has started. For a game whose server keeps the run itself (Word Guess) and ties it to the
    * session; other games have no use for it.
