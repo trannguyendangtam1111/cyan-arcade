@@ -19,6 +19,7 @@ import com.cyan.arcade.progression.ProgressionService;
 import com.cyan.arcade.progression.Rewards;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import tools.jackson.databind.json.JsonMapper;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -43,6 +44,8 @@ public class GameSessionService {
 
 	static final String SESSION_EXPIRED = "SESSION_EXPIRED";
 
+	static final String SESSION_NOT_FINISHED = "SESSION_NOT_FINISHED";
+
 	static final String GAME_NOT_SCORED = "GAME_NOT_SCORED";
 
 	private static final Logger log = LoggerFactory.getLogger(GameSessionService.class);
@@ -63,9 +66,12 @@ public class GameSessionService {
 
 	private final Clock clock;
 
+	private final JsonMapper json;
+
 	GameSessionService(GameSessionRepository sessions, ScoreRepository scores, GameService games,
 			ProgressionService progression, RunValidator validator, GameModes modes,
-			AbandonedSessionCleaner.SessionProperties sessionProperties, Clock clock) {
+			AbandonedSessionCleaner.SessionProperties sessionProperties, Clock clock, JsonMapper json) {
+		this.json = json;
 		this.clock = clock;
 		this.validator = validator;
 		this.modes = modes;
@@ -134,8 +140,35 @@ public class GameSessionService {
 		Rewards rewards = (session.getUserId() != null) ? reward(session, game, score, checked) : null;
 		int xpAwarded = (rewards != null) ? rewards.xpEarned() : 0;
 		boolean personalBest = rewards != null && rewards.personalBest();
-		this.scores.save(new Score(session, score, durationMs, xpAwarded, personalBest, now));
-		return new ScoreResponse(session.getId(), game.slug(), session.getMode(), score, durationMs, now, rewards);
+		ScoreResponse result = new ScoreResponse(session.getId(), game.slug(), session.getMode(), score,
+				durationMs, now, rewards);
+		this.scores.save(new Score(session, score, durationMs, xpAwarded, personalBest, now,
+				this.json.writeValueAsString(result)));
+		return result;
+	}
+
+	/**
+	 * Reads an account's committed result without running validation or reward calculation again.
+	 * A normal read sees either the pre-finish state or the whole committed transaction, never a
+	 * partially paid result. Unknown sessions and other owners both return 404. Guest identifiers
+	 * are not authentication and never authorize this endpoint.
+	 */
+	@Transactional(readOnly = true)
+	public ScoreResponse resultOf(UUID sessionId, Long userId) {
+		GameSession session = this.sessions.findById(sessionId)
+			.filter((found) -> userId != null && userId.equals(found.getUserId()))
+			.orElseThrow(() -> new NotFoundException("Game session", sessionId));
+		if (!session.isFinished()) {
+			throw new ConflictException(SESSION_NOT_FINISHED, "This game session has not been finished");
+		}
+		Score score = this.scores.findByGameSessionId(sessionId)
+			.orElseThrow(() -> new NotFoundException("Score result", sessionId));
+		if (score.getResultSnapshot() != null) {
+			return this.json.readValue(score.getResultSnapshot(), ScoreResponse.class);
+		}
+		// Legacy rewards cannot be reconstructed from today's balance, level or achievement catalog.
+		return new ScoreResponse(sessionId, this.games.requireGame(session.getGameId()).slug(), score.getMode(),
+				score.getValue(), score.getDurationMs(), score.getCreatedAt(), null);
 	}
 
 	/**

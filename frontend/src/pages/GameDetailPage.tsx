@@ -239,7 +239,7 @@ function ScoreStatus({ submission, onRetry, gameSlug, mode, boardDate, timed, ra
         <>
           <LoaderCircle aria-hidden className="size-4 animate-spin text-ink-soft" />
           <span className="text-ink-soft">
-            Saving your {noun}…
+            {submission.recovering ? 'Loading your saved result…' : `Saving your ${noun}…`}
           </span>
         </>
       )}
@@ -250,6 +250,20 @@ function ScoreStatus({ submission, onRetry, gameSlug, mode, boardDate, timed, ra
             {timed ? 'Time' : 'Score'} {value(submission.score)}{' '}
             {submission.alreadySaved ? 'was already saved.' : 'saved.'}
           </span>
+          {submission.recoveryError && ranked && (
+            <span className="text-ink-soft">
+              Result details couldn't be loaded.
+              {submission.recoveryError === 'retryable' && (
+                <button
+                  type="button"
+                  onClick={onRetry}
+                  className="ml-2 rounded font-bold text-brand-700 underline underline-offset-2 hover:text-brand-900"
+                >
+                  Retry result details
+                </button>
+              )}
+            </span>
+          )}
           {!ranked ? (
             <span className="text-ink-soft">Unranked: no leaderboard, XP or coins.</span>
           ) : (

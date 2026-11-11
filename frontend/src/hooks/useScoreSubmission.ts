@@ -2,15 +2,17 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useRef, useState } from 'react'
 import { ApiError } from '@/api/client'
 import {
-  CLASSIC_MODE,
-  modeOf,
   SCORE_REJECTED,
   SESSION_ALREADY_FINISHED,
   SESSION_EXPIRED,
+  CLASSIC_MODE,
   finishGameSession,
+  fetchGameSessionResult,
+  modeOf,
   startGameSession,
   type GameSessionResponse,
   type Rewards,
+  type ScoreResponse,
 } from '@/api/gameSessions'
 import { userKeys } from '@/api/auth'
 import { leaderboardKeys } from '@/api/leaderboards'
@@ -18,12 +20,19 @@ import type { GameResult } from '@/games/types'
 
 export type ScoreSubmission =
   | { status: 'idle' }
-  | { status: 'saving'; score: number }
-  /** `alreadySaved`: an earlier attempt had reached the server, so this one earned nothing more. */
-  | { status: 'saved'; score: number; rewards: Rewards | null; alreadySaved?: boolean }
+  | { status: 'saving'; score: number; recovering?: boolean }
+  /** Recovered rewards describe the original save; retrieving them grants nothing more. */
+  | {
+      status: 'saved'
+      score: number
+      rewards: Rewards | null
+      alreadySaved?: boolean
+      recoveryError?: 'retryable' | 'unavailable'
+    }
   /**
-   * `rejected`: the server did not accept the run; `expired`: it was open too long; `error`: it
-   * could not be saved for any other reason.
+   * `rejected`: the server did not accept the run; `expired`: it was open too long; `mode-mismatch`:
+   * the server opened the run under another mode than the one chosen, so its score is not sent;
+   * `error`: it could not be saved for any other reason.
    */
   | { status: 'failed'; score: number; canRetry: boolean; reason: FailureReason }
 
@@ -36,21 +45,31 @@ function reasonOf(error: unknown): FailureReason {
   return 'error'
 }
 
-/** Short retries keep timed runs within their server-enforced time allowance. */
+/**
+ * How long to wait before each automatic new attempt to finish a run of a mode other than Classic,
+ * when the server could not be reached or failed. Such a mode may bound its run's real time (Tetris
+ * Ultra: its game time plus the pause allowance, from the session's start until the finish arrives),
+ * so a score sent again much later may no longer fit; trying again at once, a few seconds in all,
+ * gets past a brief outage within that bound. Safe to repeat: a session is finished at most once, and
+ * an attempt that had reached the server is answered "already finished". Classic keeps its manual retry.
+ */
 export const FINISH_RETRY_DELAYS_MS = [1000, 3000]
 
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
 interface Run {
-  /** The chosen mode, fixed for the run. */
+  /** The mode chosen when the run started. Fixed for the whole run. */
   mode: string
   /** Resolves to the server session; rejects if it could not be created. */
   session: Promise<GameSessionResponse>
   /** Set once the run has ended. */
   result?: GameResult
-  /** The game was told its run is saved; repeated retries cannot confirm twice. */
+  /** Set once the server has recorded the run and the game has been told (`GameResult.onSaved`). */
   confirmed?: boolean
+  /** Acknowledged by the finish endpoint: subsequent attempts may only read the result. */
+  alreadySaved?: boolean
   submitting?: boolean
+  settled?: boolean
 }
 
 /** The whole-number details a game reported about its run, in the shape the API accepts. */
@@ -99,59 +118,97 @@ export function useScoreSubmission(gameSlug: string) {
 
   const submit = useCallback(
     async (run: Run, result: GameResult) => {
-      if (run.submitting || run.confirmed) return
+      if (run.submitting || run.settled) return
       run.submitting = true
-      const { score } = result
-      const isCurrent = () => current.current === run
-      // Tells the game its run is recorded: once per run, and only while it is the current one, so a
-      // late answer for an earlier run (or a second answer for this one) changes nothing.
-      const confirm = () => {
-        if (!isCurrent() || run.confirmed) return
-        run.confirmed = true
-        try {
-          result.onSaved?.()
-        } catch {
-          // The game's own bookkeeping: it cannot undo the save.
+      try {
+        const { score } = result
+        const isCurrent = () => current.current === run
+        // Tells the game its run is recorded: once per run, and only while it is the current one, so a
+        // late answer for an earlier run (or a second answer for this one) changes nothing.
+        const confirm = () => {
+          if (!isCurrent() || run.confirmed) return
+          run.confirmed = true
+          try {
+            result.onSaved?.()
+          } catch {
+            // The game's own bookkeeping: it cannot undo the save.
+          }
         }
-      }
-      setSubmission({ status: 'saving', score })
+        let refreshed = false
+        const refresh = () => {
+          if (refreshed) return
+          refreshed = true
+          void queryClient.invalidateQueries({ queryKey: leaderboardKeys.game(gameSlug) })
+          void queryClient.invalidateQueries({ queryKey: userKeys.all })
+        }
+        const saved = (recorded?: ScoreResponse, recoveryError?: 'retryable' | 'unavailable') => {
+          refresh()
+          run.settled = recoveryError !== 'retryable'
+          if (isCurrent()) {
+            setSubmission({
+              status: 'saved',
+              score: recorded?.score ?? score,
+              rewards: recorded?.rewards ?? null,
+              ...(run.alreadySaved && { alreadySaved: true }),
+              ...(recoveryError && { recoveryError }),
+            })
+          }
+          confirm()
+        }
+        setSubmission({ status: 'saving', score, ...(run.alreadySaved && { recovering: true }) })
 
-      let session: GameSessionResponse
-      try {
-        session = await run.session
-      } catch {
-        run.submitting = false
-        // The session never existed, so there is nothing to finish and nothing to retry.
-        if (isCurrent()) setSubmission({ status: 'failed', score, canRetry: false, reason: 'error' })
-        return
-      }
+        let session: GameSessionResponse
+        try {
+          session = await run.session
+        } catch {
+          // The session never existed, so there is nothing to finish and nothing to retry.
+          if (isCurrent()) setSubmission({ status: 'failed', score, canRetry: false, reason: 'error' })
+          return
+        }
 
-      if (modeOf(session) !== run.mode) {
-        run.submitting = false
-        if (isCurrent()) setSubmission({ status: 'failed', score, canRetry: false, reason: 'mode-mismatch' })
-        return
-      }
+        // A run is only ever recorded under the mode it was played in. If the server opened it under
+        // another one (not what this client asked for), the score would land on the wrong board: send
+        // nothing.
+        if (modeOf(session) !== run.mode) {
+          if (isCurrent()) setSubmission({ status: 'failed', score, canRetry: false, reason: 'mode-mismatch' })
+          return
+        }
 
-      try {
-        const recorded = await finishWithRetries(run.mode, session.id, score, numericDetails(result), isCurrent)
-        // The leaderboard has a new entry, and a signed-in player's XP, history and achievements
-        // have changed, whether or not the player is still looking at this run.
-        void queryClient.invalidateQueries({ queryKey: leaderboardKeys.game(gameSlug) })
-        void queryClient.invalidateQueries({ queryKey: userKeys.all })
-        if (isCurrent()) setSubmission({ status: 'saved', score, rewards: recorded.rewards ?? null })
-        confirm()
-      } catch (error) {
-        if (!isCurrent()) return
-        // "Already finished" means an earlier attempt did reach the server: the score is recorded.
-        const alreadySaved = error instanceof ApiError && error.code === SESSION_ALREADY_FINISHED
-        // Retrying only helps when the server was unreachable or failed, not when it said no.
-        const canRetry = !(error instanceof ApiError && error.isClientError)
-        setSubmission(
-          alreadySaved
-            ? { status: 'saved', score, rewards: null, alreadySaved: true }
-            : { status: 'failed', score, canRetry, reason: reasonOf(error) },
-        )
-        if (alreadySaved) confirm()
+        try {
+          let recorded: ScoreResponse | undefined
+          if (!run.alreadySaved) {
+            try {
+              recorded = await finishWithRetries(run.mode, session.id, score, numericDetails(result), isCurrent)
+            } catch (error) {
+              if (!(error instanceof ApiError && error.code === SESSION_ALREADY_FINISHED)) throw error
+              run.alreadySaved = true
+              // The write committed even if reading its result fails or this run is no longer shown.
+              refresh()
+              confirm()
+            }
+          }
+          if (run.alreadySaved) {
+            if (!isCurrent()) return
+            setSubmission({ status: 'saving', score, recovering: true })
+            try {
+              recorded = await fetchGameSessionResult(session.id)
+              if (recorded.sessionId !== session.id || recorded.gameSlug !== gameSlug || modeOf(recorded) !== run.mode) {
+                throw new Error('Recovered result does not match the run')
+              }
+            } catch (error) {
+              // A lost read never changes a confirmed save into a failed score submission. Guests
+              // cannot retrieve results; retryable failures retry this GET alone, never the finish.
+              saved(undefined, error instanceof ApiError && error.isClientError ? 'unavailable' : 'retryable')
+              return
+            }
+          }
+          saved(recorded)
+        } catch (error) {
+          if (!isCurrent()) return
+          // Retrying only helps when the server was unreachable or failed, not when it said no.
+          const canRetry = !(error instanceof ApiError && error.isClientError)
+          setSubmission({ status: 'failed', score, canRetry, reason: reasonOf(error) })
+        }
       } finally {
         run.submitting = false
       }

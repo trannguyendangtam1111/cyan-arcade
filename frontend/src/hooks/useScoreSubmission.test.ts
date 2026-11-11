@@ -3,17 +3,19 @@ import { act, renderHook as renderHookBare, waitFor } from '@testing-library/rea
 import { createElement, type ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@/api/client'
-import { finishGameSession, startGameSession, type GameSessionResponse, type ScoreResponse } from '@/api/gameSessions'
+import { fetchGameSessionResult, finishGameSession, startGameSession, type GameSessionResponse, type ScoreResponse } from '@/api/gameSessions'
 import { useScoreSubmission } from './useScoreSubmission'
 
 vi.mock('@/api/gameSessions', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api/gameSessions')>()),
   startGameSession: vi.fn(),
   finishGameSession: vi.fn(),
+  fetchGameSessionResult: vi.fn(),
 }))
 
 const start = vi.mocked(startGameSession)
 const finish = vi.mocked(finishGameSession)
+const recover = vi.mocked(fetchGameSessionResult)
 
 const session: GameSessionResponse = { id: 'session-1', gameSlug: 'snake', startedAt: '2026-09-30T10:00:00Z' }
 const recorded: ScoreResponse = {
@@ -27,6 +29,14 @@ const recorded: ScoreResponse = {
 const result = { score: 12, durationMs: 5000 }
 
 let queryClient: QueryClient
+
+beforeEach(() => {
+  recover.mockImplementation(async () => ({
+    ...recorded,
+    gameSlug: start.mock.calls.at(-1)?.[0] ?? 'snake',
+    mode: (await start.mock.results.at(-1)?.value as GameSessionResponse)?.mode,
+  }))
+})
 
 /** Renders a hook inside the query client the score flow reports to. */
 function renderHook<T>(hook: () => T) {
@@ -119,6 +129,7 @@ describe('useScoreSubmission', () => {
     await waitFor(() =>
       expect(hook.current.submission).toEqual({ status: 'saved', score: 12, rewards: null, alreadySaved: true }),
     )
+    expect(recover).toHaveBeenCalledWith('session-1')
   })
 
   it('does not count a retry that finds the score saved as a second reward', async () => {
@@ -213,6 +224,105 @@ describe('useScoreSubmission', () => {
     await act(async () => resolveFinish(recorded))
 
     expect(hook.current.submission).toEqual({ status: 'idle' })
+  })
+})
+
+describe('recovering a committed score result', () => {
+  const rewards = {
+    xpEarned: 85, coinsEarned: 120, personalBest: true,
+    achievements: [{ code: 'FIRST_GAME', name: 'First Coin', description: 'Finish a game', xp: 50, coins: 100 }],
+    bonuses: [], totalXp: 85, level: 1, leveledUp: false, coinBalance: 120,
+  }
+
+  beforeEach(() => {
+    queryClient = new QueryClient()
+    start.mockResolvedValue(session)
+    finish.mockRejectedValue(new ApiError(409, 'SESSION_ALREADY_FINISHED', 'done'))
+    recover.mockResolvedValue({ ...recorded, rewards })
+  })
+
+  it('restores original rewards and invalidates the same caches as normal success', async () => {
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
+    const { result: hook } = renderHook(() => useScoreSubmission('snake'))
+    act(() => hook.current.onGameStart())
+    act(() => hook.current.onGameOver(result))
+    await waitFor(() => expect(hook.current.submission).toEqual({
+      status: 'saved', score: 12, rewards, alreadySaved: true,
+    }))
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['leaderboards', 'snake'] })
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['users', 'me'] })
+    expect(invalidate).toHaveBeenCalledTimes(2)
+    act(() => hook.current.retry())
+    expect(finish).toHaveBeenCalledTimes(1)
+    expect(recover).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps a confirmed save on a network failure and retries only the result GET', async () => {
+    recover.mockRejectedValueOnce(new ApiError(0, 'NETWORK_ERROR', 'offline'))
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
+    const onSaved = vi.fn()
+    const { result: hook } = renderHook(() => useScoreSubmission('snake'))
+    act(() => hook.current.onGameStart())
+    act(() => hook.current.onGameOver({ ...result, onSaved }))
+    await waitFor(() => expect(hook.current.submission).toEqual({
+      status: 'saved', score: 12, rewards: null, alreadySaved: true, recoveryError: 'retryable',
+    }))
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['users', 'me'] })
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['leaderboards', 'snake'] })
+    expect(onSaved).toHaveBeenCalledTimes(1)
+    act(() => { hook.current.retry(); hook.current.retry() })
+    await waitFor(() => expect(hook.current.submission).toMatchObject({ rewards }))
+    expect(finish).toHaveBeenCalledTimes(1)
+    expect(recover).toHaveBeenCalledTimes(2)
+    expect(onSaved).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([401, 403, 404, 409])('keeps a saved result when retrieval returns %s without offering resubmission', async (status) => {
+    recover.mockRejectedValue(new ApiError(status, 'UNAVAILABLE', 'unavailable'))
+    const { result: hook } = renderHook(() => useScoreSubmission('snake'))
+    act(() => hook.current.onGameStart())
+    act(() => hook.current.onGameOver(result))
+    await waitFor(() => expect(hook.current.submission).toEqual({
+      status: 'saved', score: 12, rewards: null, alreadySaved: true, recoveryError: 'unavailable',
+    }))
+    act(() => hook.current.retry())
+    expect(finish).toHaveBeenCalledTimes(1)
+    expect(recover).toHaveBeenCalledTimes(1)
+  })
+
+  it('uses the committed score rather than the retried payload and accepts legacy null rewards', async () => {
+    recover.mockResolvedValue({ ...recorded, score: 10, rewards: null })
+    const { result: hook } = renderHook(() => useScoreSubmission('snake'))
+    act(() => hook.current.onGameStart())
+    act(() => hook.current.onGameOver(result))
+    await waitFor(() => expect(hook.current.submission).toEqual({
+      status: 'saved', score: 10, rewards: null, alreadySaved: true,
+    }))
+  })
+
+  it('ignores recovery for an old run and blocks duplicate submissions while it is pending', async () => {
+    let resolveRecovery!: (value: ScoreResponse) => void
+    recover.mockReturnValue(new Promise((resolve) => { resolveRecovery = resolve }))
+    const onSaved = vi.fn()
+    const { result: hook } = renderHook(() => useScoreSubmission('snake'))
+    act(() => hook.current.onGameStart())
+    act(() => hook.current.onGameOver({ ...result, onSaved }))
+    await waitFor(() => expect(recover).toHaveBeenCalledTimes(1))
+    expect(hook.current.submission).toEqual({ status: 'saving', score: 12, recovering: true })
+    act(() => { hook.current.retry(); hook.current.onGameOver(result) })
+    expect(finish).toHaveBeenCalledTimes(1)
+    act(() => hook.current.onGameStart())
+    await act(async () => resolveRecovery({ ...recorded, rewards }))
+    expect(hook.current.submission).toEqual({ status: 'idle' })
+    expect(onSaved).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not display a recovered result for another session or mode', async () => {
+    recover.mockResolvedValue({ ...recorded, sessionId: 'another-session', rewards })
+    const { result: hook } = renderHook(() => useScoreSubmission('snake'))
+    act(() => hook.current.onGameStart())
+    act(() => hook.current.onGameOver(result))
+    await waitFor(() => expect(hook.current.submission).toMatchObject({ status: 'saved', rewards: null, recoveryError: 'retryable' }))
   })
 })
 

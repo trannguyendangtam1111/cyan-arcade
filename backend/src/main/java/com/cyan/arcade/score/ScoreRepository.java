@@ -3,6 +3,7 @@ package com.cyan.arcade.score;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -12,6 +13,8 @@ import org.springframework.data.repository.Repository;
 interface ScoreRepository extends Repository<Score, Long> {
 
 	Score save(Score score);
+
+	Optional<Score> findByGameSessionId(UUID gameSessionId);
 
 	/** A player's best in one mode of a game, where higher is better. */
 	@Query("select max(s.value) from Score s where s.gameId = :gameId and s.userId = :userId and s.mode = :mode")

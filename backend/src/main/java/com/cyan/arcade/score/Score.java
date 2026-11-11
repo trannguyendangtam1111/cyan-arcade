@@ -52,10 +52,19 @@ class Score {
 	@Column(name = "created_at", nullable = false, updatable = false)
 	private Instant createdAt;
 
+	/** Original public response, committed with the score; null for scores written before recovery. */
+	@Column(name = "result_snapshot", updatable = false, columnDefinition = "text")
+	private String resultSnapshot;
+
 	protected Score() {
 	}
 
 	Score(GameSession session, int value, long durationMs, int xpAwarded, boolean personalBest, Instant createdAt) {
+		this(session, value, durationMs, xpAwarded, personalBest, createdAt, null);
+	}
+
+	Score(GameSession session, int value, long durationMs, int xpAwarded, boolean personalBest, Instant createdAt,
+			String resultSnapshot) {
 		this.gameSessionId = session.getId();
 		this.gameId = session.getGameId();
 		this.userId = session.getUserId();
@@ -66,6 +75,11 @@ class Score {
 		this.xpAwarded = xpAwarded;
 		this.personalBest = personalBest;
 		this.createdAt = createdAt;
+		this.resultSnapshot = resultSnapshot;
+	}
+
+	String getResultSnapshot() {
+		return this.resultSnapshot;
 	}
 
 	String getMode() {

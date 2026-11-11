@@ -31,7 +31,7 @@ export interface ScoreResponse {
   /** Time between starting and finishing the session, measured by the server. */
   durationMs: number
   recordedAt: string
-  /** What this run earned its player; `null` for guests. */
+  /** Original rewards at finish time; `null` for guests or legacy results without a snapshot. */
   rewards: Rewards | null
 }
 
@@ -91,4 +91,9 @@ export function finishGameSession(
     // A guest's run can only be finished by the browser that started it.
     headers: playerHeaders(),
   })
+}
+
+/** Reads a committed result for the authenticated account owner, without submitting or rewarding again. */
+export function fetchGameSessionResult(sessionId: string): Promise<ScoreResponse> {
+  return apiFetch<ScoreResponse>(`/api/game-sessions/${encodeURIComponent(sessionId)}/result`)
 }
