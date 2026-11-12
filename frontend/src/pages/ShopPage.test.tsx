@@ -41,6 +41,8 @@ describe('the shop', () => {
 
     const bought = await screen.findByRole('status')
     expect(bought).toHaveTextContent('Purchased! Extra Pack is yours.')
+    // What it cost and what is left, as the server counted them.
+    expect(bought).toHaveTextContent('You spent 100 coins and have 1,140 coins left.')
     expect(within(bought).getByRole('link', { name: 'Open packs' })).toHaveAttribute('href', '/tcg')
     expect(await within(screen.getByRole('main')).findByText('1,140 coins', { selector: 'span.sr-only' })).toBeInTheDocument()
     expect(await (await item('Extra Pack')).findByText('You have 1')).toBeInTheDocument()
@@ -76,6 +78,8 @@ describe('the shop', () => {
 
     const box = await item('Pack Box')
     expect(box.getByText('Unlocks at level 3')).toBeInTheDocument()
+    // How far off it is, from the level the shop sends with the items.
+    expect(box.getByText("· you're level 2", { exact: false })).toBeInTheDocument()
     expect(box.getByRole('button', { name: /buy pack box/i })).toBeDisabled()
 
     const title = await item('High Roller')

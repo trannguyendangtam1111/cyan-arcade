@@ -133,8 +133,9 @@ describe('when the shop says no', () => {
     renderRoute('/shop')
 
     await buy('Extra Pack')
+    // Without an answer the purchase may or may not have gone through: never "nothing was charged".
     expect(await within(screen.getByRole('dialog')).findByRole('alert')).toHaveTextContent(
-      'Could not reach the Cyan Arcade server.',
+      "Couldn't reach the server, so the purchase may not have gone through. Try again: the same purchase is never charged twice.",
     )
     expect(screen.queryByText(/Purchased!/)).not.toBeInTheDocument()
   })
