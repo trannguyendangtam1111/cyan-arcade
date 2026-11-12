@@ -20,6 +20,8 @@ interface MoveListProps {
   viewPly: number
   /** Whether the board shows the game as it stands (not an earlier position or a line). */
   live: boolean
+  /** A saved replay has a latest position, but is not a live game. */
+  latestLabel?: string
   onSelect: (ply: number) => void
   labels: ReadonlyMap<number, MoveLabel>
   showLabels: boolean
@@ -36,7 +38,7 @@ interface MoveListProps {
  * looks back. A label shows only once its analysis has arrived; one from Coach Mode's quick analysis
  * is drawn dashed until the game review confirms or replaces it.
  */
-export function MoveList({ history, viewPly, live, onSelect, labels, showLabels, expanded, onToggle, onKeyDown }: MoveListProps) {
+export function MoveList({ history, viewPly, live, latestLabel = 'Live', onSelect, labels, showLabels, expanded, onToggle, onKeyDown }: MoveListProps) {
   const pairs = movePairs(history)
   const list = useRef<HTMLOListElement>(null)
   const latest = history.length
@@ -77,7 +79,7 @@ export function MoveList({ history, viewPly, live, onSelect, labels, showLabels,
           )}
         >
           {live && <Radio aria-hidden className="size-3" />}
-          {viewName(viewPly, live, history)}
+          {live ? latestLabel : viewName(viewPly, live, history)}
         </span>
         {pairs.length > 6 && (
           <button

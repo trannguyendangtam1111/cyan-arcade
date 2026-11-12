@@ -1,4 +1,4 @@
-import { Activity, Bot, CircleHelp, CornerUpLeft, Flag, GitBranch, GraduationCap, Handshake, LoaderCircle, Palette, Plus, Redo2, RotateCcw, SearchCheck, SlidersHorizontal, Undo2, X } from 'lucide-react'
+import { Activity, Archive, Bot, CircleHelp, CornerUpLeft, Flag, GitBranch, GraduationCap, Handshake, LoaderCircle, Palette, Plus, Redo2, RotateCcw, SearchCheck, SlidersHorizontal, Undo2, X } from 'lucide-react'
 import { useCallback, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { Button } from '@/components/ui/Button'
 import { ErrorState } from '@/components/ui/ErrorState'
@@ -22,6 +22,7 @@ import { HelpDialog } from './components/HelpDialog'
 import { HintButton, HintCard } from './components/HintPanel'
 import { LookPicker } from './components/LookPicker'
 import { MoveList, type MoveLabel } from './components/MoveList'
+import { MatchArchive } from './components/MatchArchive'
 import { NavStrip } from './components/NavStrip'
 import { PlayerBar } from './components/PlayerBar'
 import { ReviewPanel } from './components/ReviewPanel'
@@ -53,6 +54,12 @@ type Dialog = null | 'help' | 'skin' | 'engine'
  * review, and open the Skin, Help, Display and "vs Stockfish" panels; none of them touches the game.
  */
 export default function ChessGame(props: GameProps<ChessAi>) {
+  const [archive, setArchive] = useState(false)
+  return archive ? <MatchArchive onBack={() => setArchive(false)} cosmetics={props.cosmetics} />
+    : <CurrentChessGame {...props} onArchive={() => setArchive(true)} />
+}
+
+function CurrentChessGame(props: GameProps<ChessAi> & { onArchive: () => void }) {
   const admin = props.ai !== undefined
   const game = useChessGame(props.onGameStart)
   const look = useLook(props.cosmetics)
@@ -459,6 +466,7 @@ export default function ChessGame(props: GameProps<ChessAi>) {
         <aside className="flex w-full max-w-[40rem] min-w-0 flex-col gap-3 self-center lg:sticky lg:top-20 lg:max-h-[calc(100dvh-6rem)] lg:w-[22rem] lg:shrink-0 lg:self-start lg:overflow-y-auto lg:pr-1" aria-label="Game controls and tools">
           <Controls game={game} match={match} onResign={() => setConfirm({ kind: 'resign' })} onNewGame={requestNewGame} loginPath={loginPath} />
           <div className="flex flex-wrap gap-1.5" role="toolbar" aria-label="Tools">
+            {match.hints.allowed && <Tool icon={<Archive aria-hidden className="size-4" />} label="Match archive" onClick={props.onArchive} title="Browse and export your retained matches" />}
             <Tool icon={<GraduationCap aria-hidden className="size-4" />} label="Coach" pressed={settings.coach} onClick={() => change('coach', !settings.coach)} title="Coach Mode: Stockfish rates each of your moves as you play" />
             {admin && <Tool icon={<Activity aria-hidden className="size-4" />} label="Analysis" pressed={settings.analysis} onClick={() => change('analysis', !settings.analysis)} title="Engine analysis of the position on the board" />}
             {admin && (

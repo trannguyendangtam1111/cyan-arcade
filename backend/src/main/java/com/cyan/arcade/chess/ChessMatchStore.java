@@ -89,6 +89,31 @@ class ChessMatchStore {
 			.optional();
 	}
 
+	/** Account/date index serves the page; project metadata only, never replay each row. */
+	List<ChessViews.ArchivedMatch> archive(long userId, int limit, int offset) {
+		return this.jdbc.sql("""
+				SELECT id, mode, status, engine_side, engine_difficulty, winner, termination,
+				       created_at, updated_at, finished_at,
+				       CASE WHEN btrim(moves) = '' THEN 0
+				            ELSE cardinality(string_to_array(btrim(moves), ' ')) END AS ply_count
+				FROM chess_matches WHERE user_id = :userId
+				ORDER BY updated_at DESC, id DESC LIMIT :limit OFFSET :offset
+				""")
+			.param("userId", userId).param("limit", limit).param("offset", offset)
+			.query((row, index) -> {
+				String side = row.getString("engine_side");
+				String difficulty = row.getString("engine_difficulty");
+				Status status = Status.valueOf(row.getString("status"));
+				return new ChessViews.ArchivedMatch(row.getObject("id", UUID.class),
+						Mode.valueOf(row.getString("mode")), status,
+						(side != null) ? Color.valueOf(side).opposite() : null,
+						(difficulty != null) ? Difficulty.valueOf(difficulty) : null,
+						ChessPgn.result(status, row.getString("winner"), row.getString("termination")),
+						row.getInt("ply_count"), instant(row, "created_at"), instant(row, "updated_at"),
+						instant(row, "finished_at"));
+			}).list();
+	}
+
 	/**
 	 * The player's latest game that was not left for another: the one in progress, or the last one
 	 * finished. A variation is never the current game.

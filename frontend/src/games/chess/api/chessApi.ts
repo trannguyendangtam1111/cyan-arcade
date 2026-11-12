@@ -1,6 +1,32 @@
-import { apiFetch } from '@/api/client'
+import { ApiError, apiFetch, NETWORK_ERROR } from '@/api/client'
 import { playerHeaders } from '@/lib/playerId'
-import type { CoachResponse, Difficulty, DrawAction, EngineStatus, EvaluationResponse, HintResponse, MatchView, ReviewResponse, Side } from '../types/chessTypes'
+import type { ArchivePage, CoachResponse, Difficulty, DrawAction, EngineStatus, EvaluationResponse, HintResponse, MatchView, ReviewResponse, Side } from '../types/chessTypes'
+
+export function fetchArchive(page: number, signal?: AbortSignal): Promise<ArchivePage> {
+  return apiFetch<ArchivePage>(`/api/chess/archive?page=${page}&size=10`, { signal })
+}
+
+export function fetchArchivedMatch(id: string, signal?: AbortSignal): Promise<MatchView> {
+  return apiFetch<MatchView>(`/api/chess/archive/${encodeURIComponent(id)}`, { signal })
+}
+
+/** PGN is a text attachment, so it cannot use the shared JSON response decoder. */
+export async function fetchPgn(id: string, signal?: AbortSignal): Promise<string> {
+  const base = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
+  let response: Response
+  try {
+    response = await fetch(`${base}/api/chess/archive/${encodeURIComponent(id)}/pgn`, {
+      credentials: base ? 'include' : 'same-origin', signal, headers: { Accept: 'application/x-chess-pgn, application/problem+json' },
+    })
+  } catch (error) {
+    if (signal?.aborted) throw error
+    throw new ApiError(0, NETWORK_ERROR, 'Could not reach the Cyan Arcade server.')
+  }
+  if (!response.ok) {
+    throw new ApiError(response.status, `HTTP_${response.status}`, response.status === 401 ? 'Sign in again to export this match.' : 'Could not export this match. Try again.')
+  }
+  return response.text()
+}
 
 /**
  * Chess's own endpoints. Chess is played on the server, which judges every move; a match is not
