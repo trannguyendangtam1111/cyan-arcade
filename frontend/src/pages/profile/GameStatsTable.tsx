@@ -10,9 +10,10 @@ export function GameStatsTable({ games }: { games: GameStats[] }) {
       <h2 id="game-stats-heading" className="mb-3 text-2xl font-bold">
         By game
       </h2>
+      <p className="mb-3 text-sm text-ink-soft">Classic results only.</p>
       <Card padding="none" className="overflow-x-auto">
         <table className="w-full min-w-[32rem] text-left">
-          <caption className="sr-only">Your numbers in every game you have played</caption>
+          <caption className="sr-only">Classic results in each game played</caption>
           <thead className="text-xs font-bold tracking-wide text-ink-soft uppercase">
             <tr>
               <th scope="col" className="py-3 pl-5">

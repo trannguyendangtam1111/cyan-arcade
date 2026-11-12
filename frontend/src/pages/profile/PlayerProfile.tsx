@@ -170,7 +170,7 @@ function activity(stats: StatsResponse | undefined, key: string): string {
 function Statistics({ profile, stats }: { profile: ProfileResponse; stats: StatsResponse | undefined }) {
   const items: Stat[] = [
     { icon: null, label: 'Coins', value: formatScore(profile.coins), tone: 'bg-amber-100 text-amber-800' },
-    { icon: Gamepad2, label: 'Games played', value: formatScore(profile.gamesPlayed), tone: 'bg-brand-100 text-brand-800' },
+    { icon: Gamepad2, label: 'Games played (Classic)', value: formatScore(profile.gamesPlayed), tone: 'bg-brand-100 text-brand-800' },
     {
       icon: Award,
       label: 'Achievements',
@@ -181,11 +181,11 @@ function Statistics({ profile, stats }: { profile: ProfileResponse; stats: Stats
     { icon: Package, label: 'Packs opened', value: activity(stats, 'tcg.packsOpened'), tone: 'bg-pink-100 text-pink-800' },
     {
       icon: Clock,
-      label: 'Play time',
+      label: 'Play time (Classic)',
       value: stats ? formatDuration(stats.playTimeMs) : '–',
       tone: 'bg-sky-100 text-sky-800',
     },
-    { icon: Star, label: 'Total score', value: formatScore(profile.totalScore), tone: 'bg-emerald-100 text-emerald-800' },
+    { icon: Star, label: 'Total score (Classic)', value: formatScore(profile.totalScore), tone: 'bg-emerald-100 text-emerald-800' },
     {
       icon: PiggyBank,
       label: 'Coins earned',
@@ -196,11 +196,14 @@ function Statistics({ profile, stats }: { profile: ProfileResponse; stats: Stats
 
   return (
     <Card padding="lg">
-      <h2 className="mb-4 text-xl font-semibold">Statistics</h2>
+      <h2 className="mb-2 text-xl font-semibold">Statistics</h2>
+      <p className="mb-4 text-sm text-ink-soft">
+        Games played, total score and play time count Classic results only. Saved results from other modes appear in Recent games.
+      </p>
       <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {items.map(({ icon: Icon, label, value, tone }) => (
           <div key={label} className="rounded-control bg-surface-muted p-3">
-            <dt className="flex items-center gap-2 text-sm font-bold text-ink-soft">
+            <dt className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-bold text-ink-soft">
               <span className={cn('grid size-7 shrink-0 place-items-center rounded-lg', tone)}>
                 {Icon ? <Icon aria-hidden className="size-4" /> : <CoinIcon className="size-4 text-[0.55rem]" />}
               </span>

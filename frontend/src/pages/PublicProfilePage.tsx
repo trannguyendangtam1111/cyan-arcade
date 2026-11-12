@@ -132,9 +132,9 @@ function ProfileCard({ profile }: { profile: PublicProfile }) {
 function Statistics({ profile }: { profile: PublicProfile }) {
   const { stats } = profile
   const items: { icon: LucideIcon; label: string; value: string }[] = [
-    { icon: Gamepad2, label: 'Games played', value: formatScore(stats.gamesPlayed) },
-    { icon: Star, label: 'Total score', value: formatScore(stats.totalScore) },
-    { icon: Clock, label: 'Play time', value: formatDuration(stats.playTimeMs) },
+    { icon: Gamepad2, label: 'Games played (Classic)', value: formatScore(stats.gamesPlayed) },
+    { icon: Star, label: 'Total score (Classic)', value: formatScore(stats.totalScore) },
+    { icon: Clock, label: 'Play time (Classic)', value: formatDuration(stats.playTimeMs) },
     { icon: Award, label: 'Achievements', value: `${profile.achievements.length} / ${profile.achievementsTotal}` },
     ...stats.activities
       .filter((entry) => entry.key !== 'tcg.uniqueCards')
@@ -146,6 +146,9 @@ function Statistics({ profile }: { profile: PublicProfile }) {
       <h2 id="public-stats-heading" className="mb-3 text-2xl font-bold">
         Statistics
       </h2>
+      <p className="mb-3 text-sm text-ink-soft">
+        Games played, total score and play time count Classic results only. Other modes do not count toward these totals.
+      </p>
       <Card padding="lg">
         <dl className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
           {items.map(({ icon: Icon, label, value }) => (

@@ -11,12 +11,12 @@ describe('the profile, with the platform', () => {
     mockApi({ user: pixel, coins: 12_480 })
     renderRoute('/profile')
 
-    await screen.findByText('Games played')
+    await screen.findByText('Games played (Classic)')
     expect(value('Coins')).toHaveTextContent('12,480')
     expect(await screen.findByText('341', { selector: 'dd' })).toBeInTheDocument()
     expect(value('Cards collected')).toHaveTextContent('341')
     expect(value('Packs opened')).toHaveTextContent('14')
-    expect(value('Play time')).toHaveTextContent('1:02:05')
+    expect(value('Play time (Classic)')).toHaveTextContent('1:02:05')
     expect(value('Coins earned')).toHaveTextContent('12,980')
   })
 
@@ -38,7 +38,8 @@ describe('the profile, with the platform', () => {
     mockApi({ user: pixel })
     renderRoute('/profile')
 
-    const table = within(await screen.findByRole('table', { name: 'Your numbers in every game you have played' }))
+    const table = within(await screen.findByRole('table', { name: 'Classic results in each game played' }))
+    expect(screen.getByText('Classic results only.')).toBeInTheDocument()
     const snake = table.getByRole('row', { name: /snake/i })
     expect(within(snake).getByRole('link', { name: 'Snake' })).toHaveAttribute('href', '/games/snake')
     expect(snake).toHaveTextContent('9')
