@@ -172,6 +172,7 @@ describe('public profiles', () => {
     expect(stats.getByText(/Games played, total score and play time count Classic results only/)).toBeInTheDocument()
     expect(stats.queryByText('Packs opened (Classic)')).not.toBeInTheDocument()
     expect(within(screen.getByRole('region', { name: 'Rankings' })).getByText('#2', { selector: 'span' })).toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Rankings' })).getByText(/Classic leaderboards only/)).toBeInTheDocument()
     expect(within(screen.getByRole('region', { name: 'By game' })).getByText('20,480')).toBeInTheDocument()
     expect(within(screen.getByRole('region', { name: /Achievements/ })).getByText('First Coin')).toBeInTheDocument()
     // Not theirs: no editing, and nothing private to show.

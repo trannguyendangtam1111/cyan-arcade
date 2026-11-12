@@ -1,5 +1,6 @@
 import { Medal, Trophy } from "lucide-react";
 import { Link } from "react-router";
+import { CLASSIC, homeBoard } from "@/api/games";
 import {
   leaderboardUrl,
   LEADERBOARD_PERIODS,
@@ -57,73 +58,76 @@ export function RankingsView({
   whose?: string;
 }) {
   return (
-    <div className="grid gap-5 lg:grid-cols-[1fr_2fr]">
-      <Card
-        padding="lg"
-        className="flex items-center gap-4 bg-linear-to-br from-amber-50 to-surface"
-      >
-        <span className="grid size-14 shrink-0 place-items-center rounded-2xl bg-amber-400 text-amber-950 shadow-soft">
-          <Trophy aria-hidden className="size-7" />
-        </span>
-        {data.bestRank !== null && data.bestRankGame ? (
-          <p>
-            <span className="block text-sm font-bold tracking-wide text-ink-soft uppercase">
-              Best rank
-            </span>
-            <span className="font-display text-3xl font-bold tabular-nums">
-              #{formatScore(data.bestRank)}
-            </span>{" "}
-            <span className="text-ink-soft">
-              in {data.bestRankGame.name}, of all time
-            </span>
-          </p>
-        ) : (
-          <p className="text-ink-soft">
-            <strong className="block text-ink">Not ranked yet.</strong> Finish a
-            game to get on the boards.
-          </p>
-        )}
-      </Card>
+    <div>
+      <p className="mb-3 text-sm text-ink-soft">Classic leaderboards only. Other modes have their own rankings.</p>
+      <div className="grid gap-5 lg:grid-cols-[1fr_2fr]">
+        <Card
+          padding="lg"
+          className="flex items-center gap-4 bg-linear-to-br from-amber-50 to-surface"
+        >
+          <span className="grid size-14 shrink-0 place-items-center rounded-2xl bg-amber-400 text-amber-950 shadow-soft">
+            <Trophy aria-hidden className="size-7" />
+          </span>
+          {data.bestRank !== null && data.bestRankGame ? (
+            <p>
+              <span className="block text-sm font-bold tracking-wide text-ink-soft uppercase">
+                Best Classic rank
+              </span>
+              <span className="font-display text-3xl font-bold tabular-nums">
+                #{formatScore(data.bestRank)}
+              </span>{" "}
+              <span className="text-ink-soft">
+                in {data.bestRankGame.name}, of all time
+              </span>
+            </p>
+          ) : (
+            <p className="text-ink-soft">
+              <strong className="block text-ink">No Classic rank yet.</strong> Classic
+              results appear here once ranked.
+            </p>
+          )}
+        </Card>
 
-      <Card padding="none" className="overflow-x-auto">
-        <table className="w-full min-w-[22rem] text-left">
-          <caption className="sr-only">
-            {whose} rank in every game, today, this week and of all time
-          </caption>
-          <thead className="text-xs font-bold tracking-wide text-ink-soft uppercase">
-            <tr>
-              <th scope="col" className="py-3 pl-5">
-                Game
-              </th>
-              {LEADERBOARD_PERIODS.map((period) => (
-                <th key={period} scope="col" className="py-3 pr-5 text-right">
-                  {periodNames[period].label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {data.games.map(({ game, ...ranks }) => (
-              <tr key={game.slug} className="border-t border-line">
-                <th
-                  scope="row"
-                  className="py-3 pl-5 font-display font-semibold"
-                >
-                  {game.name}
+        <Card padding="none" className="overflow-x-auto">
+          <table className="w-full min-w-[22rem] text-left">
+            <caption className="sr-only">
+              {whose} rank in every game, Classic only, today, this week and of all time
+            </caption>
+            <thead className="text-xs font-bold tracking-wide text-ink-soft uppercase">
+              <tr>
+                <th scope="col" className="py-3 pl-5">
+                  Game
                 </th>
                 {LEADERBOARD_PERIODS.map((period) => (
-                  <td key={period} className="py-3 pr-5 text-right">
-                    <RankCell
-                      standing={ranks[keys[period]]}
-                      to={leaderboardUrl(game.slug, period)}
-                    />
-                  </td>
+                  <th key={period} scope="col" className="py-3 pr-5 text-right">
+                    {periodNames[period].label}
+                  </th>
                 ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </Card>
+            </thead>
+            <tbody>
+              {data.games.map(({ game, ...ranks }) => (
+                <tr key={game.slug} className="border-t border-line">
+                  <th
+                    scope="row"
+                    className="py-3 pl-5 font-display font-semibold"
+                  >
+                    {game.name}
+                  </th>
+                  {LEADERBOARD_PERIODS.map((period) => (
+                    <td key={period} className="py-3 pr-5 text-right">
+                      <RankCell
+                        standing={ranks[keys[period]]}
+                        to={`${leaderboardUrl(game.slug, period)}${homeBoard(game.slug).id !== CLASSIC.id ? '&mode=classic' : ''}`}
+                      />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+      </div>
     </div>
   );
 }
