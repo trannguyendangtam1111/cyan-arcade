@@ -62,6 +62,15 @@ class EnginePathTests {
 	}
 
 	@Test
+	void withoutABinaryStartedFromTheRepositoryRootThePathInsideTheRepositoryIsNamed() throws IOException {
+		// As an IDE starts it: "../tools" from the root would be beside the repository, not in it.
+		Files.createDirectories(this.repository.resolve("backend"));
+
+		assertThat(ChessAiConfig.enginePath(this.repository, DEFAULT))
+			.isEqualTo(this.repository.resolve("tools/stockfish/dist/stockfish"));
+	}
+
+	@Test
 	void anAbsolutePathIsTakenAsItIs() {
 		Path absolute = this.repository.resolve("opt/stockfish/stockfish").toAbsolutePath();
 

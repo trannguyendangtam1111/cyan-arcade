@@ -49,7 +49,9 @@ class ChessAiConfig {
 	 * meant from {@code backend/}, where {@code ./mvnw spring-boot:run} starts the application, but an
 	 * IDE often starts it from the repository root: so a relative path that names no binary from the
 	 * working directory is also looked for from its {@code backend/} directory. When neither has it,
-	 * the path from the working directory, for the startup warning to name.
+	 * the path for the startup warning to name: from {@code backend/} when the working directory is the
+	 * repository root (it has one), so the warning names the place the install script fills, not one
+	 * beside the repository; else from the working directory.
 	 */
 	static Path enginePath(Path workingDirectory, String configured) {
 		Path path = Path.of(configured);
@@ -63,7 +65,7 @@ class ChessAiConfig {
 				return candidate;
 			}
 		}
-		return direct;
+		return Files.isDirectory(workingDirectory.resolve("backend")) ? fromBackend : direct;
 	}
 
 	@Bean(destroyMethod = "close")
