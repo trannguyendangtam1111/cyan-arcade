@@ -309,7 +309,7 @@ public class TcgDatasetImporter {
 			.param("externalId", externalId)
 			.param("number", card.number())
 			.param("name", card.name())
-			.param("imageUrl", card.imageUrl())
+			.param("imageUrl", card.imageUrl(), Types.VARCHAR)
 			.param("thumbnailUrl", card.thumbnailUrl(), Types.VARCHAR)
 			.param("metadata", this.json.writeValueAsString(card.metadata()))
 			.param("order", order)
