@@ -21,7 +21,7 @@ export function HelpDialog({ open, onClose }: { open: boolean; onClose: () => vo
         <section aria-label="Playing" className="flex flex-col gap-1.5">
           <h3 className="font-display font-semibold">Playing</h3>
           <ul className="flex list-disc flex-col gap-1 pl-4 text-ink-soft">
-            <li>Two players share this device and take turns, White first; or, for admins, play Stockfish.</li>
+            <li>Two players share this device and take turns, White first. Admins can also play against Stockfish.</li>
             <li>Drag a piece to a marked square, or tap it and then the square: dots are moves, rings are captures.</li>
             <li>Only the side to move can move. Against Stockfish you can plan your next move while it thinks (a premove, violet and dashed): it is played when your turn comes if it is still legal, and dropped if not.</li>
             <li>Every move is checked on the server by the full rules of chess. These games are for fun: they are not scored.</li>
@@ -30,8 +30,10 @@ export function HelpDialog({ open, onClose }: { open: boolean; onClose: () => vo
         <section aria-label="Looking back and takebacks" className="flex flex-col gap-1.5">
           <h3 className="font-display font-semibold">Looking back is not taking back</h3>
           <ul className="flex list-disc flex-col gap-1 pl-4 text-ink-soft">
-            <li>The arrows under the board and the move list only show earlier positions. The game goes on as it is; return to the live game to move.</li>
-            <li>Undo and Redo really take a move back or replay it, in two-player games only. Against Stockfish there are no takebacks.</li>
+            <li>Use the arrows under the board or select a move to look through the game without changing it. Return to the live game to move.</li>
+            <li>In two-player games, Undo takes back the last move; Redo plays it again. Agree with the other player before taking back.</li>
+            <li>Against Stockfish, Undo returns to your previous turn: it takes back your last move and Stockfish&apos;s reply, if it has moved. Redo replays those moves.</li>
+            <li>Takebacks are only available while a game is in progress.</li>
           </ul>
         </section>
         <section aria-label="Keys" className="flex flex-col gap-1.5">

@@ -91,16 +91,32 @@ describe('The control surface', () => {
   })
 
   it('explains how to play in a Help dialog, with the keys and the difference between looking back and taking back', async () => {
-    setup()
+    const server = setup()
     await screen.findByRole('grid', { name: /Chess board/ })
     expect(screen.queryByRole('dialog', { name: 'How to play' })).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Help' }))
     const dialog = await screen.findByRole('dialog', { name: 'How to play' })
     expect(within(dialog).getByText('Looking back is not taking back')).toBeInTheDocument()
+    expect(within(dialog).getByRole('region', { name: 'Playing' })).toHaveTextContent(
+      'Two players share this device and take turns, White first. Admins can also play against Stockfish.',
+    )
+    const takebacks = within(dialog).getByRole('region', { name: 'Looking back and takebacks' })
+    expect(takebacks).toHaveTextContent('look through the game without changing it. Return to the live game to move.')
+    expect(takebacks).toHaveTextContent('In two-player games, Undo takes back the last move; Redo plays it again.')
+    expect(takebacks).toHaveTextContent('Agree with the other player before taking back.')
+    expect(takebacks).toHaveTextContent("Against Stockfish, Undo returns to your previous turn: it takes back your last move and Stockfish's reply, if it has moved. Redo replays those moves.")
+    expect(takebacks).toHaveTextContent('Takebacks are only available while a game is in progress.')
+    expect(takebacks).not.toHaveTextContent('Against Stockfish there are no takebacks')
     expect(within(dialog).getByRole('region', { name: 'Keys' })).toHaveTextContent('←Previous position')
     expect(within(dialog).getByRole('region', { name: 'Keys' })).toHaveTextContent('EscLet go of a piece; clear a premove and drawings')
     expect(within(dialog).getAllByText(/premove/).length).toBeGreaterThan(0)
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'How to play' })).not.toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Help' }))
+    expect(await screen.findByRole('dialog', { name: 'How to play' })).toBeInTheDocument()
+    // Reading the instructions never changes the match.
+    expect(server.calls.filter((call) => call.method === 'POST')).toHaveLength(1)
   })
 
   it('opens the review only for a finished game, starting it, and closes it again', async () => {
