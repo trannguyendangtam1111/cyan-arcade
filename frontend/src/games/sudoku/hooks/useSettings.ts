@@ -12,7 +12,7 @@ export interface SudokuSettings {
   showMistakes: boolean
   /** Placing a digit removes it from the notes of the cells that see it. */
   autoRemoveNotes: boolean
-  /** N, H, Escape and Ctrl+Z / Ctrl+Y. Digits, arrows and erasing always work. */
+  /** N, C, H, Escape and Ctrl+Z / Ctrl+Y. Digits, arrows and erasing always work. */
   keyboardShortcuts: boolean
 }
 

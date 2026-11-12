@@ -182,8 +182,10 @@ export interface GameResult {
    */
   boardDate?: string
   /**
-   * Called once the server has recorded this run, only while it is the latest run. A game can use
-   * this to keep progress for saved clears (2048 Puzzle: the next stage opens).
+   * Called by the platform once the server has recorded this run: at most once, and only while it is
+   * still the run started last. Never called for a run that was refused or could not be saved. For a
+   * game that keeps something of its own only for saved runs (2048 Puzzle, Snake Adventure and Tetris
+   * Challenge: the next stage opens).
    */
   onSaved?: () => void
 }

@@ -40,6 +40,7 @@ import org.springframework.context.annotation.Import;
 // These feature tests pass MockHttpSession objects directly. Real cookie/JDBC persistence,
 // including a closed/recreated application context, is covered by PersistentSessionTests.
 @ImportAutoConfiguration(exclude = { SessionAutoConfiguration.class, JdbcSessionAutoConfiguration.class })
+// ModeLab: test-only rules for a test-only game with more modes than Classic, inert unless a test adds the game.
 @Import({ TestcontainersConfiguration.class, MockMvcTestConfiguration.class, ModeLab.class })
 public @interface IntegrationTest {
 
