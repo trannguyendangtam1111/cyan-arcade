@@ -19,8 +19,23 @@ TLS is required both by the pool properties and the production URL guard. Certif
 modes additionally need the appropriate JDBC trust configuration; prefer verify-full where configured.
 Never use sslmode=disable/prefer or put database credentials in VITE_ variables.
 
-On the first backend start, Flyway automatically applies unchanged V1–V27 to the empty database;
+On the first backend start, Flyway automatically applies unchanged V1–V37 to the empty database;
 Hibernate only validates. Do not baseline an unknown schema or enable Flyway clean.
+
+An **existing** database is upgraded in the same way: every pending migration is applied in order
+at startup, before the service reports ready. Before deploying to one, confirm which database the
+Render `DB_URL` points at and its current version (`flyway_schema_history`), and take a Neon
+branch or backup to roll back to. Notes on V28–V37:
+
+- V28 adds `mode` to game sessions and scores with the constant default `'classic'` (no table
+  rewrite); V29, V33 and V35 add indexes or a table; V36 adds a nullable column.
+- V30–V32 create the Minesweeper Daily Board tables. V31 moves rows stored under V30 into
+  archive tables in one transaction; a database that never ran V30 has none to move.
+- V34 widens Sudoku's run-mode check for `ARCHIVE` replays.
+- V37 creates the Spring Session tables. Login sessions are stored there from then on, so
+  sessions held in memory by the previous deployment end once, at this upgrade.
+- Applied migrations are never edited; roll back by restoring the branch or backup, not by
+  changing migration files.
 Migrations seed game/shop configuration, not development users. The real TCG catalog is empty
 until a separate, explicitly authorized import or existing-data migration is performed.
 Normal production startup refuses source/file imports and the import-tcg profile.
@@ -45,6 +60,7 @@ Required environment variables:
 | SPRING_PROFILES_ACTIVE | prod |
 | DB_URL, DB_USERNAME, DB_PASSWORD | Neon values above; store credentials as secrets |
 | CORS_ALLOWED_ORIGINS | Exact HTTPS Vercel production origin, without a trailing slash |
+| MINESWEEPER_DAILY_SECRET | A long random secret, stored as a Render secret. Not enforced at startup, but without it each process uses a random one (a warning is logged), so boards of days not yet stored differ after a restart |
 
 Render supplies PORT; both Spring and Docker's health command use it. Do not override it with
 a different SERVER_PORT. The service binds to 0.0.0.0. Keep the supplied health check; readiness
@@ -53,8 +69,13 @@ includes the database, while liveness is not coupled to database availability.
 The image defaults JAVA_TOOL_OPTIONS to a 160 MiB maximum heap, Serial GC, a 32 MiB code cache,
 16 MiB direct-buffer limit and 512 KiB thread stacks. It retains non-root execution and the pinned
 Stockfish binary. Production defaults are one Stockfish process/thread, an 8 MiB hash,
-three database connections, 24 Tomcat threads and a smaller analysis cache.
-Optional tuning names: JAVA_TOOL_OPTIONS, STOCKFISH_POOL_SIZE, STOCKFISH_THREADS, STOCKFISH_HASH_MB.
+three database connections, 12 Tomcat threads and a smaller analysis cache.
+Idle engines are retired after 60 seconds, checked every 30 seconds; the next search starts one again.
+Optional tuning names: JAVA_TOOL_OPTIONS, STOCKFISH_POOL_SIZE, STOCKFISH_THREADS, STOCKFISH_HASH_MB,
+STOCKFISH_IDLE_TIMEOUT_SECONDS and MEMORY_DIAGNOSTICS_ENABLED. The image's JAVA_TOOL_OPTIONS also
+sets ActiveProcessorCount=1, and the image sets MALLOC_ARENA_MAX=2. Setting JAVA_TOOL_OPTIONS on
+Render replaces the whole default, including these flags; copy it in full if you change it. See the [memory incident runbook](render-memory.md)
+for numeric JVM/Stockfish/container measurements and production acceptance steps.
 Keep the supplied small defaults initially. Hash memory is not Stockfish's total memory:
 its embedded neural network and native allocations also consume RAM. A JVM heap limit likewise
 does not cap total JVM RSS. **512 MiB operation is not proven by these settings.** Exercise
@@ -139,8 +160,10 @@ require a separately authorized password change; editing an environment variable
 
 - Render Free sleeps after 15 idle minutes and can take about a minute to wake. An AI asset
   authorization timeout returns 503; allow the backend to wake and retry rather than bypassing it.
-- Sessions, request budgets and in-memory jobs are lost/paused when the backend restarts or sleeps.
-  PostgreSQL data persists in Neon. Login persistence across restarts is not implemented.
+- Login sessions are stored in PostgreSQL (V37) and survive restarts and sleep; they end after
+  14 days without a visit or on logout. Request budgets, the engine rate limiter, the analysis
+  cache and running jobs are in memory and are lost or paused when the backend restarts or sleeps.
+  PostgreSQL data persists in Neon.
 - Daily challenges are generated again at startup; other timers do not run while stopped.
 - Shared free-instance hours, build/bandwidth allowances and Vercel middleware usage limits apply.
   Free hosting is appropriate for a portfolio preview, not an availability guarantee.
