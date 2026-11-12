@@ -117,6 +117,11 @@ public final class StockfishEngineAdapter implements AutoCloseable {
 		return this.stopGrace;
 	}
 
+	/** Release idle native memory without changing the process cap or interrupting a search. */
+	public int evictIdle(Duration timeout) {
+		return this.pool.evictIdle(timeout);
+	}
+
 	@Override
 	public void close() {
 		this.pool.close();

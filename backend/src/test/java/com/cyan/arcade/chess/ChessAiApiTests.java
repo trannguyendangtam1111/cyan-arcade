@@ -14,6 +14,7 @@ import com.cyan.arcade.IntegrationTest;
 import com.cyan.arcade.Players;
 import com.cyan.arcade.chess.engine.Move;
 import com.cyan.arcade.chess.engine.Position;
+import com.cyan.arcade.common.error.ApiException;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,6 +28,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.hasSize;
@@ -57,6 +59,9 @@ class ChessAiApiTests {
 
 	@Autowired
 	private EngineAnalysisCache cache;
+
+	@Autowired
+	private EngineRateLimiter limiter;
 
 	@BeforeEach
 	void freshEngine() {
@@ -574,6 +579,29 @@ class ChessAiApiTests {
 		evaluateAt(admin, match, 4, 3, 1).andExpect(jsonPath("$.finished").value(false))
 			.andExpect(jsonPath("$.evaluation.display").value("#-1"))
 			.andExpect(jsonPath("$.bestMove.san").value("Qh4#"));
+	}
+
+	@Test
+	void anAccountAtItsEngineLimitStillGetsStockfishsMovesAndPositionsAlreadyEvaluated() throws Exception {
+		MockHttpSession admin = newAdmin();
+		String match = id(startEngineGame(admin, "WHITE", "CASUAL"));
+		move(admin, match, 0, "e2e4").andExpect(status().isOk());
+		evaluateAt(admin, match, 1, 1, 1).andExpect(status().isOk());
+		// Analysis on every position used up the minute's engine requests (this account's only).
+		Long adminId = Players.userId(this.mockMvc, admin);
+		assertThatThrownBy(() -> {
+			while (true) {
+				this.limiter.check(adminId);
+			}
+		}).isInstanceOf(ApiException.class);
+
+		// The game goes on: Stockfish's move is not refused.
+		engineMove(admin, match, 1).andExpect(status().isOk()).andExpect(jsonPath("$.history", hasSize(2)));
+		// A position evaluated before comes from the cache, free; a new search is refused until later.
+		evaluateAt(admin, match, 2, 1, 1).andExpect(status().isOk());
+		evaluateAt(admin, match, 2, 2, 1).andExpect(status().isTooManyRequests())
+			.andExpect(jsonPath("$.code").value("TOO_MANY_ENGINE_REQUESTS"));
+		hint(admin, match, 2).andExpect(status().isTooManyRequests());
 	}
 
 	@Test

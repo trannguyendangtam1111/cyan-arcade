@@ -115,7 +115,8 @@ app:
     # Move hints a player (not an admin) gets per game, counted on the server; a new game brings new
     # ones. Guests get none: hints need an account.
     hints-per-game: ${CHESS_HINTS_PER_GAME:3}
-    # Engine requests (hints, engine moves, evaluations, review starts) one account may make a minute.
+    # Engine requests (hints, evaluations that need a search, review starts) one account may make a
+    # minute. Stockfish's own moves in a game are not counted, so a game never stalls on this limit.
     requests-per-minute: ${CHESS_ENGINE_REQUESTS_PER_MINUTE:30}
     engine:
       # The Stockfish binary (on Windows the .exe may be left off). The default is where

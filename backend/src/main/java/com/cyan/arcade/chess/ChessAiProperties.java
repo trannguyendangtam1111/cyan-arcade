@@ -12,8 +12,8 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * single-threaded engines with a small hash, short searches, one game review at a time.
  *
  * @param hintsPerGame move hints a player (not an admin) gets per match
- * @param requestsPerMinute engine requests (hints, engine moves, evaluations, reviews) one account
- * may make in a minute
+ * @param requestsPerMinute engine requests (hints, evaluations that need a search, reviews) one
+ * account may make in a minute; Stockfish's own moves in a game are not counted
  * @param coach Coach Mode's searches and its own limit
  * @param classification the limits of the move labels, in winning chances lost
  */

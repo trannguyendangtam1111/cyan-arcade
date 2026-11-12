@@ -2,12 +2,15 @@ package com.cyan.arcade.chess;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.List;
 
 import com.cyan.arcade.chess.stockfish.StockfishEngineAdapter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -68,6 +71,33 @@ class ChessAiConfig {
 		ChessAiProperties.Engine engine = this.properties.engine();
 		return new StockfishEngineAdapter(launcher, engine.poolSize(), engine.maxWaiting(), engine.threads(),
 				engine.hashMb(), engine.acquireTimeout(), engine.readyTimeout(), engine.stopGrace());
+	}
+
+	@Bean
+	IdleEngineCleanup idleEngineCleanup(StockfishEngineAdapter engine,
+			@Value("${app.chess.engine.idle-timeout-seconds:0}") long seconds) {
+		return new IdleEngineCleanup(engine, seconds);
+	}
+
+	static class IdleEngineCleanup {
+		private final StockfishEngineAdapter engine;
+		private final Duration timeout;
+
+		IdleEngineCleanup(StockfishEngineAdapter engine, long seconds) {
+			if (seconds < 0) {
+				throw new IllegalArgumentException("Stockfish idle timeout must not be negative");
+			}
+			this.engine = engine;
+			this.timeout = Duration.ofSeconds(seconds);
+		}
+
+		@Scheduled(fixedDelay = 30000)
+		void retireIdleEngines() {
+			int retired = this.engine.evictIdle(this.timeout);
+			if (retired > 0) {
+				log.info("Released {} idle Stockfish process(es)", retired);
+			}
+		}
 	}
 
 	@EventListener(ApplicationReadyEvent.class)

@@ -70,6 +70,7 @@ class ProductionDeploymentTests {
 		assertThat(env.getProperty("app.tcg.import.sources")).isEmpty();
 		assertThat(env.getProperty("spring.datasource.hikari.maximum-pool-size", Integer.class)).isEqualTo(3);
 		assertThat(env.getProperty("app.chess.engine.pool-size", Integer.class)).isEqualTo(1);
+		assertThat(env.getProperty("app.chess.engine.idle-timeout-seconds", Integer.class)).isEqualTo(60);
 		assertThat(env.getProperty("management.endpoint.health.group.readiness.include")).isEqualTo("readinessState,db");
 	}
 
