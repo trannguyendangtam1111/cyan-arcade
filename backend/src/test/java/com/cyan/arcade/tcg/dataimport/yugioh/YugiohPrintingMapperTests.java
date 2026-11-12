@@ -273,13 +273,13 @@ class YugiohPrintingMapperTests {
 				card.def(), card.level(), card.attribute(), card.linkval(), card.scale(), card.archetype(), printings);
 	}
 
-	private static List<YgoSet> sets() {
+	static List<YgoSet> sets() {
 		List<YgoSet> sets = new ArrayList<>();
 		JSON.readTree(fixture("cardsets.json")).forEach((set) -> sets.add(JSON.treeToValue(set, YgoSet.class)));
 		return sets;
 	}
 
-	private static List<YgoCard> cards(String file) {
+	static List<YgoCard> cards(String file) {
 		List<YgoCard> cards = new ArrayList<>();
 		JsonNode data = JSON.readTree(fixture(file)).path("data");
 		data.forEach((card) -> cards.add(JSON.treeToValue(card, YgoCard.class)));

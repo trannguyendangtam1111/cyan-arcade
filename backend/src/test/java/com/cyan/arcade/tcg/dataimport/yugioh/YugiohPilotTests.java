@@ -10,6 +10,7 @@ import com.cyan.arcade.tcg.dataimport.SetCheck;
 import com.cyan.arcade.tcg.dataimport.SourceConfig.RarityRule;
 import com.cyan.arcade.tcg.dataimport.SourceFetch;
 import com.cyan.arcade.tcg.dataimport.SourceHttp;
+import com.cyan.arcade.tcg.dataimport.TcgDataset;
 import com.cyan.arcade.tcg.dataimport.TcgSource;
 import com.cyan.arcade.tcg.dataimport.TcgSourceException;
 import com.cyan.arcade.tcg.dataimport.yugioh.YugiohConfig.PilotSet;
@@ -116,7 +117,7 @@ class YugiohPilotTests {
 	}
 
 	@Test
-	void theSourceReportsEverySetItReadsAsWaitingForImagesAndGivesNoDataset() {
+	void theSourceGivesACardOnlyDatasetOfTheSetsItCanReadAndReportsTheOthers() {
 		RestClient.Builder builder = RestClient.builder().baseUrl(URL);
 		MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
 		server.expect(requestTo(URL + "/cardsets.php"))
@@ -135,10 +136,44 @@ class YugiohPilotTests {
 
 		// Only sets the provider lists are asked for: Glorious Victors costs no request.
 		server.verify();
-		assertThat(fetch.dataset()).isNull();
+		assertThat(fetch.dataset().sets()).singleElement().satisfies((set) -> {
+			assertThat(set.code()).isEqualTo("betb");
+			assertThat(set.cards()).hasSize(9);
+			assertThat(set.packs()).isEmpty();
+		});
 		assertThat(fetch.checks()).extracting(SetCheck::setId, SetCheck::status, SetCheck::listed, SetCheck::importable)
-			.containsExactly(org.assertj.core.groups.Tuple.tuple("betb", SetCheck.Status.PENDING_IMAGES, 9, 9),
+			.containsExactly(org.assertj.core.groups.Tuple.tuple("betb", SetCheck.Status.IMPORTABLE, 9, 9),
 					org.assertj.core.groups.Tuple.tuple("glvi", SetCheck.Status.NOT_AT_SOURCE, 0, 0));
+	}
+
+	@Test
+	void theDatasetIsAHiddenGameOfTextCardsWithoutPacksOrNothingAtAll() {
+		YugiohConfig shipped = YugiohConfig.load(new ClassPathResource("tcg/pilots/yugioh.json"), JSON);
+		YugiohCatalog catalog = YugiohPrintingMapper.map(shipped, YugiohPrintingMapperTests.sets(),
+				Map.of("Beyond the Brave", YugiohPrintingMapperTests.cards("cardinfo-beyond-the-brave.json")));
+
+		TcgDataset dataset = YugiohSource.datasetOf(shipped, catalog);
+
+		assertThat(dataset.game().slug()).isEqualTo("yugioh");
+		assertThat(dataset.game().cardImagesOptional()).isTrue();
+		assertThat(dataset.game().hidden()).isTrue();
+		assertThat(dataset.game().imageUrl()).isNull();
+		assertThat(dataset.rarities()).extracting(TcgDataset.Rarity::code)
+			.containsExactly("common", "super-rare", "ultra-rare", "secret-rare", "starlight-rare");
+		assertThat(dataset.sets()).singleElement().satisfies((set) -> {
+			assertThat(set.name()).isEqualTo("Beyond the Brave");
+			assertThat(set.imageUrl()).isNull();
+			assertThat(set.packs()).isEmpty();
+			assertThat(set.cards()).allSatisfy((card) -> {
+				assertThat(card.imageUrl()).isNull();
+				assertThat(card.thumbnailUrl()).isNull();
+				assertThat(card.externalId()).isEqualTo("betb:" + card.number() + ":" + card.rarity());
+			});
+		});
+		assertThat(YugiohSource.datasetOf(shipped, catalog)).isEqualTo(dataset);
+
+		YugiohCatalog nothing = YugiohPrintingMapper.map(shipped, List.of(), Map.of());
+		assertThat(YugiohSource.datasetOf(shipped, nothing)).isNull();
 	}
 
 	private static PropertySource<?> applicationProperties() {

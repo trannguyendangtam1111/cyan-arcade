@@ -191,12 +191,13 @@ public class TcgDatasetImporter {
 
 	/**
 	 * A game's picture comes from a card of one of its sets; when that set is held back, the dataset
-	 * has none, and the picture the catalog has is kept.
+	 * has none, and the picture the catalog has is kept. Whether the game is shown is only decided
+	 * when it is created (a hidden one starts inactive), never changed by a later import.
 	 */
 	private Long upsertGame(TcgDataset.Game game) {
 		return this.jdbc.sql("""
-				INSERT INTO tcg_games (slug, name, description, image_url, card_back_url, accent_color, attribution)
-				VALUES (:slug, :name, :description, :imageUrl, :cardBackUrl, :accentColor, :attribution)
+				INSERT INTO tcg_games (slug, name, description, image_url, card_back_url, accent_color, attribution, active)
+				VALUES (:slug, :name, :description, :imageUrl, :cardBackUrl, :accentColor, :attribution, NOT :hidden)
 				ON CONFLICT (slug) DO UPDATE
 				SET name = EXCLUDED.name, description = EXCLUDED.description,
 				    image_url = COALESCE(EXCLUDED.image_url, tcg_games.image_url),
@@ -211,6 +212,7 @@ public class TcgDatasetImporter {
 			.param("cardBackUrl", game.cardBackUrl(), Types.VARCHAR)
 			.param("accentColor", game.accentColor(), Types.VARCHAR)
 			.param("attribution", orEmpty(game.attribution()))
+			.param("hidden", game.hidden())
 			.query(Long.class)
 			.single();
 	}

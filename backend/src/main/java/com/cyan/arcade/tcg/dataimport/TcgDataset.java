@@ -41,16 +41,26 @@ public record TcgDataset(@NotNull @Valid Game game, @NotEmpty List<@Valid @NotNu
 	 * @param cardImagesOptional whether the game's cards may come without an image, to be shown as
 	 * text (a game whose artwork the arcade may not show). Off unless set: every other game's cards
 	 * must each have one, and a dataset with a card without one is refused.
+	 * @param hidden whether a game this dataset creates starts hidden ({@code tcg_games.active} off): its
+	 * cards are stored, but no page or API lists the game, its sets or its cards until it is activated
+	 * in the database on purpose. Off unless set. Only a new game is affected: an import never changes
+	 * whether an existing game is shown.
 	 */
 	public record Game(@NotNull @Pattern(regexp = CODE) @Size(max = 50) String slug,
 			@NotBlank @Size(max = 100) String name, @Size(max = 500) String description,
 			@Size(max = 500) String imageUrl, @Size(max = 500) String cardBackUrl,
 			@Pattern(regexp = COLOR) String accentColor, @Size(max = 500) String attribution,
-			Boolean cardImagesOptional) {
+			Boolean cardImagesOptional, Boolean hidden) {
 
 		public Game {
-			// Left out of a dataset file, it is off.
+			// Left out of a dataset file, both are off.
 			cardImagesOptional = Boolean.TRUE.equals(cardImagesOptional);
+			hidden = Boolean.TRUE.equals(hidden);
+		}
+
+		public Game(String slug, String name, String description, String imageUrl, String cardBackUrl,
+				String accentColor, String attribution, Boolean cardImagesOptional) {
+			this(slug, name, description, imageUrl, cardBackUrl, accentColor, attribution, cardImagesOptional, false);
 		}
 
 		public Game(String slug, String name, String description, String imageUrl, String cardBackUrl) {

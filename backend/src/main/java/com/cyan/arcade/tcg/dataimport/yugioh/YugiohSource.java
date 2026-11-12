@@ -12,15 +12,24 @@ import com.cyan.arcade.tcg.dataimport.TcgDataset;
 import com.cyan.arcade.tcg.dataimport.TcgSource;
 import com.cyan.arcade.tcg.dataimport.yugioh.YgoprodeckClient.YgoCard;
 import com.cyan.arcade.tcg.dataimport.yugioh.YgoprodeckClient.YgoSet;
+import com.cyan.arcade.tcg.dataimport.yugioh.YugiohCatalog.Printing;
 import com.cyan.arcade.tcg.dataimport.yugioh.YugiohCatalog.SetPrintings;
 import com.cyan.arcade.tcg.dataimport.yugioh.YugiohConfig.PilotSet;
 
 /**
  * The Yu-Gi-Oh! Trading Card Game, read from YGOPRODeck: a pilot. It only exists when
- * {@code app.tcg.pilots.yugioh.enabled} is set (see {@link YugiohPilotConfiguration}), and even then
- * it writes nothing: every set it reads is held back, with its counts in the import report, because
- * the arcade has no card pictures it may show for Yu-Gi-Oh! (YGOPRODeck forbids hotlinking, and the
- * artwork is Konami's). Turning printings into a dataset is a later step.
+ * {@code app.tcg.pilots.yugioh.enabled} is set (see {@link YugiohPilotConfiguration}).
+ *
+ * <p>What it imports is a card catalog and nothing else:
+ * <ul>
+ * <li>One card per printing, its id the printing's ({@code betb:BETB-EN018:ultra-rare}), its number
+ * the printed code, its metadata the card's text, for the arcade's text cards.
+ * <li>No image: the artwork is Konami's and YGOPRODeck forbids hotlinking it, so the game says its
+ * cards come without one ({@code cardImagesOptional}).
+ * <li>No packs, so no odds: Konami publishes no pull rates.
+ * <li>The game starts hidden: no page or API lists it until it is activated in the database on
+ * purpose, so a pilot import never puts Yu-Gi-Oh! in front of players.
+ * </ul>
  */
 class YugiohSource implements TcgSource {
 
@@ -46,7 +55,6 @@ class YugiohSource implements TcgSource {
 		return "YGOPRODeck (" + this.url + "), pilot";
 	}
 
-	/** Nothing yet: see {@link #fetchChecked()}. */
 	@Override
 	public TcgDataset fetch() {
 		return fetchChecked().dataset();
@@ -54,7 +62,9 @@ class YugiohSource implements TcgSource {
 
 	@Override
 	public SourceFetch fetchChecked() {
-		return new SourceFetch(null, catalog().sets().stream().map(YugiohSource::checkOf).toList());
+		YugiohCatalog catalog = catalog();
+		return new SourceFetch(datasetOf(this.config, catalog),
+				catalog.sets().stream().map(YugiohSource::checkOf).toList());
 	}
 
 	/** The configured sets' printings, asking the provider only for the sets it has. */
@@ -71,13 +81,42 @@ class YugiohSource implements TcgSource {
 	}
 
 	/**
-	 * A set that could be read is reported as waiting for images: none of its printings has a
-	 * picture the arcade may use.
+	 * The sets that have printings, as a card-only dataset in the configuration's order; {@code null}
+	 * when none has. Sets held back (not at the source, or empty) are left out and left alone.
 	 */
+	static TcgDataset datasetOf(YugiohConfig config, YugiohCatalog catalog) {
+		List<TcgDataset.CardSet> sets = catalog.sets()
+			.stream()
+			.filter((set) -> set.status() == SetCheck.Status.IMPORTABLE && !set.printings().isEmpty())
+			.map(YugiohSource::cardSetOf)
+			.toList();
+		if (sets.isEmpty()) {
+			return null;
+		}
+		TcgDataset.Game game = new TcgDataset.Game(config.game().slug(), config.game().name(),
+				config.game().description(), null, null, config.game().accentColor(), config.game().attribution(), true,
+				true);
+		List<TcgDataset.Rarity> rarities = config.rarities()
+			.stream()
+			.map((rule) -> new TcgDataset.Rarity(rule.code(), rule.name(), rule.tier()))
+			.toList();
+		return new TcgDataset(game, rarities, sets);
+	}
+
+	private static TcgDataset.CardSet cardSetOf(SetPrintings set) {
+		List<TcgDataset.Card> cards = set.printings().stream().map(YugiohSource::cardOf).toList();
+		return new TcgDataset.CardSet(set.code(), null, set.sourceName(), "", null, null, null, set.releasedOn(), cards,
+				List.of());
+	}
+
+	private static TcgDataset.Card cardOf(Printing printing) {
+		return new TcgDataset.Card(printing.externalId(), printing.printingCode(), printing.name(), printing.rarity(),
+				null, null, printing.metadata());
+	}
+
+	/** Every card of a set it imports is one without an image, by design: the report says so. */
 	private static SetCheck checkOf(SetPrintings set) {
-		SetCheck.Status status = (set.status() == SetCheck.Status.IMPORTABLE) ? SetCheck.Status.PENDING_IMAGES
-				: set.status();
-		return new SetCheck(set.code(), set.sourceName(), status, set.listed(), set.printings().size(),
+		return new SetCheck(set.code(), set.sourceName(), set.status(), set.listed(), set.printings().size(),
 				set.printings().size(), set.excluded(), set.unknownRarities(), 0, 0);
 	}
 
