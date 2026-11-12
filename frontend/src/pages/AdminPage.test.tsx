@@ -12,7 +12,7 @@ describe('the admin page', () => {
     mockApi({ user: admin })
     renderRoute('/admin')
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Admin' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Admin' })).toBeInTheDocument()
     const account = within(await screen.findByRole('region', { name: 'Your account' }))
     expect(account.getByText('admin')).toBeInTheDocument()
     expect(account.getByText('ADMIN')).toBeInTheDocument()

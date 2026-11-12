@@ -16,7 +16,7 @@ describe('the shop', () => {
     mockApi()
     renderRoute('/shop')
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Shop' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Shop' })).toBeInTheDocument()
     expect(await screen.findByRole('heading', { name: 'Card packs' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Badges' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Titles' })).toBeInTheDocument()

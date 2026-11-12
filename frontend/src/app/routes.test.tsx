@@ -149,7 +149,7 @@ describe('other pages', () => {
     mockApi()
     renderRoute('/leaderboard')
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Leaderboard' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Leaderboard' })).toBeInTheDocument()
     const tetris = await screen.findByRole('button', { name: 'Tetris' })
     expect(screen.getByRole('button', { name: 'Snake' })).toHaveAttribute('aria-pressed', 'true')
 

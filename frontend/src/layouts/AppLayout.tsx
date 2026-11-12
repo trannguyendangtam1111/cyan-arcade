@@ -1,4 +1,5 @@
 import { Heart, ShieldCheck } from 'lucide-react'
+import { Suspense } from 'react'
 import { Link, NavLink, Outlet, ScrollRestoration, useLocation } from 'react-router'
 import { isAdmin, useSession } from '@/api/auth'
 import { useCoins } from '@/api/economy'
@@ -7,6 +8,7 @@ import { ThemeToggle } from '@/components/ThemeToggle'
 import { Logo } from '@/components/brand/Logo'
 import { Avatar } from '@/components/ui/Avatar'
 import { CoinAmount } from '@/components/ui/CoinAmount'
+import { LoadingState } from '@/components/ui/LoadingState'
 import { buttonStyles } from '@/components/ui/buttonStyles'
 import { cn } from '@/lib/cn'
 import { navItems } from './navigation'
@@ -123,7 +125,10 @@ export function AppLayout() {
       >
         {/* Keyed by path, so a new page fades in while a changed query string (a filter, a page number) does not. */}
         <div key={pathname} className="motion-safe:animate-page-in">
-          <Outlet />
+          {/* Some pages arrive in their own chunk the first time someone opens them (app/lazyPages). */}
+          <Suspense fallback={<LoadingState label="Loading…" />}>
+            <Outlet />
+          </Suspense>
         </div>
       </main>
 
