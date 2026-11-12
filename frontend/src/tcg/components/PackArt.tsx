@@ -53,7 +53,7 @@ export function PackArt({ pack, className, label }: PackArtProps) {
         {pack.setLogoUrl ? (
           <img src={pack.setLogoUrl} alt="" loading="lazy" draggable={false} className="max-h-full max-w-full object-contain" />
         ) : (
-          <span className="line-clamp-2 text-center font-display text-[9cqw] leading-tight font-bold text-ink">
+          <span className="line-clamp-2 text-center font-display text-[9cqw] leading-tight font-bold text-[#16323f]">
             {pack.set.name}
           </span>
         )}

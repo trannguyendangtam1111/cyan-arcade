@@ -200,6 +200,15 @@ describe('text cards in the collection and the closer look', () => {
     expect(value('Owned')).toHaveTextContent('Not yet')
     expect(value('Effect')).toHaveTextContent(LONG_EFFECT)
   })
+
+  it('keeps the line breaks of an effect, as a Link monster lists its materials on a line of their own', () => {
+    const effect = '2 "Adamancipator" monsters\r\nYou can excavate the top 5 cards of your Deck.'
+    render(<CardDetail card={{ ...luminous, metadata: { ...luminous.metadata, effect } }} quantity={1} onClose={() => {}} />)
+
+    const effectValue = within(screen.getByRole('dialog')).getByText('Effect', { selector: 'dt' }).nextElementSibling
+    expect(effectValue?.textContent).toBe(effect)
+    expect(effectValue).toHaveClass('whitespace-pre-line')
+  })
 })
 
 describe('opening a pack of text cards', () => {

@@ -56,7 +56,7 @@ export function CardDetail({ card, quantity, onClose }: CardDetailProps) {
             {details.map(([key, value]) => (
               <div key={key} className="contents">
                 <dt className="font-bold text-ink">{label(key)}</dt>
-                <dd>{String(value)}</dd>
+                <dd className="whitespace-pre-line">{String(value)}</dd>
               </div>
             ))}
           </dl>

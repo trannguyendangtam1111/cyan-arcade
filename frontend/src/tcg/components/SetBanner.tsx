@@ -28,7 +28,7 @@ export function SetBanner({ name, logoUrl, coverImageUrl, className }: SetBanner
         {logoUrl ? (
           <img src={logoUrl} alt="" loading="lazy" draggable={false} className="max-h-full max-w-full object-contain drop-shadow-md" />
         ) : (
-          <span className="line-clamp-3 text-center font-display text-[7cqw] leading-tight font-bold text-ink">{name}</span>
+          <span className="line-clamp-3 text-center font-display text-[7cqw] leading-tight font-bold text-[#16323f]">{name}</span>
         )}
       </span>
       {coverImageUrl && (
