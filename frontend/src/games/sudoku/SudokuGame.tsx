@@ -289,30 +289,34 @@ export default function SudokuGame(props: GameProps<SudokuAiPlayer>) {
         </>
       )}
 
-      <Toolbar
-        canUndo={!isAi && game.canUndo}
-        canRedo={!isAi && game.canRedo}
-        notesMode={game.notesMode}
-        fillMode={game.fillMode}
-        hintsLeft={run?.hintsLeft ?? 3}
-        hintOpen={hintOpen}
-        disabled={isAi || !game.active || game.paused}
-        onUndo={game.undo}
-        onRedo={game.redo}
-        onErase={game.erase}
-        onNotes={game.toggleNotes}
-        onCandidates={game.fillCandidates}
-        onFill={game.toggleFill}
-        onHint={() => setHintOpen((open) => !open)}
-      />
-      <NumberPad
-        counts={counts}
-        onDigit={game.padDigit}
-        active={!isAi && game.fillMode ? game.fillDigit : null}
-        notesMode={game.notesMode}
-        disabled={isAi || !game.active || game.paused}
-        theme={look.pad}
-      />
+      {/* The tools and the digits read as one set of controls: a little apart from the board on a
+          phone, closer to each other; from sm the spacing is the column's own. */}
+      <div className="mt-1 flex w-full flex-col gap-2 sm:mt-0 sm:gap-3">
+        <Toolbar
+          canUndo={!isAi && game.canUndo}
+          canRedo={!isAi && game.canRedo}
+          notesMode={game.notesMode}
+          fillMode={game.fillMode}
+          hintsLeft={run?.hintsLeft ?? 3}
+          hintOpen={hintOpen}
+          disabled={isAi || !game.active || game.paused}
+          onUndo={game.undo}
+          onRedo={game.redo}
+          onErase={game.erase}
+          onNotes={game.toggleNotes}
+          onCandidates={game.fillCandidates}
+          onFill={game.toggleFill}
+          onHint={() => setHintOpen((open) => !open)}
+        />
+        <NumberPad
+          counts={counts}
+          onDigit={game.padDigit}
+          active={!isAi && game.fillMode ? game.fillDigit : null}
+          notesMode={game.notesMode}
+          disabled={isAi || !game.active || game.paused}
+          theme={look.pad}
+        />
+      </div>
     </div>
   )
 

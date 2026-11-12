@@ -16,30 +16,38 @@ interface StatusBarProps {
   onPause: () => void
 }
 
-/** Above the board: which puzzle, the mistakes so far and the clock, with pause. */
+/**
+ * Above the board: which puzzle, the mistakes so far and the clock, with pause.
+ *
+ * One line from 24rem (measured on the bar, as it follows the board's width). Narrower (a phone), the
+ * title takes a line of its own so it is not cut short, and the mistakes and the clock share the next,
+ * with a finger-sized (44 px) pause button.
+ */
 export function StatusBar({ title, mistakes, mistakeLimit, rule, elapsedMs, paused, canPause, onPause }: StatusBarProps) {
   const danger = mistakeLimit > 0 && mistakes >= mistakeLimit - 1 && mistakes > 0
   return (
-    <div className="flex w-full items-center justify-between gap-2 text-sm">
-      <p className="min-w-0 truncate font-display font-semibold text-ink">{title}</p>
-      <p title={rule} className={cn('shrink-0 font-bold tabular-nums', danger ? 'text-danger' : 'text-ink-soft')}>
-        <span className="sr-only">{rule}. </span>
-        {mistakeLimit > 0 ? `Mistakes ${mistakes}/${mistakeLimit}` : `Conflicts ${mistakes}`}
-      </p>
-      <div className="flex shrink-0 items-center gap-1.5">
-        <span role="timer" aria-label={`Time ${formatClock(elapsedMs)}`} className="font-display text-base font-semibold text-ink tabular-nums">
-          {formatClock(elapsedMs)}
-        </span>
-        <button
-          type="button"
-          onClick={onPause}
-          disabled={!canPause}
-          aria-label={paused ? 'Resume' : 'Pause'}
-          aria-keyshortcuts="Escape"
-          className="grid size-9 place-items-center rounded-full bg-surface-muted text-ink transition-colors hover:bg-brand-100 focus-visible:outline-3 focus-visible:outline-brand-500 disabled:opacity-40"
-        >
-          {paused ? <Play aria-hidden className="size-4" /> : <Pause aria-hidden className="size-4" />}
-        </button>
+    <div className="@container w-full">
+      <div className="flex w-full flex-wrap items-center justify-between gap-x-2 gap-y-1 text-sm @min-[24rem]:flex-nowrap">
+        <p className="min-w-0 basis-full truncate font-display font-semibold text-ink @min-[24rem]:basis-auto">{title}</p>
+        <p title={rule} className={cn('shrink-0 font-bold tabular-nums', danger ? 'text-danger' : 'text-ink-soft')}>
+          <span className="sr-only">{rule}. </span>
+          {mistakeLimit > 0 ? `Mistakes ${mistakes}/${mistakeLimit}` : `Conflicts ${mistakes}`}
+        </p>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <span role="timer" aria-label={`Time ${formatClock(elapsedMs)}`} className="font-display text-base font-semibold text-ink tabular-nums">
+            {formatClock(elapsedMs)}
+          </span>
+          <button
+            type="button"
+            onClick={onPause}
+            disabled={!canPause}
+            aria-label={paused ? 'Resume' : 'Pause'}
+            aria-keyshortcuts="Escape"
+            className="grid size-11 place-items-center rounded-full bg-surface-muted text-ink transition-colors hover:bg-brand-100 focus-visible:outline-3 focus-visible:outline-brand-500 disabled:opacity-40 @min-[24rem]:size-9"
+          >
+            {paused ? <Play aria-hidden className="size-4" /> : <Pause aria-hidden className="size-4" />}
+          </button>
+        </div>
       </div>
     </div>
   )
