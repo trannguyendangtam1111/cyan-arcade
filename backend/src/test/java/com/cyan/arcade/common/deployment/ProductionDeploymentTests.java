@@ -72,6 +72,7 @@ class ProductionDeploymentTests {
 		assertThat(env.getProperty("app.chess.engine.pool-size", Integer.class)).isEqualTo(1);
 		assertThat(env.getProperty("app.chess.engine.idle-timeout-seconds", Integer.class)).isEqualTo(60);
 		assertThat(env.getProperty("server.tomcat.threads.max", Integer.class)).isEqualTo(12);
+		assertThat(env.getProperty("app.memory.diagnostics-enabled", Boolean.class)).isFalse();
 		assertThat(env.getProperty("management.endpoint.health.group.readiness.include")).isEqualTo("readinessState,db");
 	}
 

@@ -48,6 +48,8 @@ management:
           include: readinessState,db
 
 app:
+  memory:
+    diagnostics-enabled: ${MEMORY_DIAGNOSTICS_ENABLED:false}
   admin:
     seed: ${ADMIN_SEED_ENABLED:false}
   cors:
