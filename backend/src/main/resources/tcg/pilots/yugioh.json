@@ -1,0 +1,21 @@
+{
+  "game": {
+    "slug": "yugioh",
+    "name": "Yu-Gi-Oh! Trading Card Game",
+    "description": "Pilot only: not part of the arcade's catalog.",
+    "accentColor": "#7b4a12",
+    "attribution": "Card data from YGOPRODeck (ygoprodeck.com). Yu-Gi-Oh! is © Studio Dice/SHUEISHA, TV TOKYO, KONAMI. Cyan Arcade is not affiliated with or endorsed by Konami. No card images are used."
+  },
+  "region": "EN",
+  "rarities": [
+    { "code": "common", "name": "Common", "tier": 1, "source": ["Common"] },
+    { "code": "super-rare", "name": "Super Rare", "tier": 3, "source": ["Super Rare"] },
+    { "code": "ultra-rare", "name": "Ultra Rare", "tier": 4, "source": ["Ultra Rare"] },
+    { "code": "secret-rare", "name": "Secret Rare", "tier": 5, "source": ["Secret Rare"] },
+    { "code": "starlight-rare", "name": "Starlight Rare", "tier": 5, "source": ["Starlight Rare"] }
+  ],
+  "excludedRarities": {},
+  "sets": [
+    { "code": "betb", "name": "Beyond the Brave", "prefix": "BETB" }
+  ]
+}

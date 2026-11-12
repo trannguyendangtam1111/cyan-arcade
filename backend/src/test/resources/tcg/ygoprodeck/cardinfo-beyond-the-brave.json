@@ -1,0 +1,265 @@
+{
+ "data": [
+  {
+   "id": 24925387,
+   "name": "Adamancipator Conductor",
+   "typeline": [
+    "Rock",
+    "Tuner",
+    "Effect"
+   ],
+   "type": "Tuner Monster",
+   "humanReadableCardType": "Tuner Effect Monster",
+   "frameType": "effect",
+   "desc": "If this card is in your hand: You can place 1 other \"Adamancipator\" card from yo [trimmed]",
+   "race": "Rock",
+   "atk": 1400,
+   "def": 1100,
+   "level": 6,
+   "attribute": "EARTH",
+   "archetype": "Adamancipator",
+   "card_sets": [
+    {
+     "set_name": "Beyond the Brave",
+     "set_code": "BETB-EN024",
+     "set_rarity": "Super Rare",
+     "set_rarity_code": "(SR)"
+    }
+   ],
+   "card_images": [
+    {
+     "id": 24925387,
+     "image_url": "https://images.ygoprodeck.com/images/cards/24925387.jpg",
+     "image_url_small": "https://images.ygoprodeck.com/images/cards_small/24925387.jpg",
+     "image_url_cropped": "https://images.ygoprodeck.com/images/cards_cropped/24925387.jpg"
+    }
+   ]
+  },
+  {
+   "id": 51420096,
+   "name": "Adamancipator Crystal - Tiamite",
+   "typeline": [
+    "Rock",
+    "Effect"
+   ],
+   "type": "Effect Monster",
+   "humanReadableCardType": "Effect Monster",
+   "frameType": "effect",
+   "desc": "If this card is Special Summoned by the effect of an \"Adamancipator\" card: You c [trimmed]",
+   "race": "Rock",
+   "atk": 0,
+   "def": 2200,
+   "level": 4,
+   "attribute": "DARK",
+   "archetype": "Adamancipator",
+   "card_sets": [
+    {
+     "set_name": "Beyond the Brave",
+     "set_code": "BETB-EN025",
+     "set_rarity": "Common",
+     "set_rarity_code": "(C)"
+    }
+   ],
+   "card_images": [
+    {
+     "id": 51420096,
+     "image_url": "https://images.ygoprodeck.com/images/cards/51420096.jpg",
+     "image_url_small": "https://images.ygoprodeck.com/images/cards_small/51420096.jpg",
+     "image_url_cropped": "https://images.ygoprodeck.com/images/cards_cropped/51420096.jpg"
+    }
+   ]
+  },
+  {
+   "id": 41458361,
+   "name": "Adamancipator Luminous",
+   "typeline": [
+    "Rock",
+    "Link",
+    "Effect"
+   ],
+   "type": "Link Monster",
+   "humanReadableCardType": "Link Effect Monster",
+   "frameType": "link",
+   "desc": "2 Effect Monsters, including a Synchro Monster\r\nIf this card is Link Summoned, o [trimmed]",
+   "race": "Rock",
+   "atk": 1800,
+   "def": null,
+   "level": null,
+   "attribute": "LIGHT",
+   "archetype": "Adamancipator",
+   "linkval": 2,
+   "linkmarkers": [
+    "Left",
+    "Bottom"
+   ],
+   "card_sets": [
+    {
+     "set_name": "Beyond the Brave",
+     "set_code": "BETB-EN049",
+     "set_rarity": "Super Rare",
+     "set_rarity_code": "(SR)"
+    }
+   ],
+   "card_images": [
+    {
+     "id": 41458361,
+     "image_url": "https://images.ygoprodeck.com/images/cards/41458361.jpg",
+     "image_url_small": "https://images.ygoprodeck.com/images/cards_small/41458361.jpg",
+     "image_url_cropped": "https://images.ygoprodeck.com/images/cards_cropped/41458361.jpg"
+    }
+   ]
+  },
+  {
+   "id": 30068809,
+   "name": "Adamancipator Mates",
+   "type": "Spell Card",
+   "humanReadableCardType": "Normal Spell",
+   "frameType": "spell",
+   "desc": "Add 1 \"Adamancipator\" monster from your Deck to your hand. If this card is in yo [trimmed]",
+   "race": "Normal",
+   "archetype": "Adamancipator",
+   "card_sets": [
+    {
+     "set_name": "Beyond the Brave",
+     "set_code": "BETB-EN063",
+     "set_rarity": "Super Rare",
+     "set_rarity_code": "(SR)"
+    }
+   ],
+   "card_images": [
+    {
+     "id": 30068809,
+     "image_url": "https://images.ygoprodeck.com/images/cards/30068809.jpg",
+     "image_url_small": "https://images.ygoprodeck.com/images/cards_small/30068809.jpg",
+     "image_url_cropped": "https://images.ygoprodeck.com/images/cards_cropped/30068809.jpg"
+    }
+   ]
+  },
+  {
+   "id": 38331244,
+   "name": "Akasuna the Battle Ashtra",
+   "typeline": [
+    "Fiend",
+    "Effect"
+   ],
+   "type": "Effect Monster",
+   "humanReadableCardType": "Effect Monster",
+   "frameType": "effect",
+   "desc": "You can Special Summon this card (from your hand) by revealing 1 face-down card  [trimmed]",
+   "race": "Fiend",
+   "atk": 3000,
+   "def": 300,
+   "level": 8,
+   "attribute": "FIRE",
+   "archetype": "Ashtra",
+   "card_sets": [
+    {
+     "set_name": "Beyond the Brave",
+     "set_code": "BETB-EN009",
+     "set_rarity": "Secret Rare",
+     "set_rarity_code": "(ScR)"
+    },
+    {
+     "set_name": "Beyond the Brave",
+     "set_code": "BETB-EN009",
+     "set_rarity": "Starlight Rare",
+     "set_rarity_code": "(StR)"
+    }
+   ],
+   "card_images": [
+    {
+     "id": 38331244,
+     "image_url": "https://images.ygoprodeck.com/images/cards/38331244.jpg",
+     "image_url_small": "https://images.ygoprodeck.com/images/cards_small/38331244.jpg",
+     "image_url_cropped": "https://images.ygoprodeck.com/images/cards_cropped/38331244.jpg"
+    },
+    {
+     "id": 38331244,
+     "image_url": "https://images.ygoprodeck.com/images/cards/38331244.jpg",
+     "image_url_small": "https://images.ygoprodeck.com/images/cards_small/38331244.jpg",
+     "image_url_cropped": "https://images.ygoprodeck.com/images/cards_cropped/38331244.jpg"
+    }
+   ]
+  },
+  {
+   "id": 36270527,
+   "name": "Ars Magna the Finite and the Infinite",
+   "typeline": [
+    "Warrior",
+    "Effect"
+   ],
+   "type": "Effect Monster",
+   "humanReadableCardType": "Effect Monster",
+   "frameType": "effect",
+   "desc": "You can banish this card from your hand; add 1 non-Warrior \"Ars Magna\" monster f [trimmed]",
+   "race": "Warrior",
+   "atk": 1000,
+   "def": 2400,
+   "level": 8,
+   "attribute": "EARTH",
+   "archetype": "Ars Magna",
+   "card_sets": [
+    {
+     "set_name": "Beyond the Brave",
+     "set_code": "BETB-EN018",
+     "set_rarity": "Starlight Rare",
+     "set_rarity_code": "(StR)"
+    },
+    {
+     "set_name": "Beyond the Brave",
+     "set_code": "BETB-EN018",
+     "set_rarity": "Ultra Rare",
+     "set_rarity_code": "(UR)"
+    }
+   ],
+   "card_images": [
+    {
+     "id": 36270527,
+     "image_url": "https://images.ygoprodeck.com/images/cards/36270527.jpg",
+     "image_url_small": "https://images.ygoprodeck.com/images/cards_small/36270527.jpg",
+     "image_url_cropped": "https://images.ygoprodeck.com/images/cards_cropped/36270527.jpg"
+    },
+    {
+     "id": 36270527,
+     "image_url": "https://images.ygoprodeck.com/images/cards/36270527.jpg",
+     "image_url_small": "https://images.ygoprodeck.com/images/cards_small/36270527.jpg",
+     "image_url_cropped": "https://images.ygoprodeck.com/images/cards_cropped/36270527.jpg"
+    }
+   ]
+  },
+  {
+   "id": 15185344,
+   "name": "Crowned Siclavee",
+   "typeline": [
+    "Beast-Warrior",
+    "Xyz",
+    "Effect"
+   ],
+   "type": "XYZ Monster",
+   "humanReadableCardType": "Xyz Effect Monster",
+   "frameType": "xyz",
+   "desc": "2 Level 3 monsters\r\nCannot be used as material for an Xyz Summon. Once per turn, [trimmed]",
+   "race": "Beast-Warrior",
+   "atk": 2000,
+   "def": 2000,
+   "level": 3,
+   "attribute": "LIGHT",
+   "card_sets": [
+    {
+     "set_name": "Beyond the Brave",
+     "set_code": "BETB-EN045",
+     "set_rarity": "Common",
+     "set_rarity_code": "(C)"
+    }
+   ],
+   "card_images": [
+    {
+     "id": 15185344,
+     "image_url": "https://images.ygoprodeck.com/images/cards/15185344.jpg",
+     "image_url_small": "https://images.ygoprodeck.com/images/cards_small/15185344.jpg",
+     "image_url_cropped": "https://images.ygoprodeck.com/images/cards_cropped/15185344.jpg"
+    }
+   ]
+  }
+ ]
+}

@@ -3,6 +3,7 @@ package com.cyan.arcade.tcg.dataimport;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.time.Duration;
+import java.util.Map;
 import java.util.function.Supplier;
 
 import org.slf4j.Logger;
@@ -57,6 +58,18 @@ public final class SourceHttp {
 	public JsonNode get(String path) {
 		return withRetries("GET " + path,
 				() -> this.client.get().uri(path).accept(MediaType.APPLICATION_JSON).retrieve().body(String.class));
+	}
+
+	/**
+	 * A GET whose query carries values from the source's own data (a set's name, say): each
+	 * {@code {variable}} of the template is encoded as a value, so "&amp;" or ":" in it stays part of it.
+	 */
+	public JsonNode get(String uriTemplate, Map<String, ?> variables) {
+		return withRetries("GET " + uriTemplate, () -> this.client.get()
+			.uri(uriTemplate, variables)
+			.accept(MediaType.APPLICATION_JSON)
+			.retrieve()
+			.body(String.class));
 	}
 
 	public JsonNode post(String path, Object body) {

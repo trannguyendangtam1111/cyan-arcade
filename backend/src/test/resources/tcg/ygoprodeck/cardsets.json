@@ -1,0 +1,36 @@
+[
+ {
+  "set_name": "Beyond the Brave",
+  "set_code": "BETB",
+  "num_of_cards": 100,
+  "tcg_date": "2026-10-08",
+  "set_image": "https://images.ygoprodeck.com/images/sets/BETB.jpg"
+ },
+ {
+  "set_name": "Legend of Blue Eyes White Dragon",
+  "set_code": "LOB",
+  "num_of_cards": 355,
+  "tcg_date": "2002-03-08",
+  "set_image": "https://images.ygoprodeck.com/images/sets/LOB.jpg"
+ },
+ {
+  "set_name": "Legend of Blue Eyes White Dragon (25th Anniversary Edition)",
+  "set_code": "LOB",
+  "num_of_cards": 14,
+  "tcg_date": "2023-04-20",
+  "set_image": "https://images.ygoprodeck.com/images/sets/LOB.jpg"
+ },
+ {
+  "set_name": "Quarter Century Bonanza",
+  "set_code": "RA03",
+  "num_of_cards": 276,
+  "tcg_date": "2024-11-07"
+ },
+ {
+  "set_name": "Rarity Collection 5",
+  "set_code": "RA05",
+  "num_of_cards": 150,
+  "tcg_date": "2026-04-09",
+  "set_image": "https://images.ygoprodeck.com/images/sets/RA05.jpg"
+ }
+]
