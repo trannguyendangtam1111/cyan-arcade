@@ -259,6 +259,7 @@ The backend reads further settings from environment variables when run natively 
 | `TCG_IMPORT_REPORT_FILE` | empty | Also write the card game import report (JSON) to this path |
 | `TCG_POKEMON_URL`, `TCG_POKEMON_CONFIG` | TCGdex's GraphQL API, `classpath:tcg/sources/pokemon.json` | Where Pokémon data comes from, and which sets and pack layouts to use |
 | `TCG_ONE_PIECE_URL`, `TCG_ONE_PIECE_CONFIG` | `https://optcgapi.com/api`, `classpath:tcg/sources/one-piece.json` | The same for One Piece |
+| `APP_TCG_PILOTS_YUGIOH_ENABLED` | `false` | The Yu-Gi-Oh! pilot source (YGOPRODeck). On, it only reports what it reads and writes nothing; see "The Yu-Gi-Oh! pilot" in [ARCHITECTURE.md](ARCHITECTURE.md) |
 
 **Request limits and reverse proxies.** The three POST limits above use separate, atomic fixed
 windows starting at the first request. They return `429` problem details with code
@@ -370,6 +371,7 @@ External source ──(import job, on demand)──▶ PostgreSQL ──▶ Cyan
 - **Run it** with the `import-tcg` profile (commands above); `TCG_IMPORT_SOURCES=pokemon` imports one game. Import duration depends on the configured catalog and source availability.
 - **Repeatable and idempotent**: every card is keyed by its source's id (`sv01-001`, `OP01-120_p1`), so running it again adds what is new, updates what changed and duplicates nothing; every run ends with a report per game (in the log, and as JSON with `TCG_IMPORT_REPORT_FILE`): sets, cards and packs new, updated and unchanged, and every configured set held back with the reason. A set the source does not list, or lists without an image for every card, is held back and left exactly as it was, pack included (a card is never given a picture its source does not have). Nothing is deleted, because collections and opening histories point at cards. Each game is one transaction: a game that fails writes nothing, and the other games are still imported. `TCG_IMPORT_DRY_RUN=true` shows what an import would do without keeping it. Adding a new set is a line of configuration; see "A new set of an existing card game" in [ARCHITECTURE.md](ARCHITECTURE.md).
 - **Configurable**: which sets to take, what each source rarity is called and how rare it is, and how each kind of pack is made up live in `backend/src/main/resources/tcg/sources/*.json`, not in code.
+- **Yu-Gi-Oh! is a pilot, not a game here.** A YGOPRODeck source for Beyond the Brave exists, off by default; even on, it only reports what it reads. No Yu-Gi-Oh! card or image is imported: YGOPRODeck forbids hotlinking its images, and hosting the artwork needs Konami's permission.
 - **Pack odds are simulator probabilities.** Neither The Pokémon Company nor Bandai publishes official pull rates, so each pack layout is this arcade's approximation, and every pack says so on its page.
 - **Adding another card game** means one new source (a client and a mapper to the generic dataset format) and a configuration file; the tables, the API and the pages stay as they are. A game with no API can also be imported from a dataset file (`TCG_IMPORT_FILES`).
 
@@ -435,7 +437,8 @@ Useful backend entry points: [purchase concurrency tests](backend/src/test/java/
 │       │   └── tcg/          # the card game module: game, set, card, pack, opening, collection, dataimport
 │       └── resources/
 │           ├── db/migration/     # versioned Flyway migrations
-│           └── tcg/sources/      # which sets to import, rarities and pack layouts, per card game
+│           ├── tcg/sources/      # which sets to import, rarities and pack layouts, per card game
+│           └── tcg/pilots/       # card games being tried out, not part of the catalog (Yu-Gi-Oh!)
 ├── frontend/                 # React + Vite SPA, served by nginx in Docker
 │   ├── nginx/                # nginx configuration and security headers
 │   ├── public/               # favicon and game thumbnails
