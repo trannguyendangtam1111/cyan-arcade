@@ -1729,8 +1729,8 @@ An alternate art is a card of its own that **shares the number** of the card it 
 | ----- | ----- |
 | `externalId` | The card's id in the source it was imported from; unique within its game |
 | `number` | Printed on the card; text, because real sets number cards like `TG03` or `OP01-120`. Not unique: alternate arts share it |
-| `imageUrl` | The full-size image, for a closer look and pack openings |
-| `thumbnailUrl` | A smaller image for grids, or `null` when the source has one size only (One Piece) |
+| `imageUrl` | The full-size image, for a closer look and pack openings; `null` for a card shown as text (a game whose artwork the arcade may not show), never blank. Pokémon and One Piece cards always have one |
+| `thumbnailUrl` | A smaller image for grids, or `null` when the source has one size only (One Piece) or the card has no image |
 | `metadata` | The game's own fields: a Pokémon's HP, types, stage and illustrator; a One Piece card's color, cost, power, counter, types, effect, printed rarity and kind of print |
 
 #### `GET /api/tcg/packs?set={id}`
