@@ -50,7 +50,22 @@ export interface AchievementStatus {
   coins: number
   unlocked: boolean
   unlockedAt: string | null
+  /**
+   * How far the player is towards `target`, never above it: only for a locked achievement whose goal
+   * the server can measure (Classic games finished, a best Classic score). Absent otherwise, and from
+   * an older backend. Shown only; the server alone unlocks.
+   */
+  progress?: number | null
+  target?: number | null
+  /**
+   * What `progress` counts, with it: games finished under Classic rules (Classic runs of every game,
+   * and Sudoku's ranked boards), or the best Classic score of the achievement's game.
+   */
+  goal?: AchievementGoal | null
 }
+
+/** What a measured achievement goal counts. */
+export type AchievementGoal = 'GAMES_PLAYED' | 'BEST_SCORE'
 
 export interface GameHistoryEntry {
   gameSlug: string

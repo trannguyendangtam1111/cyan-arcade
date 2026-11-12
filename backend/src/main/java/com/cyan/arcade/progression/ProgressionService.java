@@ -165,6 +165,33 @@ public class ProgressionService {
 			.toList();
 	}
 
+	/**
+	 * Every achievement, as {@link #achievementsOf(Long)}, and for each locked one with a measurable
+	 * goal how far the player is towards it (capped at the target). Shown only: a run still unlocks
+	 * an achievement by its rule alone.
+	 */
+	@Transactional(readOnly = true)
+	public List<AchievementStatus> achievementsOf(Long userId, AchievementProgress progress) {
+		Map<String, Instant> unlockedAt = this.unlocked.of(userId);
+		return this.catalog.all().stream().map((achievement) -> {
+			boolean unlocked = unlockedAt.containsKey(achievement.code());
+			Achievement.Goal goal = achievement.goal();
+			Integer current = (unlocked || goal == null) ? null : progressTowards(goal, progress);
+			return new AchievementStatus(achievement.code(), achievement.name(), achievement.description(),
+					achievement.reward().xp(), achievement.reward().coins(), unlocked,
+					unlockedAt.get(achievement.code()), current, (current == null) ? null : goal.target(),
+					(current == null) ? null : goal.kind());
+		}).toList();
+	}
+
+	private static int progressTowards(Achievement.Goal goal, AchievementProgress progress) {
+		long value = switch (goal.kind()) {
+			case GAMES_PLAYED -> progress.gamesPlayed();
+			case BEST_SCORE -> Math.max(0, progress.bestScore(goal.gameSlug()).orElse(0));
+		};
+		return (int) Math.min(value, goal.target());
+	}
+
 	private int payBonus(Long userId, Bonus bonus) {
 		return pay(userId, bonus.type(), bonus.coins(), bonus.reference(), bonus.title());
 	}

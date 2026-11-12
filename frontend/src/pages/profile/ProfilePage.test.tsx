@@ -113,7 +113,7 @@ describe('profile page when signed in', () => {
     renderRoute('/profile')
 
     const achievements = await section(/^Achievements/)
-    const cards = await achievements.findAllByRole('listitem')
+    const cards = within(await achievements.findByRole('list', { name: 'All achievements' })).getAllByRole('listitem')
     expect(cards).toHaveLength(3)
     expect(achievements.getByRole('heading', { name: /Achievements/ })).toHaveTextContent('1 of 3')
     expect(within(cards[0]).getByRole('heading', { name: 'First Coin' })).toBeInTheDocument()

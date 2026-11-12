@@ -3,7 +3,6 @@ package com.cyan.arcade.score;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -217,17 +216,7 @@ public class GameSessionService {
 	 * Classic's progression (see {@link ModeSpec#classicProgression()}).
 	 */
 	private long classicGamesOf(Long userId) {
-		long classic = this.scores.countByUserIdAndMode(userId, GameModes.CLASSIC);
-		List<ModeCount> others = this.scores.countOtherModesOfUser(userId);
-		if (others.isEmpty()) {
-			return classic;
-		}
-		Map<Long, GameInfo> byId = this.games.gamesById(others.stream().map(ModeCount::gameId).toList());
-		return classic + others.stream()
-			.filter((count) -> byId.containsKey(count.gameId())
-					&& this.modes.countsAsClassic(byId.get(count.gameId()).slug(), count.mode()))
-			.mapToLong(ModeCount::runs)
-			.sum();
+		return ClassicGames.countFor(userId, this.scores, this.games, this.modes);
 	}
 
 	/**

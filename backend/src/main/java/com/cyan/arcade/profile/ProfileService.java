@@ -3,6 +3,7 @@ package com.cyan.arcade.profile;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalInt;
 import java.util.stream.Collectors;
 
 import com.cyan.arcade.common.error.NotFoundException;
@@ -14,6 +15,7 @@ import com.cyan.arcade.leaderboard.LeaderboardService;
 import com.cyan.arcade.leaderboard.PlayerRanks;
 import com.cyan.arcade.profile.GameHistoryResponse.Entry;
 import com.cyan.arcade.profile.ProfileResponse.Cosmetic;
+import com.cyan.arcade.progression.AchievementProgress;
 import com.cyan.arcade.progression.AchievementStatus;
 import com.cyan.arcade.progression.Levels;
 import com.cyan.arcade.progression.Levels.LevelProgress;
@@ -109,8 +111,33 @@ public class ProfileService {
 				account.id().equals(callerId));
 	}
 
+	/**
+	 * The player's own achievements, with progress towards the locked ones whose goal the recorded
+	 * scores can show: Classic games finished (counted as the rule counts them) and best Classic scores.
+	 */
 	public List<AchievementStatus> achievementsOf(Long userId) {
-		return this.progression.achievementsOf(userId);
+		long gamesPlayed = this.scores.gamesPlayedUnderClassicRules(userId);
+		List<GameStats> perGame = this.scores.statsByGameOf(userId);
+		Map<Long, GameInfo> gamesById = this.games
+			.gamesById(perGame.stream().map(GameStats::gameId).collect(Collectors.toSet()));
+		Map<String, Integer> bestBySlug = perGame.stream()
+			.filter((stats) -> gamesById.containsKey(stats.gameId()) && stats.bestScore() != null)
+			.collect(Collectors.toMap((stats) -> gamesById.get(stats.gameId()).slug(), GameStats::bestScore,
+					Math::max));
+		return this.progression.achievementsOf(userId, new AchievementProgress() {
+
+			@Override
+			public long gamesPlayed() {
+				return gamesPlayed;
+			}
+
+			@Override
+			public OptionalInt bestScore(String gameSlug) {
+				Integer best = bestBySlug.get(gameSlug);
+				return (best == null) ? OptionalInt.empty() : OptionalInt.of(best);
+			}
+
+		});
 	}
 
 	/**

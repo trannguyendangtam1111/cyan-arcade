@@ -89,6 +89,9 @@ export const achievementsFixture: AchievementStatus[] = [
     coins: 150,
     unlocked: false,
     unlockedAt: null,
+    progress: 3,
+    target: 10,
+    goal: 'GAMES_PLAYED',
   },
   {
     code: 'SNAKE_25',
@@ -98,6 +101,9 @@ export const achievementsFixture: AchievementStatus[] = [
     coins: 150,
     unlocked: false,
     unlockedAt: null,
+    progress: 20,
+    target: 25,
+    goal: 'BEST_SCORE',
   },
 ]
 

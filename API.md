@@ -381,10 +381,15 @@ Every achievement in the arcade, in display order, with whether the caller has i
     "xp": 100,
     "coins": 150,
     "unlocked": false,
-    "unlockedAt": null
+    "unlockedAt": null,
+    "progress": 3,
+    "target": 10,
+    "goal": "GAMES_PLAYED"
   }
 ]
 ```
+
+A locked achievement whose goal the kept scores can measure also has `progress` and `target`: games finished under Classic rules (Classic runs and Sudoku's boards, as the achievement counts them) for a games-played goal, the best Classic score of its game for a score goal. `progress` stops at `target`; reaching it unlocks the achievement on the next qualifying run. `goal` says what `progress` counts: `GAMES_PLAYED` or `BEST_SCORE`. All three are absent once unlocked, and for a goal that depends on what a single run reported (a 2048 tile, Tetris lines), since those details are not kept.
 
 #### `GET /api/users/me/stats`
 

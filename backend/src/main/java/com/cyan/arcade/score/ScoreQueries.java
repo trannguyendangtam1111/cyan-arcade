@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.cyan.arcade.game.GameService;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -23,9 +25,24 @@ public class ScoreQueries {
 
 	private final ScoreBoard board;
 
-	ScoreQueries(ScoreRepository scores, ScoreBoard board) {
+	private final GameModes modes;
+
+	private final GameService games;
+
+	ScoreQueries(ScoreRepository scores, ScoreBoard board, GameModes modes, GameService games) {
 		this.scores = scores;
 		this.board = board;
+		this.modes = modes;
+		this.games = games;
+	}
+
+	/**
+	 * How many games the player has finished under Classic rules: in Classic, or in a mode that shares
+	 * Classic's progression (see {@link ModeSpec#classicProgression()}). What games-played
+	 * achievements count, and so what their progress shows.
+	 */
+	public long gamesPlayedUnderClassicRules(Long userId) {
+		return ClassicGames.countFor(userId, this.scores, this.games, this.modes);
 	}
 
 	/**
