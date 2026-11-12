@@ -1,5 +1,7 @@
 package com.cyan.arcade.tcg.dataimport;
 
+import java.util.List;
+
 /**
  * Somewhere a real card game's catalog comes from: an API, a data dump. A source fetches what it
  * is configured to fetch and turns it into a {@link TcgDataset}; the import then works from that
@@ -20,5 +22,14 @@ public interface TcgSource {
 	 * @throws TcgSourceException when the source cannot be reached or answers with something unusable
 	 */
 	TcgDataset fetch();
+
+	/**
+	 * The dataset with what was found for each configured set (sets held back, cards left out).
+	 * A source that knows nothing more answers with its dataset alone.
+	 * @throws TcgSourceException when the source cannot be reached or answers with something unusable
+	 */
+	default SourceFetch fetchChecked() {
+		return new SourceFetch(fetch(), List.of());
+	}
 
 }

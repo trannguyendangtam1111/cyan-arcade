@@ -192,6 +192,10 @@ app:
       # Comma-separated paths of dataset files (the arcade's own JSON format) to import at startup.
       files: ${TCG_IMPORT_FILES:}
       exit-when-done: false
+      # Run every import and roll it back: the report says what would change, nothing is kept.
+      dry-run: ${TCG_IMPORT_DRY_RUN:false}
+      # Where to write the run's report as JSON (sets held back, counts of what changed). Optional.
+      report-file: ${TCG_IMPORT_REPORT_FILE:}
     sources:
       pokemon:
         # TCGdex's GraphQL API, and which sets to take and how their packs are made up.

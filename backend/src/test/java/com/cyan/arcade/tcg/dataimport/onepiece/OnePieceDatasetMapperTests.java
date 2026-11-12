@@ -3,8 +3,10 @@ package com.cyan.arcade.tcg.dataimport.onepiece;
 import java.util.List;
 import java.util.Map;
 
+import com.cyan.arcade.tcg.dataimport.SetCheck;
 import com.cyan.arcade.tcg.dataimport.SourceConfig;
 import com.cyan.arcade.tcg.dataimport.SourceConfig.SetChoice;
+import com.cyan.arcade.tcg.dataimport.SourceFetch;
 import com.cyan.arcade.tcg.dataimport.TcgDataset;
 import com.cyan.arcade.tcg.dataimport.TcgDataset.Card;
 import com.cyan.arcade.tcg.dataimport.TcgDataset.CardSet;
@@ -22,6 +24,7 @@ import org.springframework.core.io.ClassPathResource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
+import static org.assertj.core.api.Assertions.tuple;
 
 /**
  * OPTCG API's sets and cards, as recorded for real cards, turned into a dataset with the
@@ -211,18 +214,50 @@ class OnePieceDatasetMapperTests {
 	}
 
 	@Test
-	void aMissingSetOrAnUnknownRarityStopsTheImport() {
-		assertThatExceptionOfType(TcgSourceException.class)
-			.isThrownBy(() -> OnePieceDatasetMapper.map(narrowed(List.of("OP-01")), List.of(), Map.of()))
-			.withMessageContaining("no set 'OP-01'");
+	void anUnknownRarityStopsTheImport() {
 		assertThatExceptionOfType(TcgSourceException.class)
 			.isThrownBy(() -> map(List.of("OP-01"),
 					Map.of("OP-01", List.of(card("OP01-999", "OP01-999", "Mystery", "UR"),
 							card("OP01-077", "OP01-077", "Perona", "UC")))))
-			.withMessageContaining("{UR=1}");
-		assertThatExceptionOfType(TcgSourceException.class)
-			.isThrownBy(() -> map(List.of("OP-01"), Map.of("OP-01", List.of())))
-			.withMessageContaining("no cards for set 'OP-01'");
+			.withMessageContaining("{UR=1}")
+			.withMessageContaining("excludedRarities");
+	}
+
+	@Test
+	void aSetThatIsMissingIncompleteOrEmptyIsHeldBackAndTheOthersAreImported() {
+		SourceConfig config = narrowed(List.of("OP-01", "EB-01"));
+		List<OptcgSet> withoutEb01 = SETS.stream().filter((set) -> !set.id().equals("EB-01")).toList();
+
+		SourceFetch missing = OnePieceDatasetMapper.mapChecked(config, withoutEb01, Map.of("OP-01", romanceDawn()));
+		SourceFetch incomplete = OnePieceDatasetMapper.mapChecked(config, SETS, Map.of("OP-01", romanceDawn(), "EB-01",
+				List.of(card("EB01-001", "EB01-001", "Kouzuki Oden", "L"), new OptcgCard("EB01-002", "EB01-002",
+						"Not Pictured Yet", "C", "EB-01", "Character", "Red", "1", "2000", 1000, "Slash", "Land of Wano",
+						null, null))));
+		SourceFetch empty = OnePieceDatasetMapper.mapChecked(config, SETS, Map.of("OP-01", romanceDawn(), "EB-01",
+				List.of()));
+
+		for (SourceFetch fetched : List.of(missing, incomplete, empty)) {
+			assertThat(fetched.dataset().sets()).extracting(CardSet::externalId).containsExactly("OP-01");
+		}
+		assertThat(List.of(missing, incomplete, empty)).extracting((fetched) -> fetched.checks().get(1).status())
+			.containsExactly(SetCheck.Status.NOT_AT_SOURCE, SetCheck.Status.PENDING_IMAGES, SetCheck.Status.EMPTY);
+		assertThat(incomplete.checks().get(1)).extracting(SetCheck::listed, SetCheck::importable, SetCheck::withoutImage)
+			.containsExactly(2, 1, 1);
+		assertThat(OnePieceDatasetMapper.mapChecked(narrowed(List.of("EB-01")), withoutEb01, Map.of()).dataset())
+			.isNull();
+	}
+
+	@Test
+	void theChecksCountReprintsAndPrintsGivenAnIdOfTheirOwn() {
+		OptcgCard reprint = card("OP03-070", "OP03-070", "Monkey.D.Luffy", "R");
+		SourceFetch fetched = OnePieceDatasetMapper.mapChecked(narrowed(List.of("OP-04", "OP-03", "OP14-EB04")), SETS,
+				Map.of("OP-04", List.of(card("OP04-001", "OP04-001", "Nefeltari Vivi", "L"), reprint), "OP-03",
+						List.of(card("OP03-001", "OP03-001", "Portgas.D.Ace", "L"), reprint), "OP14-EB04",
+						List.of(card("OP14-074", "OP14-074", "Monet (Dash Pack)", "R"),
+								card("OP14-074", "OP14-074", "Monet", "R"))));
+
+		assertThat(fetched.checks()).extracting(SetCheck::setId, SetCheck::otherSet, SetCheck::renamedIds)
+			.containsExactly(tuple("OP-04", 1, 0), tuple("OP-03", 0, 0), tuple("OP14-EB04", 0, 1));
 	}
 
 	/** Maps with the shipped configuration, narrowed to some of its sets in the order given. */
