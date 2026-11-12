@@ -3,6 +3,7 @@ import { cn } from '@/lib/cn'
 import type { TcgCard } from '../api'
 import { TOP_TIER, tierStyle } from '../rarity'
 import { CardImage } from './CardImage'
+import { TextCardFace } from './TextCardFace'
 
 interface CardFaceProps {
   card: TcgCard
@@ -16,7 +17,8 @@ interface CardFaceProps {
 /**
  * The front of a card: its real image, as the card game's source serves it, in a frame that gets
  * fancier with the rarity tier. The rarest cards shimmer, with a single bar of light moved by
- * `transform` so it stays cheap to animate.
+ * `transform` so it stays cheap to animate. A card with no image (a game whose artwork the arcade
+ * may not show) gets its card text instead, in the same frame.
  */
 export function CardFace({ card, missing = false, size = 'full', className }: CardFaceProps) {
   const tier = card.rarity.tier
@@ -30,12 +32,16 @@ export function CardFace({ card, missing = false, size = 'full', className }: Ca
         className,
       )}
     >
-      <CardImage
-        key={src}
-        src={src}
-        fallbackLabel={`${card.name} ${card.number}`}
-        className={cn('size-full object-cover', missing && 'opacity-35 grayscale')}
-      />
+      {src ? (
+        <CardImage
+          key={src}
+          src={src}
+          fallbackLabel={`${card.name} ${card.number}`}
+          className={cn('size-full object-cover', missing && 'opacity-35 grayscale')}
+        />
+      ) : (
+        <TextCardFace card={card} size={size} missing={missing} />
+      )}
       {tier >= TOP_TIER && !missing && (
         <span
           aria-hidden
