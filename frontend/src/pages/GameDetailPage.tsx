@@ -155,6 +155,9 @@ function GameStage({ game, gameModule }: { game: GameDefinition; gameModule: Gam
   const timedResult = declaredModes?.find((mode) => mode.id === runMode)?.unit === 'MILLISECONDS'
   // An unranked mode (a Tetris Challenge stage) has no leaderboard and earns nothing: its result says only that it was kept.
   const rankedResult = declaredModes?.find((mode) => mode.id === runMode)?.ranked !== false
+  // A ranked mode outside Classic progression (Tetris Ultra) has its own board but leaves achievements
+  // and daily challenges alone: the result says so, since the rewards alone would not.
+  const progressionResult = declaredModes?.find((mode) => mode.id === runMode)?.classicProgression !== false
   // A reward paid outside a score session (a won Daily Board): the player's coins, XP and history
   // are read again, as after a submitted run.
   const queryClient = useQueryClient()
@@ -202,6 +205,7 @@ function GameStage({ game, gameModule }: { game: GameDefinition; gameModule: Gam
         boardDate={boardDate}
         timed={timedResult}
         ranked={rankedResult}
+        progression={progressionResult}
       />
     </Card>
   )
@@ -219,13 +223,15 @@ interface ScoreStatusProps {
   timed: boolean
   /** Whether the run's mode is ranked: an unranked one has no leaderboard to link and no rewards to show. */
   ranked: boolean
+  /** Whether the run's mode counts towards achievements and daily challenges, as Classic does. */
+  progression: boolean
 }
 
 /** What an unscored game's results go to: nowhere. */
 function ignoreResult() {}
 
 /** Tells the player what happened to the score of the run that just ended. */
-function ScoreStatus({ submission, onRetry, gameSlug, mode, boardDate, timed, ranked }: ScoreStatusProps) {
+function ScoreStatus({ submission, onRetry, gameSlug, mode, boardDate, timed, ranked, progression }: ScoreStatusProps) {
   if (submission.status === 'idle') return null
   const noun = timed ? 'time' : 'score'
   const value = (score: number) => <strong>{timed ? formatGameTime(score) : score}</strong>
@@ -269,7 +275,12 @@ function ScoreStatus({ submission, onRetry, gameSlug, mode, boardDate, timed, ra
           ) : (
             <>
               {submission.rewards ? (
-                <RewardBadges rewards={submission.rewards} />
+                <>
+                  <RewardBadges rewards={submission.rewards} />
+                  {!progression && (
+                    <span className="text-ink-soft">Achievements and daily challenges count Classic runs only.</span>
+                  )}
+                </>
               ) : (
                 !submission.alreadySaved && <GuestHint gameSlug={gameSlug} />
               )}

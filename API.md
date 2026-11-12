@@ -479,7 +479,7 @@ Today's challenges. Public.
       "id": 3,
       "title": "Tidy Up",
       "description": "Clear 5 lines in one game of Tetris.",
-      "game": { "slug": "tetris", "name": "Tetris" },
+      "game": { "slug": "tetris", "name": "Tetris", "classicRunsOnly": true },
       "activity": null,
       "target": 5,
       "xpReward": 30,
@@ -506,6 +506,7 @@ Today's challenges. Public.
 | `date` | The day these challenges belong to, in UTC |
 | `resetsAt` | When the next set takes over |
 | `challenges[].game` | The game the challenge is played in; `null` for an activity's challenge |
+| `challenges[].game.classicRunsOnly` | Whether the game has other modes whose runs do not count towards the challenge, so only its Classic runs do (Tetris, Snake, 2048, Minesweeper). `false` for a game with Classic alone and for Sudoku, whose every board counts |
 | `challenges[].activity` | What an activity's challenge counts (`TCG_PACK_OPENED`); `null` for a game's |
 | `challenges[].target` | The number to reach: in one run for a game (`1` for "finish a game"), over the day for an activity. `description` says what is counted |
 | `challenges[].xpReward`, `challenges[].coinReward` | XP and coins for completing it |
@@ -526,7 +527,7 @@ The same challenges with the caller's own progress. `401 UNAUTHORIZED` without a
       "id": 3,
       "title": "Tidy Up",
       "description": "Clear 5 lines in one game of Tetris.",
-      "game": { "slug": "tetris", "name": "Tetris" },
+      "game": { "slug": "tetris", "name": "Tetris", "classicRunsOnly": true },
       "activity": null,
       "target": 5,
       "xpReward": 30,
@@ -603,7 +604,7 @@ The modes a game offers, as its rules on the server declare them: the only list 
 
 ```json
 [
-  { "id": "classic", "name": "Classic", "ranked": true, "order": "DESC", "unit": "POINTS" }
+  { "id": "classic", "name": "Classic", "ranked": true, "order": "DESC", "unit": "POINTS", "classicProgression": true }
 ]
 ```
 
@@ -614,6 +615,7 @@ The modes a game offers, as its rules on the server declare them: the only list 
 | `ranked` | Whether the mode has a leaderboard. An unranked mode's runs are still recorded |
 | `order` | `DESC` (highest score first) or `ASC` (lowest first, such as a fastest time) |
 | `unit` | What a score counts: `POINTS`, or `MILLISECONDS` (a time) |
+| `classicProgression` | Whether the mode's runs count where Classic runs do: achievements, daily challenges and the personal-best bonus. `true` for Classic and for Sudoku's boards; `false` for every other mode |
 
 Classic is always ranked, `DESC` and `POINTS`. An unscored game (`scored: false`) answers `[]`; `404 NOT_FOUND` when no active game has that slug. Score limits stay on the server.
 

@@ -71,10 +71,22 @@ export interface GameMode {
   ranked: boolean
   order: ModeOrder
   unit: ModeUnit
+  /**
+   * Whether the mode's runs count where Classic runs do: achievements, daily challenges and the
+   * personal-best bonus. Absent from an older backend, which says nothing either way.
+   */
+  classicProgression?: boolean
 }
 
 /** The mode every scored game has. A backend from before game modes offers this one alone. */
-export const CLASSIC: GameMode = { id: 'classic', name: 'Classic', ranked: true, order: 'DESC', unit: 'POINTS' }
+export const CLASSIC: GameMode = {
+  id: 'classic',
+  name: 'Classic',
+  ranked: true,
+  order: 'DESC',
+  unit: 'POINTS',
+  classicProgression: true,
+}
 
 /**
  * The modes a game offers, as the server declares them: the only source of truth for which modes

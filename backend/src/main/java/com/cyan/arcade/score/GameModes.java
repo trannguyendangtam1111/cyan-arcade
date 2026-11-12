@@ -80,6 +80,15 @@ public class GameModes {
 	}
 
 	/**
+	 * Whether the game has a mode whose runs do not count where Classic runs do (Tetris's Sprint, a
+	 * Snake map), so a player is told that only Classic runs count. False for a game with Classic
+	 * alone, for one whose every mode shares Classic progression (Sudoku), and for an unscored game.
+	 */
+	public boolean hasModesOutsideClassicProgression(GameInfo game) {
+		return modesOf(game).stream().anyMatch((mode) -> !countsAsClassic(game.slug(), mode.id()));
+	}
+
+	/**
 	 * Whether an accepted run of this game and mode reached the mode's own end (see
 	 * {@link RunRules#completes}). A game without rules has Classic alone, whose every run completes.
 	 */

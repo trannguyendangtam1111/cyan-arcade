@@ -22,6 +22,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.everyItem;
+import static org.hamcrest.Matchers.is;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -212,9 +215,22 @@ class GameModeApiTests {
 				.andExpect(jsonPath("$[0].ranked").value(true))
 				.andExpect(jsonPath("$[0].order").value("DESC"))
 				.andExpect(jsonPath("$[0].unit").value("POINTS"))
+				.andExpect(jsonPath("$[0].classicProgression").value(true))
 				// Limits stay on the server.
 				.andExpect(jsonPath("$[0].maxScore").doesNotExist());
 		}
+	}
+
+	@Test
+	void eachModeSaysWhetherItsRunsCountWhereClassicRunsDo() throws Exception {
+		// Tetris's other modes have rewards and boards of their own: achievements and challenges skip them.
+		this.mockMvc.perform(get("/api/games/{slug}/modes", "tetris"))
+			.andExpect(jsonPath("$[?(@.id == 'classic')].classicProgression", contains(true)))
+			.andExpect(jsonPath("$[?(@.id == 'ultra')].classicProgression", contains(false)))
+			.andExpect(jsonPath("$[?(@.id == 'challenge-1')].classicProgression", contains(false)));
+		// Sudoku's Daily and difficulty boards replaced its single Classic board, and count as it did.
+		this.mockMvc.perform(get("/api/games/{slug}/modes", "sudoku"))
+			.andExpect(jsonPath("$[*].classicProgression", everyItem(is(true))));
 	}
 
 	@Test

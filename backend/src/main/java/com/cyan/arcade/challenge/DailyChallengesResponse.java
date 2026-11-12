@@ -23,8 +23,14 @@ public record DailyChallengesResponse(LocalDate date, Instant resetsAt, List<Cha
 			int xpReward, int coinReward, LocalDate date) {
 	}
 
-	/** The game a challenge is played in. */
-	public record Game(String slug, String name) {
+	/**
+	 * The game a challenge is played in.
+	 *
+	 * @param classicRunsOnly whether the game has other modes whose runs do not count towards the
+	 * challenge, so only its Classic runs do (Tetris, with Sprint and Ultra). False when every run of
+	 * the game counts (a game with Classic alone, or Sudoku's boards)
+	 */
+	public record Game(String slug, String name, boolean classicRunsOnly) {
 	}
 
 	/** What an activity's challenge counts, e.g. {@code TCG_PACK_OPENED}, "Card packs". */

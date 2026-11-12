@@ -13,6 +13,7 @@ import com.cyan.arcade.challenge.DailyChallengesResponse.Activity;
 import com.cyan.arcade.challenge.DailyChallengesResponse.Game;
 import com.cyan.arcade.game.GameInfo;
 import com.cyan.arcade.game.GameService;
+import com.cyan.arcade.score.GameModes;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,11 +30,14 @@ public class DailyChallengeService {
 
 	private final GameService games;
 
+	private final GameModes modes;
+
 	private final Clock clock;
 
-	DailyChallengeService(DailyChallengeStore store, GameService games, Clock clock) {
+	DailyChallengeService(DailyChallengeStore store, GameService games, GameModes modes, Clock clock) {
 		this.store = store;
 		this.games = games;
+		this.modes = modes;
 		this.clock = clock;
 	}
 
@@ -87,12 +91,13 @@ public class DailyChallengeService {
 			.collect(Collectors.toSet()));
 	}
 
-	private static Game gameOf(DailyChallenge challenge, Map<Long, GameInfo> gamesById) {
+	private Game gameOf(DailyChallenge challenge, Map<Long, GameInfo> gamesById) {
 		if (!challenge.isAboutAGame()) {
 			return null;
 		}
 		GameInfo game = Objects.requireNonNull(gamesById.get(challenge.gameId()));
-		return new Game(game.slug(), game.name());
+		// Said with the challenge, so a client need not ask for each game's modes to explain it.
+		return new Game(game.slug(), game.name(), this.modes.hasModesOutsideClassicProgression(game));
 	}
 
 	private static Activity activityOf(DailyChallenge challenge) {

@@ -48,6 +48,39 @@ describe('daily challenges on the home page', () => {
     expect(requested(fetchSpy)).not.toContain('/api/daily-challenges')
   })
 
+  it('says which runs count for a game whose other modes do not, as the challenge itself says', async () => {
+    // Snake and Tetris have other modes; 2048 here has Classic alone.
+    const classicRunsOnly = new Set(['snake', 'tetris'])
+    const fetchSpy = mockApi({
+      user: pixel,
+      challenges: challengesFixture.map((challenge) =>
+        challenge.game
+          ? { ...challenge, game: { ...challenge.game, classicRunsOnly: classicRunsOnly.has(challenge.game.slug) } }
+          : challenge,
+      ),
+    })
+    renderRoute('/')
+
+    const challenges = section('Daily challenges')
+    const tetris = await challenges.findByRole('link', { name: /tidy up/i })
+    expect(within(tetris).getByText('Only Classic runs count')).toBeInTheDocument()
+    // 2048 counts every run, and Snake's challenge is already done: nothing to say on either.
+    expect(within(challenges.getByRole('link', { name: /five twelve/i })).queryByText('Only Classic runs count')).not.toBeInTheDocument()
+    expect(within(challenges.getByRole('link', { name: /snack time/i })).queryByText('Only Classic runs count')).not.toBeInTheDocument()
+    // Said with the challenges: no game's modes are asked for to say it.
+    expect(requested(fetchSpy).filter((path) => path.endsWith('/modes'))).toEqual([])
+  })
+
+  it('says nothing about modes when the server does not (an older backend)', async () => {
+    const fetchSpy = mockApi({ user: pixel, challenges: challengesFixture })
+    renderRoute('/')
+
+    const challenges = section('Daily challenges')
+    await challenges.findByRole('link', { name: /tidy up/i })
+    expect(challenges.queryByText('Only Classic runs count')).not.toBeInTheDocument()
+    expect(requested(fetchSpy).filter((path) => path.endsWith('/modes'))).toEqual([])
+  })
+
   it('says when the next set arrives', async () => {
     const inFiveHours = new Date(Date.now() + (5 * 60 + 12) * 60_000 + 30_000).toISOString()
     mockApi({ challenges: challengesFixture, challengesResetAt: inFiveHours })

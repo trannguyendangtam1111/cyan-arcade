@@ -29,17 +29,26 @@ class GameModeController {
 	@GetMapping("/api/games/{slug}/modes")
 	List<ModeResponse> modes(@PathVariable String slug) {
 		GameInfo game = this.games.requireActiveGame(slug);
-		return this.modes.modesOf(game).stream().map(ModeResponse::of).toList();
+		return this.modes.modesOf(game)
+			.stream()
+			.map((spec) -> ModeResponse.of(spec, this.modes.countsAsClassic(game.slug(), spec.id())))
+			.toList();
 	}
 
 	/**
 	 * A mode as clients see it: what to call it and how its scores read. The limits that make the
 	 * mode what it is stay on the server.
+	 *
+	 * @param classicProgression whether its runs count where Classic runs do: achievements, daily
+	 * challenges and the personal-best bonus. True for Classic and for a mode that shares its
+	 * progression (Sudoku's boards); false for every other mode
 	 */
-	record ModeResponse(String id, String name, boolean ranked, ModeSpec.Order order, ModeSpec.Unit unit) {
+	record ModeResponse(String id, String name, boolean ranked, ModeSpec.Order order, ModeSpec.Unit unit,
+			boolean classicProgression) {
 
-		static ModeResponse of(ModeSpec spec) {
-			return new ModeResponse(spec.id(), spec.name(), spec.ranked(), spec.order(), spec.unit());
+		static ModeResponse of(ModeSpec spec, boolean classicProgression) {
+			return new ModeResponse(spec.id(), spec.name(), spec.ranked(), spec.order(), spec.unit(),
+					classicProgression);
 		}
 
 	}

@@ -1,7 +1,7 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CLASSIC, type GameMode } from '@/api/games'
-import { mockApi } from '@/test/mockApi'
+import { mockApi, pixel } from '@/test/mockApi'
 import { renderRoute } from '@/test/renderWithProviders'
 import type { Cell, TetrisState } from '@/games/tetris/types/tetrisTypes'
 
@@ -67,6 +67,21 @@ describe('Tetris Sprint on the game page', () => {
     const seconds = (finish.score / 1000).toFixed(2).padStart(5, '0')
     // The status line, not the game's own help (which also says what is not saved).
     expect(await screen.findByText(/^Time\s+saved\.$/)).toHaveTextContent(`Time 0:${seconds} saved.`)
+  })
+
+  it('says a Sprint run leaves achievements and daily challenges to Classic, when the server says so', async () => {
+    mockApi({ user: pixel, modes: { tetris: [CLASSIC, { ...SPRINT, classicProgression: false }] } })
+    renderRoute('/games/tetris')
+
+    const modes = await screen.findByRole('group', { name: 'Game mode' })
+    fireEvent.click(within(modes).getByRole('button', { name: 'Sprint' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+    await act(() => new Promise((resolve) => setTimeout(resolve, 300)))
+    fireEvent.keyDown(window, { key: ' ' })
+
+    expect(await screen.findByText('Achievements and daily challenges count Classic runs only.')).toBeInTheDocument()
+    // Its own rewards still show beside the note.
+    expect(screen.getByText(/^\+\d+ XP$/)).toBeInTheDocument()
   })
 
   it('offers no Sprint while the server does not declare it', async () => {
