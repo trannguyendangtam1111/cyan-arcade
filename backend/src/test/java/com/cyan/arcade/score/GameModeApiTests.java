@@ -30,7 +30,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * The mode a run is played under: one its game's rules declare, chosen when it starts, Classic
- * unless the client names another, and carried unchanged to its score. Existing games retain Classic.
+ * unless the client names another, and carried unchanged to its score. Every game declares Classic
+ * first; the other modes each game declares are pinned below.
  */
 @IntegrationTest
 class GameModeApiTests {
@@ -40,6 +41,9 @@ class GameModeApiTests {
 
 	@Autowired
 	private JdbcTemplate jdbc;
+
+	@Autowired
+	private List<RunRules> rules;
 
 	@Test
 	void aRunStartedWithoutAModeIsClassic() throws Exception {
@@ -150,6 +154,39 @@ class GameModeApiTests {
 	// --- Which modes a game offers ---------------------------------------------------------------------
 
 	@Test
+	void onlyTetrisSnake2048MinesweeperAndSudokuDeclareModesBesidesClassic() {
+		List<RunRules> realGames = this.rules.stream().filter((rules) -> !rules.gameSlug().equals(ModeLab.GAME)).toList();
+
+		assertThat(realGames).isNotEmpty().allSatisfy((rules) -> {
+			if (rules.gameSlug().equals("tetris")) {
+				assertThat(rules.modes()).extracting(ModeSpec::id)
+					.containsExactly("classic", "ultra", "sprint", "challenge-1", "challenge-2", "challenge-3", "challenge-4",
+							"challenge-5", "challenge-6");
+			}
+			else if (rules.gameSlug().equals("snake")) {
+				assertThat(rules.modes()).extracting(ModeSpec::id)
+					.containsExactly("classic", "map-pillars", "map-tunnels", "map-rooms", "adventure-1", "adventure-2",
+							"adventure-3", "adventure-4", "adventure-5", "adventure-6");
+			}
+			else if (rules.gameSlug().equals("2048")) {
+				assertThat(rules.modes()).extracting(ModeSpec::id).containsExactly("classic", "moves", "time-attack", "puzzle-1",
+						"puzzle-2", "puzzle-3", "puzzle-4", "puzzle-5", "puzzle-6");
+			}
+			else if (rules.gameSlug().equals("minesweeper")) {
+				assertThat(rules.modes()).extracting(ModeSpec::id)
+					.containsExactly("classic", "beginner", "intermediate", "expert");
+			}
+			else if (rules.gameSlug().equals("sudoku")) {
+				assertThat(rules.modes()).extracting(ModeSpec::id)
+					.containsExactly("classic", "daily", "easy", "medium", "hard", "expert");
+			}
+			else {
+				assertThat(rules.modes()).as(rules.gameSlug()).containsExactly(ModeSpec.CLASSIC);
+			}
+		});
+	}
+
+	@Test
 	void everyScoredGameInTheCatalogOffersClassicFirst() throws Exception {
 		List<String> catalog = this.jdbc.queryForList("SELECT slug FROM games WHERE active AND scored ORDER BY slug",
 				String.class);
@@ -158,6 +195,10 @@ class GameModeApiTests {
 		for (String slug : catalog) {
 			this.mockMvc.perform(get("/api/games/{slug}/modes", slug))
 				.andExpect(status().isOk())
+				// Tetris: Classic, Ultra, Sprint and the six Challenge stages; Snake: Classic, three maps and
+				// the six Adventure stages; 2048: Classic, Moves Limit, Time Attack and the six Puzzle stages;
+				// Minesweeper: Classic and the Beginner, Intermediate and Expert races; Sudoku: Classic (scores
+				// from before its boards were split), Daily and the four difficulties.
 				.andExpect(jsonPath("$.length()").value(switch (slug) {
 					case "tetris" -> 9;
 					case "snake" -> 10;
