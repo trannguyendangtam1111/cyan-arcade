@@ -75,6 +75,22 @@ class ExpansionImportTests {
 		assertThat(again.newCards()).isZero();
 		assertThat(again.updatedCards()).isZero();
 		assertThat(again.unchangedCards()).isEqualTo(5);
+		assertThat(List.of(again.newSets(), again.updatedSets(), again.newPacks(), again.updatedPacks()))
+			.containsOnly(0);
+
+		// The source holds the second set back (say its images are not all there yet): the dataset
+		// leaves it out, and its cards, its pack and what players have of it stay as they are.
+		List<Map<String, Object>> cardsNow = cards();
+		List<Map<String, Object>> packsNow = packs();
+		List<Map<String, Object>> collectionNow = collectionOf(playerId);
+		List<Map<String, Object>> openingsNow = openingsOf(playerId);
+		ImportReport heldBack = this.importer.importDataset(dataset(false), "test");
+		assertThat(heldBack.setsNotInDataset()).containsExactly("second");
+		assertThat(cards()).isEqualTo(cardsNow);
+		assertThat(packs()).isEqualTo(packsNow);
+		assertThat(collectionOf(playerId)).isEqualTo(collectionNow);
+		assertThat(openingsOf(playerId)).isEqualTo(openingsNow);
+		open(player, "second");
 	}
 
 	private void open(MockHttpSession session, String setCode) throws Exception {

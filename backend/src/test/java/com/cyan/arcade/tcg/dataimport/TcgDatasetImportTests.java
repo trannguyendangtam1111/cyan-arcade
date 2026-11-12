@@ -44,7 +44,8 @@ class TcgDatasetImportTests {
 	void importsAGameWithItsSetsCardsPacksPoolsAndOdds() {
 		ImportReport report = this.importer.importDataset(game("import-basic", "Basic"), "test");
 
-		assertThat(report).isEqualTo(new ImportReport("import-basic", 2, 1, 3, 3, 0, 0, 1));
+		assertThat(report).isEqualTo(new ImportReport("import-basic", false, 2, 1, 3, 1, 3, 0, 0, 1, 0, 1, 0, 0,
+				List.of(), Map.of("base", 3), List.of()));
 		assertThat(count("tcg_sets s JOIN tcg_games g ON g.id = s.game_id WHERE g.slug = 'import-basic'")).isEqualTo(1);
 		assertThat(this.jdbc.queryForList("""
 				SELECT c.card_number || ':' || r.code || ':' || (c.metadata ->> 'power')
@@ -73,6 +74,9 @@ class TcgDatasetImportTests {
 		assertThat(second.newCards()).isZero();
 		assertThat(second.updatedCards()).isZero();
 		assertThat(second.unchangedCards()).isEqualTo(3);
+		assertThat(List.of(second.newSets(), second.updatedSets(), second.newPacks(), second.updatedPacks(),
+				second.movedCards())).containsOnly(0);
+		assertThat(second.newCardsBySet()).isEmpty();
 		assertThat(cardRows("import-twice")).isEqualTo(cardsBefore);
 		assertThat(packId("import-twice")).isEqualTo(packBefore);
 		assertThat(count("tcg_games WHERE slug = 'import-twice'")).isEqualTo(1);
@@ -92,8 +96,12 @@ class TcgDatasetImportTests {
 						List.of(card("1", "Renamed", "common", 10), card("2", "Card 2", "rare", 20),
 								card("3", "Card 3", "rare", 30), card("4", "Card 4", "common", 40)),
 						List.of(new Pack("pack", "Pack", "", "/pack.svg", ONE_COMMON, List.of("1", "4"))))));
-		this.importer.importDataset(corrected, "test");
+		ImportReport report = this.importer.importDataset(corrected, "test");
 
+		// The pack's pool and odds changed, the set did not.
+		assertThat(report.updatedPacks()).isEqualTo(1);
+		assertThat(report.updatedSets()).isZero();
+		assertThat(report.newCardsBySet()).containsExactly(Map.entry("base", 1));
 		assertThat(this.jdbc.queryForObject("SELECT name || ':' || card_back_url FROM tcg_games WHERE slug = 'import-fix'",
 				String.class))
 			.isEqualTo("After:/back.svg");
@@ -104,6 +112,66 @@ class TcgDatasetImportTests {
 		assertThat(cards.subList(0, 3)).extracting((row) -> row.get("id")).isEqualTo(idsBefore);
 		assertThat(poolOf("import-fix")).containsExactly("1", "4");
 		assertThat(count("tcg_pack_slot_odds WHERE pack_id = " + packId("import-fix"))).isEqualTo(1);
+	}
+
+	@Test
+	void aDryRunReportsWhatTheImportWouldDoAndLeavesTheCatalogAsItWas() {
+		this.importer.importDataset(game("import-dry", "Dry"), "test");
+		List<Map<String, Object>> cardsBefore = cardRows("import-dry");
+		List<String> poolBefore = poolOf("import-dry");
+		TcgDataset changed = new TcgDataset(new Game("import-dry", "Dry, renamed", "", "/img.svg", null), RARITIES,
+				List.of(new CardSet("base", "Base", "", "/set.svg", null,
+						List.of(card("1", "Renamed", "common", 10), card("2", "Card 2", "common", 20),
+								card("3", "Card 3", "rare", 30), card("4", "Card 4", "common", 40)),
+						List.of(new Pack("pack", "Pack", "", "/pack.svg", ONE_COMMON, List.of("1", "4"))))));
+
+		ImportReport report = this.importer.importDataset(changed, "test", true);
+
+		assertThat(report.dryRun()).isTrue();
+		assertThat(report.newCards()).isEqualTo(1);
+		assertThat(report.updatedCards()).isEqualTo(1);
+		assertThat(report.updatedPacks()).isEqualTo(1);
+		assertThat(this.jdbc.queryForObject("SELECT name FROM tcg_games WHERE slug = 'import-dry'", String.class))
+			.isEqualTo("Dry");
+		assertThat(cardRows("import-dry")).isEqualTo(cardsBefore);
+		assertThat(poolOf("import-dry")).isEqualTo(poolBefore);
+		assertThat(count("tcg_pack_slot_odds WHERE pack_id = " + packId("import-dry"))).isEqualTo(4);
+
+		// Nor does a dry run of a game the catalog does not have leave anything of it.
+		this.importer.importDataset(game("import-dry-new", "New"), "test", true);
+		assertThat(count("tcg_games WHERE slug = 'import-dry-new'")).isZero();
+	}
+
+	@Test
+	void aSetTheDatasetNoLongerHasIsLeftExactlyAsItWas() {
+		CardSet kept = new CardSet("kept", null, "Kept", "", null, null, null, null,
+				List.of(variant("kept-1", "1", "common")),
+				List.of(new Pack("pack", "Pack", "", null, ONE_COMMON, null)));
+		CardSet heldBack = new CardSet("held", null, "Held", "", null, null, null, null,
+				List.of(variant("held-1", "1", "common"), variant("held-2", "2", "rare")),
+				List.of(new Pack("pack", "Pack", "", null, ONE_COMMON, null)));
+		this.importer.importDataset(new TcgDataset(new Game("import-held", "Held", "", "/cover.png", null), RARITIES,
+				List.of(kept, heldBack)), "test");
+		List<Map<String, Object>> before = this.jdbc.queryForList("""
+				SELECT s.code, s.display_order, p.id, p.active, c.id AS card, c.external_id, c.image_url
+				FROM tcg_sets s JOIN tcg_games g ON g.id = s.game_id JOIN tcg_packs p ON p.set_id = s.id
+				JOIN tcg_pack_cards pc ON pc.pack_id = p.id JOIN tcg_cards c ON c.id = pc.card_id
+				WHERE g.slug = 'import-held' AND s.code = 'held' ORDER BY c.id
+				""");
+
+		// The source held the set back, and the dataset has no picture for the game either.
+		ImportReport report = this.importer.importDataset(new TcgDataset(new Game("import-held", "Held", "", null, null),
+				RARITIES, List.of(kept)), "test");
+
+		assertThat(report.setsNotInDataset()).containsExactly("held");
+		assertThat(this.jdbc.queryForList("""
+				SELECT s.code, s.display_order, p.id, p.active, c.id AS card, c.external_id, c.image_url
+				FROM tcg_sets s JOIN tcg_games g ON g.id = s.game_id JOIN tcg_packs p ON p.set_id = s.id
+				JOIN tcg_pack_cards pc ON pc.pack_id = p.id JOIN tcg_cards c ON c.id = pc.card_id
+				WHERE g.slug = 'import-held' AND s.code = 'held' ORDER BY c.id
+				""")).isEqualTo(before).isNotEmpty().allSatisfy((row) -> assertThat(row.get("active")).isEqualTo(true));
+		assertThat(this.jdbc.queryForObject("SELECT image_url FROM tcg_games WHERE slug = 'import-held'", String.class))
+			.isEqualTo("/cover.png");
 	}
 
 	@Test
@@ -213,6 +281,8 @@ class TcgDatasetImportTests {
 		// card-b moved and changed; the other two are as they were.
 		assertThat(report.updatedCards()).isEqualTo(1);
 		assertThat(report.unchangedCards()).isEqualTo(2);
+		assertThat(report.movedCards()).isEqualTo(1);
+		assertThat(report.movedExamples()).containsExactly("card-b: first -> second");
 		assertThat(this.jdbc.queryForMap("""
 				SELECT c.id, s.code, c.card_number, r.code AS rarity
 				FROM tcg_cards c JOIN tcg_sets s ON s.id = c.set_id JOIN tcg_rarities r ON r.id = c.rarity_id
