@@ -153,6 +153,37 @@ class PokemonDatasetMapperTests {
 	}
 
 	@Test
+	void theRgbMewsTcgdexAddedToTheThirtiethCelebrationAreLeftOutOnPurpose() {
+		// TCGdex lists 161 cards for "30th" since three RGB Rare Mews (localIds R, G and B) were added;
+		// the rarity is excluded in the shipped configuration, so the set imports as before.
+		TcgdexSet celebration = new TcgdexSet("30th", "30th Celebration", "2026-09-16", null,
+				new TcgdexSet.Serie("me", "Mega Evolution"));
+		TcgDataset dataset = map(new FetchedSet(new SetChoice("30th", "celebration", null), celebration,
+				List.of(card("30th", "001", "Exeggcute", "Common", "Pokemon", 50),
+						card("30th", "023", "Pikachu", "Pikachu Rare", "Pokemon", 60),
+						card("30th", "R", "Mew", "RGB Rare", "Pokemon", 70), card("30th", "G", "Mew", "RGB Rare", "Pokemon", 70),
+						card("30th", "B", "Mew", "RGB Rare", "Pokemon", 70))));
+
+		assertThat(CONFIG.excludedRarities()).containsOnlyKeys("RGB Rare");
+		assertThat(dataset.sets().get(0).cards()).extracting(Card::externalId).containsExactly("30th-001", "30th-023");
+		assertThat(dataset.rarities()).extracting(TcgDataset.Rarity::code).doesNotContain("rgb-rare");
+	}
+
+	@Test
+	void ascendedHeroesMegaAttackRaresStayTheUltraRaresTheyWereImportedAs() {
+		// TCGdex first listed me02.5-265 to 271 as "Ultra Rare" and later renamed their rarity to
+		// "Mega Attack Rare"; they keep the rarity, and so the pack odds, they were imported with.
+		TcgdexSet ascendedHeroes = new TcgdexSet("me02.5", "Ascended Heroes", "2026-01-30", null,
+				new TcgdexSet.Serie("me", "Mega Evolution"));
+		TcgDataset dataset = map(new FetchedSet(modern("me02.5"), ascendedHeroes,
+				List.of(card("me02.5", "265", "Mega Froslass ex", "Mega Attack Rare", "Pokemon", 300),
+						card("me02.5", "001", "Pinsir", "Common", "Pokemon", 110))));
+
+		assertThat(dataset.sets().get(0).cards()).extracting((card) -> card.externalId() + ":" + card.rarity())
+			.containsExactly("me02.5-001:common", "me02.5-265:ultra-rare");
+	}
+
+	@Test
 	void aSetWithoutAnyImagesIsLeftOutRatherThanShownWithout() {
 		// TCGdex lists the 30th Classic Collection's 30 reprints without images (or a rarity).
 		TcgdexSet classic = new TcgdexSet("30th-c", "30th Classic Collection", "2026-09-16", null,

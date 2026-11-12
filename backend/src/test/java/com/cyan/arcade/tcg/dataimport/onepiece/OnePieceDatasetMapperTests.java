@@ -35,7 +35,8 @@ class OnePieceDatasetMapperTests {
 	private static final List<OptcgSet> SETS = List.of(new OptcgSet("OP-01", "Romance Dawn"),
 			new OptcgSet("OP-03", "Pillars of Strength"), new OptcgSet("OP-04", "Kingdoms of Intrigue"),
 			new OptcgSet("OP-05", "Awakening of the New Era"), new OptcgSet("OP14-EB04", "The Azure Sea's Seven"),
-			new OptcgSet("EB-01", "Extra Booster: Memorial Collection"));
+			new OptcgSet("EB-01", "Extra Booster: Memorial Collection"), new OptcgSet("OP-13", "Carrying On His Will"),
+			new OptcgSet("EB-05", "Extra Booster: One Piece Heroines Edition Vol. 2"));
 
 	@ParameterizedTest
 	@CsvSource(delimiter = '|', value = { "Shanks|Shanks|", "Shanks (Parallel)|Shanks|Parallel",
@@ -155,6 +156,58 @@ class OnePieceDatasetMapperTests {
 		assertThat(set.code()).isEqualTo("eb01");
 		assertThat(set.name()).isEqualTo("Memorial Collection");
 		assertThat(set.series()).isEqualTo("Extra Booster");
+	}
+
+	@Test
+	void heroinesEditionVolumeTwoIsAnExtraBoosterShownAfterEveryExistingBoosterPack() {
+		List<String> ids = SHIPPED.sets().stream().map(SetChoice::id).toList();
+
+		assertThat(SHIPPED.sets()).filteredOn((set) -> set.id().equals("EB-05"))
+			.singleElement()
+			.satisfies((set) -> assertThat(set.profile()).isEqualTo("extra-booster"));
+		// Sets are mapped in this order, and the first set to list an id keeps it. Coming after every
+		// set the arcade already has, EB-05 can never take an id that a card players own is known by.
+		assertThat(ids.indexOf("EB-05")).isGreaterThan(ids.lastIndexOf("OP-01"));
+		assertThat(ids.subList(ids.indexOf("EB-05") + 1, ids.size())).containsExactly("EB-03", "EB-02", "EB-01");
+	}
+
+	@Test
+	void heroinesEditionVolumeTwoMapsItsAlternateArtsAndReprintsWithoutTakingAnExistingId() {
+		// Real entries as OPTCG API lists them (2026-11-12): OP-13's own Jewelry Bonney and the
+		// "Heroine Leader" print of her that EB-05 lists under the very same id, OP13-100.
+		TcgDataset dataset = map(List.of("OP-13", "EB-05"),
+				Map.of("OP-13", List.of(card("OP13-100", "OP13-100", "Jewelry Bonney", "L")), "EB-05",
+						List.of(card("EB05-043", "EB05-043", "Perona (Alternate Art)", "R"),
+								card("EB05-043", "EB05-043", "Perona", "R"),
+								card("OP13-100", "OP13-100", "Jewelry Bonney (100) (Heroine Leader)", "L"),
+								card("EB05-055", "EB05-055_p3", "Nami (055) (Kentaro Yabuki) (Gold Stamped)", "SR"),
+								card("EB05-014", "EB05-014_p2", "Shirahoshi (Manga)", "SR"),
+								card("EB05-031", "EB05-031_p1", "Vinsmoke Reiju (SP)", "R"),
+								card("EB05-061", "EB05-061", "Nami (061)", "SEC"))));
+
+		assertThat(dataset.sets().get(0).cards()).extracting(Card::externalId).containsExactly("OP13-100");
+		CardSet heroines = dataset.sets().get(1);
+		assertThat(heroines.code()).isEqualTo("eb05");
+		assertThat(heroines.externalId()).isEqualTo("EB-05");
+		assertThat(heroines.name()).isEqualTo("One Piece Heroines Edition Vol. 2");
+		assertThat(heroines.series()).isEqualTo("Extra Booster");
+		assertThat(heroines.releasedOn()).isNull();
+		assertThat(heroines.cards()).extracting((card) -> card.externalId() + ":" + card.name() + ":" + card.rarity())
+			.containsExactly("EB05-014_p2:Shirahoshi:manga", "EB05-031_p1:Vinsmoke Reiju:special",
+					"EB05-043:Perona:rare", "EB05-043-alternate-art:Perona:parallel",
+					"EB05-055_p3:Nami:parallel", "EB05-061:Nami:secret-rare",
+					"OP13-100-heroine-leader:Jewelry Bonney:parallel");
+		assertThat(heroines.cards()).filteredOn((card) -> card.externalId().equals("EB05-055_p3"))
+			.singleElement()
+			.satisfies((card) -> assertThat(card.metadata()).containsEntry("variant", "Kentaro Yabuki, Gold Stamped")
+				.containsEntry("printedRarity", "Super Rare"));
+		// The extra booster's own layout, with odds only for the rarities the set has.
+		assertThat(heroines.packs()).singleElement().satisfies((pack) -> {
+			assertThat(pack.name()).isEqualTo("One Piece Heroines Edition Vol. 2 Booster Pack");
+			assertThat(pack.slots()).extracting(Slot::count).containsExactly(1, 1);
+			assertThat(pack.slots().get(1).odds()).containsOnlyKeys("rare", "parallel", "secret-rare", "special",
+					"manga");
+		});
 	}
 
 	@Test

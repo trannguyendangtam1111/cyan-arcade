@@ -94,7 +94,7 @@ final class OnePieceDatasetMapper {
 			List<Card> mapped = new ArrayList<>();
 			for (OptcgCard card : inListOrder(choice.id(), cardsBySet.getOrDefault(choice.id(), List.of()))) {
 				if (card.imageUrl() == null || card.number() == null || card.imageId() == null
-						|| !choice.id().equals(owners.get(printKey(card)))) {
+						|| !choice.id().equals(owners.get(printKey(card))) || config.isExcludedRarity(card.rarity())) {
 					continue;
 				}
 				String printed = config.rarityCode(card.rarity()).orElse(null);

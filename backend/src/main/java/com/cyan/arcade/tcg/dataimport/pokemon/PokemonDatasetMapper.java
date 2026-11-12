@@ -30,7 +30,8 @@ import org.slf4j.LoggerFactory;
  * <li>Images: TCGdex serves each card in two sizes; the large one for a closer look and pack
  * openings, the small one for grids.
  * <li>A rarity TCGdex uses that the configuration does not map stops the import: a new kind of
- * card deserves a decision on its tier and its odds, not a silent guess.
+ * card deserves a decision on its tier and its odds, not a silent guess. A rarity the
+ * configuration excludes, with its reason, is left out and logged.
  * </ul>
  */
 final class PokemonDatasetMapper {
@@ -52,7 +53,13 @@ final class PokemonDatasetMapper {
 		for (FetchedSet each : fetched) {
 			List<Card> cards = new ArrayList<>();
 			int withoutImage = 0;
+			Map<String, Integer> excluded = new TreeMap<>();
 			for (TcgdexCard card : inPrintedOrder(each.cards())) {
+				if (config.isExcludedRarity(card.rarity())) {
+					// Left out on purpose, for the reason the configuration gives.
+					excluded.merge(card.rarity(), 1, Integer::sum);
+					continue;
+				}
 				if (card.image() == null) {
 					// No picture is invented for a card: without TCGdex's own, it is not imported.
 					withoutImage++;
@@ -69,6 +76,10 @@ final class PokemonDatasetMapper {
 				if (card.id().equals(config.game().coverCard())) {
 					gameImage = mapped.imageUrl();
 				}
+			}
+			if (!excluded.isEmpty()) {
+				log.warn("Pokémon set {}: cards of excluded rarities left out, as configured: {}", each.choice().id(),
+						excluded);
 			}
 			if (withoutImage > 0) {
 				log.warn("Pokémon set {}: {} of {} cards skipped, TCGdex has no image for them", each.choice().id(),

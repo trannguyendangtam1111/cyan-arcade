@@ -15,7 +15,7 @@
     { "code": "ace-spec-rare", "name": "ACE SPEC Rare", "tier": 3, "source": ["ACE SPEC Rare"] },
     { "code": "shiny-rare", "name": "Shiny Rare", "tier": 3, "source": ["Shiny rare"] },
     { "code": "illustration-rare", "name": "Illustration Rare", "tier": 4, "source": ["Illustration rare"] },
-    { "code": "ultra-rare", "name": "Ultra Rare", "tier": 4, "source": ["Ultra Rare"] },
+    { "code": "ultra-rare", "name": "Ultra Rare", "tier": 4, "source": ["Ultra Rare", "Mega Attack Rare"] },
     { "code": "shiny-ultra-rare", "name": "Shiny Ultra Rare", "tier": 4, "source": ["Shiny Ultra Rare"] },
     { "code": "special-illustration-rare", "name": "Special Illustration Rare", "tier": 5, "source": ["Special illustration rare"] },
     { "code": "hyper-rare", "name": "Hyper Rare", "tier": 5, "source": ["Hyper rare"] },
@@ -24,6 +24,9 @@
     { "code": "pikachu-rare", "name": "Pikachu Rare", "tier": 3, "source": ["Pikachu Rare"] },
     { "code": "futuristic-rare", "name": "Futuristic Rare", "tier": 5, "source": ["Futuristic Rare"] }
   ],
+  "excludedRarities": {
+    "RGB Rare": "The three RGB Mew cards TCGdex lists in 30th Celebration (30th-R, 30th-G, 30th-B). The Pokémon Company has not acknowledged this rarity in official material, the cards are missing from the set's master list in Pokémon TCG Live (per Bulbapedia, checked 2026-11-12) and no pull rate is known, so there is no honest tier or pack weight to give them."
+  },
   "packProfiles": {
     "modern": {
       "code": "booster",

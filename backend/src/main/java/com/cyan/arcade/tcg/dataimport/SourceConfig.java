@@ -36,12 +36,23 @@ import org.springframework.core.io.Resource;
  * sources without variants.
  * @param packProfiles kinds of pack, by name; sets refer to them
  * @param sets the sets to import, in the order they are shown
+ * @param excludedRarities rarity names of the source whose cards are left out on purpose, each with
+ * the reason why (e.g. a rarity the publisher never acknowledged, so it has no tier or odds to give
+ * it). Matched regardless of case. Any other rarity the configuration does not map still stops the
+ * import. Empty for most sources.
  */
 public record SourceConfig(GameInfo game, List<RarityRule> rarities, Map<String, String> variantRarities,
-		Map<String, PackProfile> packProfiles, List<SetChoice> sets) {
+		Map<String, PackProfile> packProfiles, List<SetChoice> sets, Map<String, String> excludedRarities) {
 
 	public SourceConfig {
 		variantRarities = (variantRarities != null) ? variantRarities : Map.of();
+		excludedRarities = (excludedRarities != null) ? excludedRarities : Map.of();
+	}
+
+	/** A configuration that leaves no rarity out. */
+	public SourceConfig(GameInfo game, List<RarityRule> rarities, Map<String, String> variantRarities,
+			Map<String, PackProfile> packProfiles, List<SetChoice> sets) {
+		this(game, rarities, variantRarities, packProfiles, sets, Map.of());
 	}
 
 	/**
@@ -101,6 +112,14 @@ public record SourceConfig(GameInfo game, List<RarityRule> rarities, Map<String,
 			.filter((set) -> !this.packProfiles.containsKey(set.profile()))
 			.forEach((set) -> problems
 				.add("set '%s' uses the unknown pack profile '%s'".formatted(set.id(), set.profile())));
+		this.excludedRarities.forEach((name, reason) -> {
+			if (rarityCode(name).isPresent()) {
+				problems.add("the rarity '%s' is both mapped and excluded".formatted(name));
+			}
+			if (reason == null || reason.isBlank()) {
+				problems.add("the excluded rarity '%s' does not say why it is excluded".formatted(name));
+			}
+		});
 		if (!problems.isEmpty()) {
 			throw new TcgSourceException("The source configuration %s is not usable: %s".formatted(where, problems));
 		}
@@ -125,6 +144,15 @@ public record SourceConfig(GameInfo game, List<RarityRule> rarities, Map<String,
 			.filter((rule) -> rule.source().stream().anyMatch((name) -> name.toLowerCase(Locale.ROOT).equals(wanted)))
 			.map(RarityRule::code)
 			.findFirst();
+	}
+
+	/** Whether cards of this source rarity are left out on purpose ({@link #excludedRarities}). */
+	public boolean isExcludedRarity(String sourceName) {
+		if (sourceName == null) {
+			return false;
+		}
+		String wanted = sourceName.trim().toLowerCase(Locale.ROOT);
+		return this.excludedRarities.keySet().stream().anyMatch((name) -> name.toLowerCase(Locale.ROOT).equals(wanted));
 	}
 
 	/**
