@@ -1,77 +1,120 @@
 # TCG-009 — PostgreSQL integration and acceptance
 
-Acceptance attempt: **2026-11-14 (Asia/Bangkok)**. Result: **blocked by Docker availability; database acceptance is incomplete**.
+**Result: PASS — the previously blocked validation is complete.** Resumed on 2026-11-14 (Asia/Bangkok), from branch `release/cyan-arcade-v2`, HEAD `1da6952`.
 
-## Starting state and environment
+The earlier attempt, recorded by `1da6952`, was blocked before executing any PostgreSQL tests. This report supersedes that blocked disposition. The pilot remains disabled by default and deployment remains postponed.
 
-- Workspace: `C:\dev\GameHub`.
-- Branch: `release/cyan-arcade-v2`; starting HEAD: `2b60ca7`, matching the request.
-- The index was empty. Existing uncommitted changes in `SudokuService.java`, `ModeLab.java`, `useScoreSubmission.test.ts`, `useScoreSubmission.ts`, `LeaderboardModes.test.tsx`, and untracked `ROADMAP.md` were preserved.
-- Two focused Docker connectivity checks were made: the normal workspace check and one host-level check to rule out sandbox restrictions. Both failed because `npipe:////./pipe/dockerDesktopLinuxEngine` does not exist. The host-level service check reported `com.docker.service` **Stopped**.
-- Docker's engine is unavailable. No disposable PostgreSQL container was started, so PostgreSQL availability and Flyway V38 execution were not established for this attempt. No alternative database was used or probed.
-- No system software was installed or modified, and no service-start attempts or broad environment diagnostics were made.
+## Environment and isolation
 
-## Exact PostgreSQL test disposition
+- Docker Desktop Linux engine: **29.8.1**, verified before proceeding.
+- The 50 integration cases used a fresh Testcontainers `postgres:18-alpine` database at a dynamically mapped port (`57741`), database/user `test`. The fallback application datasource was explicitly overridden to unused loopback port `1`, database/user `tcg009_no_fallback`, preventing a development-database fallback.
+- Real API/browser acceptance used a second container, `tcg009-acceptance-20261114`, identified by its exact container ID and `com.cyan.task=tcg009-20261114` label. Its PostgreSQL **18.6** database `tcg009_acceptance`, user `tcg009`, and disposable password were separate from development.
+- The acceptance container bound only `127.0.0.1:55439`; storage was disposable tmpfs. Backend: `127.0.0.1:8099`. Frontend: `127.0.0.1:5199`, proxying only to `8099`. JDBC URL, credentials, source/import settings and loopback bindings were explicit launch arguments.
+- Both fresh databases successfully applied **38 migrations, through V38**. No migration files were edited.
+- No application connected to the original development database or Neon. Neither database was queried to inspect its contents or migration version.
 
-The 50 cases from TCG-008 were located in the following existing test classes. Counts are the `@Test` methods in the source at the starting HEAD, not newly executed results.
+## Exact results
 
-| Test class | Passed | Failed | Skipped | Blocked |
+| Validation | PASS | FAIL | SKIPPED | BLOCKED |
 | --- | ---: | ---: | ---: | ---: |
-| `YugiohPilotImportTests` | 0 | 0 | 0 | 6 |
-| `YugiohPackOpeningTests` | 0 | 0 | 0 | 5 |
-| `TcgDatasetImportTests` | 0 | 0 | 0 | 12 |
-| `PackOpeningApiTests` | 0 | 0 | 0 | 24 |
-| `AdminPackOpeningTests` | 0 | 0 | 0 | 3 |
-| **Total** | **0** | **0** | **0** | **50** |
+| PostgreSQL/JUnit integration tests | **50** | **0** | **0** | **0** |
+| Additional real API/database acceptance checks | **18** | **0** | **0** | **0** |
+| Browser scenarios/checks using real APIs and PostgreSQL | **7** | **0** | **0** | **0** |
 
-**Zero PostgreSQL tests were executed in TCG-009.** The known missing engine was detected before running Maven; the earlier TCG-008 startup failures were not repeated or counted as new failures. “Blocked” is the acceptance disposition, not a JUnit skip result. Earlier unit tests and mocked frontend checks are not substitutes for these cases.
+The API/browser counts describe explicit acceptance checks, not additional JUnit tests. Expected refusals and deliberately injected failures are passing negative cases, not unexpected test failures.
 
-The existing `TestcontainersConfiguration` declares a fresh `postgres:18-alpine` container through Spring Boot's `@ServiceConnection`. This is the intended integration-test database boundary. It was inspected without starting an application or connecting to a datasource. No existing development connection settings were used as a fallback.
+| PostgreSQL test class | Passed |
+| --- | ---: |
+| `YugiohPilotImportTests` | 6 |
+| `YugiohPackOpeningTests` | 5 |
+| `TcgDatasetImportTests` | 12 |
+| `PackOpeningApiTests` | 24 |
+| `AdminPackOpeningTests` | 3 |
 
-## Import and real API acceptance
-
-All database-dependent acceptance work remains blocked:
-
-| Required check | Result |
-| --- | --- |
-| Flyway through V38 | Not executed |
-| Pokémon and One Piece baseline import and regression comparison | Not executed |
-| Yu-Gi-Oh! dry-run, actual import, re-import and stable printing IDs | Not executed |
-| Set/card/pack/pool/odds persistence and import rollback | Not executed |
-| Nine-card openings through the real backend API | Not executed |
-| Collection quantities and opening-history persistence | Not executed |
-| Idempotent retries and concurrent duplicate requests | Not executed |
-| Free/purchased allowance consumption and admin unlimited behavior | Not executed |
-| Invalid/exhausted requests without partial writes; opening rollback | Not executed |
-| Hidden defaults and disposable activation gates | Not executed |
-| Re-import preserving player data and other franchises | Not executed |
-
-No database row counts or import/opening outcomes were measured. The expected pilot dataset remains **one set, 127 printings representing 100 distinct cards, and one nine-card pack**, as documented in [TCG-008](tcg-008-pilot-pack.md); these are configuration/fixture expectations, not TCG-009 PostgreSQL observations.
-
-## Database-backed browser acceptance
-
-**Not executed: blocked by the unavailable disposable PostgreSQL/backend environment.** No frontend or backend was launched, no browser automation was attempted, and no API responses were intercepted or mocked in this task.
-
-Consequently pack selection, nine-card reveal, text cards, rarity effects, collection/history updates, retry/error feedback, the Arcade Simulated Odds label, both themes and the 375px/1280px layouts remain unaccepted against a real database. The TCG-008 browser results remain explicitly fixture-backed and are not promoted to database-backed acceptance.
-
-## Changes, cleanup and safety
-
-This task adds only this acceptance report. No feature fixes were made because no integration assertions could run. No pack probabilities, application settings, migrations V1–V38, Pokémon/One Piece configurations, wallet balances, shop prices or allowances were changed. Yu-Gi-Oh! remains disabled by default and was not activated anywhere. No artwork was downloaded or hotlinked.
-
-No container, application process, temporary file or local configuration override was created, so no runtime cleanup or configuration restoration was necessary. Existing TCG-008 evidence and other user files were left in place.
-
-The original development database and Neon were **not connected to or modified**. Their contents and migration versions were not independently queried. Nothing was pushed, merged or deployed.
-
-## Resume prerequisite and release recommendation
-
-Restore Docker Desktop's Linux engine availability first. This task does not authorize installing or changing system software. Once `docker info` succeeds, resume TCG-009 using a fresh disposable PostgreSQL container with separate database credentials and a separate loopback port; verify the explicit JDBC target before launching applications. Do not reuse the original development database or Neon.
-
-The focused integration command, from `backend`, is:
+The targeted set ran once; no full suite was repeated. Command from `backend`:
 
 ```powershell
 .\mvnw.cmd -o '-Dtest=YugiohPilotImportTests,YugiohPackOpeningTests,TcgDatasetImportTests,PackOpeningApiTests,AdminPackOpeningTests' test
 ```
 
-Then complete the real API and database-backed browser checks above, record actual row counts and outcomes before cleanup, and remove only resources created by that resumed task. Review whether any direct TCG correctness fixes are needed based on those results.
+The durable [evidence JSON](acceptance/tcg-009/evidence.json) contains per-class Surefire counts, all acceptance check names, import reports, per-player database totals, container identity, catalog digests, screenshot/fixture/log hashes and cleanup results.
 
-**Release recommendation: keep deployment postponed and the pilot hidden/disabled.** PostgreSQL persistence, transactions, allowances and real database-backed browser acceptance are still unverified. This report records a blocked acceptance attempt, not completion or release approval.
+## Import and persistence results
+
+- Exported existing regression fixtures through the production dataset mappers. Yu-Gi-Oh! used the existing complete metadata recording and `YugiohPackFixture`; no live provider requests were necessary.
+- Yu-Gi-Oh! dry-run: reported **127 new cards, one new set, one new pack**, then rolled back. The catalog contained **zero games** before baseline import.
+- Actual pilot import: **1 set, 127 printings, 100 distinct passcodes, 1 nine-card pack, 127 pool rows and 45 odds rows**. Game and pack were both inactive initially.
+- Pools: **50 Common, 26 Super Rare, 16 Ultra Rare, 10 Secret Rare and 25 Starlight Rare**.
+- Re-import: **0 new/updated cards, sets or packs; 127 unchanged cards**. Full catalog-row comparisons confirmed stable database and printing IDs, pool membership and odds.
+- A deliberately duplicated printing was refused as `FAILED`; the catalog remained identical. The integration tests additionally verified import validation/rollback and preservation of dropped cards.
+- A later re-import preserved existing player collections, history, replay records and the disposable environment's explicit activation state.
+
+The Arcade Simulated Odds were unchanged: Common **80%**, Super **14%**, Ultra **5%**, Secret **0.99%**, Starlight **0.01%** per slot. All nine slots use the same existing roller. No official Konami probabilities or collation are claimed.
+
+## Real openings, allowances and transactions
+
+- Both activation gates worked: a hidden game was absent from the real game list; enabling only the game still left the pack unavailable. Only then were both rows explicitly activated inside the disposable database.
+- Every successful Yu-Gi-Oh! opening returned **nine distinct printing IDs**, each valid for the pack pool and its position's rarity odds.
+- Four concurrent/same-key requests returned the same opening and consumed one allowance, producing **one opening and nine collected copies**.
+- The API player opened **five free packs**: 45 copies. An exhausted request returned **429** without changing player rows.
+- Invalid UUID and unknown-pack requests returned **400/404**, with no partial writes.
+- The disposable player bought one existing generic `EXTRA_PACK` at its unchanged **100-coin** price, using a grant made only inside the disposable database. Opening and retry consumed that extra exactly once.
+- A real PostgreSQL trigger rejected replay storage after collection writes. The backend returned **500**; snapshots confirmed rollback of opening, collection, replay, inventory and wallet/ledger state. Removing the trigger allowed the same key to succeed once.
+- Final API-player result: **6 openings, 54 collected copies, 6 history entries and 6 replay rows**. History contained nine cards per opening. Quantities and pool/rarity joins were checked directly in PostgreSQL.
+- The disposable admin opened **7 packs / 63 copies** with null daily limit/remaining count. The integration cases also verified preservation of admin bonus inventory.
+- A real backend restart followed by fresh login preserved the API player's **54 copies and six history entries**.
+
+## Pokémon and One Piece regression baseline
+
+Reused the existing mapper-test fixtures and shipped source configurations: Scarlet & Violet (**2 cards**) and Romance Dawn (**7 printings**). Artwork URLs in the disposable exports were replaced with a local data-URI test placeholder; no copyrighted artwork was fetched or hotlinked.
+
+These intentionally small fixtures produce **six-card Pokémon** and **five-card One Piece** packs under the existing mapper's pool-filtering rules. They are regression fixtures, not full production catalogs or claims about physical pack sizes.
+
+Each franchise opened once before pilot import and once afterwards. Pack API responses, sizes and behavior matched; existing player rows were unchanged by pilot import/re-import. Complete game/set/card/rarity/pack/pool/odds snapshots had identical SHA-256 digests before and after:
+
+`31ad2a63154801b57f81653e3e43974ed4c78ded2c1fef25b4f7b1438aa0e85a`
+
+No Pokémon or One Piece source configuration or production behavior was changed. Full production-catalog acceptance remains outside this bounded fixture check.
+
+## Database-backed browser results
+
+All four combinations passed in Chrome using the real frontend, backend and PostgreSQL: **375px/light, 375px/dark, 1280px/light and 1280px/dark**. No API responses were intercepted or mocked, and no external page requests were observed.
+
+Verified franchise → set → pack selection, wrapper without artwork, exact Arcade Simulated Odds labels, nine-card deal/individual flip/reveal-all, text cards and full effect text in details, rarity frames, collection quantities, opening-history card IDs/order, persistence after reload and no horizontal overflow. Screenshots were visually inspected after animations settled.
+
+Three further browser checks passed:
+
+1. Secret/Starlight catalog details showed distinct rarity labels and tier-5 frame/shimmer. These were real catalog selections; no rare pull was forced or odds changed.
+2. A real trigger-induced **500** displayed error feedback and rolled back all writes. Clicking retry reused the original idempotency key and produced exactly one additional opening.
+3. Real requests exhausted the five-pack allowance; a further request returned **429** without writes, and the UI displayed the allowance message with the open button disabled.
+
+Evidence: [375px light](acceptance/tcg-009/375-light-revealed.png), [375px dark](acceptance/tcg-009/375-dark-revealed.png), [1280px light](acceptance/tcg-009/1280-light-revealed.png), [1280px dark](acceptance/tcg-009/1280-dark-revealed.png), [Starlight detail](acceptance/tcg-009/375-light-starlight-detail.png), [real error feedback](acceptance/tcg-009/375-light-error.png).
+
+Temporary harness corrections were required: a duplicate launcher port argument, child-process detachment, allowing the isolated frontend origin after an initial CORS rejection, and narrowing a locator where rarity text appeared more than once. No application correctness defect was found and no production code/configuration fix was needed. One preliminary browser player completed one opening before the locator correction; that opening is included in the recorded database totals.
+
+## Database totals recorded before cleanup
+
+| Rows/quantity | Count |
+| --- | ---: |
+| Games / sets / packs | 3 / 3 / 3 |
+| Cards / pool rows / odds rows | 136 / 136 / 60 |
+| Successful openings / replay rows | 26 / 26 |
+| Opening-card rows / collected copies | 220 / 220 |
+| Unique user-card rows | 153 |
+| Purchases | 1 |
+
+Totals include the two baseline franchises, API/admin players, four final browser scenarios and the preliminary browser opening. Failed/invalid attempts left no extra openings or copies.
+
+## Cleanup and safety
+
+Before removing the database, both pilot rows were disabled again. The real game list excluded Yu-Gi-Oh! and the pack endpoint returned **404**. Then the verified task backend/frontend processes were stopped and the exact task-labelled container was removed. Testcontainers had already removed its own PostgreSQL container and reaper. No task ports remained listening.
+
+Only the resolved task-created directory `backend/target/tcg-009` was recursively removed, after durable evidence was copied here. Existing TCG-008 evidence, other containers and user files were left intact. No local configuration files were edited or required restoration.
+
+All six unrelated local files retained their original hashes: `SudokuService.java`, `ModeLab.java`, `useScoreSubmission.test.ts`, `useScoreSubmission.ts`, `LeaderboardModes.test.tsx`, and untracked `ROADMAP.md`. Existing migrations, source configurations, prices, probabilities and production allowances remained unchanged.
+
+The original development database and Neon were **not connected to or modified**. All grants, purchases, activations and failure triggers were confined to the removed disposable database. No artwork was downloaded or hotlinked. Nothing was pushed, merged or deployed.
+
+## Release recommendation
+
+**TCG-009 validation is complete; no validation blockers remain.** The pilot is suitable for the next controlled product review, with the bounded baseline scope above. This does not authorize public activation, artwork/branding use, shop expansion, development-database migration or deployment. Keep Yu-Gi-Oh! hidden/disabled by default and deployment postponed pending separate approval.

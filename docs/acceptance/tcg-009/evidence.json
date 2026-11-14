@@ -1,0 +1,908 @@
+{
+  "date": "2026-11-14",
+  "branch": "release/cyan-arcade-v2",
+  "startingHead": "1da6952",
+  "isolation": {
+    "containerId": "5b3af84772bf5b0a602ef83f48e981939d3e6b5a2e0c31c5a5bf345f15220f64",
+    "container": "tcg009-acceptance-20261114",
+    "postgres": "PostgreSQL 18.6 on x86_64-pc-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit",
+    "host": "127.0.0.1",
+    "port": 55439,
+    "database": "tcg009_acceptance",
+    "user": "tcg009"
+  },
+  "junit": {
+    "classes": [
+      {
+        "name": "com.cyan.arcade.tcg.AdminPackOpeningTests",
+        "time": 47.92,
+        "tests": 3,
+        "errors": 0,
+        "skipped": 0,
+        "failures": 0
+      },
+      {
+        "name": "com.cyan.arcade.tcg.PackOpeningApiTests",
+        "time": 6.638,
+        "tests": 24,
+        "errors": 0,
+        "skipped": 0,
+        "failures": 0
+      },
+      {
+        "name": "com.cyan.arcade.tcg.dataimport.TcgDatasetImportTests",
+        "time": 0.926,
+        "tests": 12,
+        "errors": 0,
+        "skipped": 0,
+        "failures": 0
+      },
+      {
+        "name": "com.cyan.arcade.tcg.dataimport.yugioh.YugiohPilotImportTests",
+        "time": 1.274,
+        "tests": 6,
+        "errors": 0,
+        "skipped": 0,
+        "failures": 0
+      },
+      {
+        "name": "com.cyan.arcade.tcg.dataimport.yugioh.YugiohPackOpeningTests",
+        "time": 7.068,
+        "tests": 5,
+        "errors": 0,
+        "skipped": 0,
+        "failures": 0
+      }
+    ],
+    "total": {
+      "tests": 50,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "api": {
+    "kind": "real HTTP backend and disposable PostgreSQL; no mocked responses",
+    "checks": [
+      {
+        "name": "Flyway through V38",
+        "status": "PASS",
+        "maxVersion": 38,
+        "successful": 38
+      },
+      {
+        "name": "Dry-run rollback",
+        "status": "PASS",
+        "catalogGames": 0
+      },
+      {
+        "name": "Existing Pokémon and One Piece fixtures imported without fetching artwork",
+        "status": "PASS"
+      },
+      {
+        "name": "Baseline franchises open through real APIs",
+        "status": "PASS",
+        "pokemon": {
+          "id": 2,
+          "cardsPerPack": 6,
+          "poolSize": 2,
+          "packDigest": "28858190bb649a46afdbffb16dd45a0fee0b17163d453eb56f559dae0d7b670b"
+        },
+        "one-piece": {
+          "id": 3,
+          "cardsPerPack": 5,
+          "poolSize": 7,
+          "packDigest": "93afd22a77d9afc86f99f3592649650759ba0959102187383083ccc9ec9e8df5"
+        }
+      },
+      {
+        "name": "Pilot persisted hidden and disabled",
+        "status": "PASS",
+        "sets": 1,
+        "printings": 127,
+        "distinctCards": 100,
+        "packs": 1,
+        "gameActive": false,
+        "packId": 4,
+        "poolRows": 127,
+        "oddsRows": 45
+      },
+      {
+        "name": "Repeated import preserves IDs and catalog rows",
+        "status": "PASS"
+      },
+      {
+        "name": "Invalid import leaves database intact",
+        "status": "PASS"
+      },
+      {
+        "name": "Game and pack require separate explicit disposable activation",
+        "status": "PASS"
+      },
+      {
+        "name": "Invalid requests have no partial writes",
+        "status": "PASS"
+      },
+      {
+        "name": "Concurrent retries replay one nine-card opening",
+        "status": "PASS",
+        "openingId": 3,
+        "requests": 4,
+        "openings": 1
+      },
+      {
+        "name": "Five free openings then exhausted request rolls back",
+        "status": "PASS",
+        "openings": 5,
+        "copies": 45
+      },
+      {
+        "name": "Failure after collecting rolls back opening, collection, inventory, wallet and replay",
+        "status": "PASS"
+      },
+      {
+        "name": "Purchased generic extra consumed exactly once",
+        "status": "PASS",
+        "extraPrice": 100,
+        "openings": 6,
+        "copies": 54
+      },
+      {
+        "name": "Collection and history persist with valid printing/rarity pools",
+        "status": "PASS",
+        "id": 3,
+        "openings": 6,
+        "collectionCopies": 54,
+        "uniqueCards": 36,
+        "replayRows": 6,
+        "historyEntries": 6
+      },
+      {
+        "name": "Admin opens beyond daily allowance",
+        "status": "PASS",
+        "openings": 7,
+        "copies": 63
+      },
+      {
+        "name": "Re-import preserves collected cards, history, replay and explicit activation",
+        "status": "PASS"
+      },
+      {
+        "name": "Pokémon and One Piece catalog, pools, odds, prior player data and opening behavior unchanged",
+        "status": "PASS"
+      },
+      {
+        "name": "Collection/history survive a real backend restart and fresh login",
+        "status": "PASS",
+        "copies": 54,
+        "openings": 6,
+        "userId": 3
+      }
+    ],
+    "imports": {
+      "dry": {
+        "gameSlug": "yugioh",
+        "dryRun": true,
+        "rarities": 5,
+        "sets": 1,
+        "cards": 127,
+        "packs": 1,
+        "newCards": 127,
+        "updatedCards": 0,
+        "unchangedCards": 0,
+        "newSets": 1,
+        "updatedSets": 0,
+        "newPacks": 1,
+        "updatedPacks": 0,
+        "movedCards": 0,
+        "movedExamples": [],
+        "newCardsBySet": {
+          "betb": 127
+        },
+        "setsNotInDataset": []
+      },
+      "baseline": [
+        {
+          "gameSlug": "pokemon",
+          "dryRun": false,
+          "rarities": 15,
+          "sets": 1,
+          "cards": 2,
+          "packs": 1,
+          "newCards": 2,
+          "updatedCards": 0,
+          "unchangedCards": 0,
+          "newSets": 1,
+          "updatedSets": 0,
+          "newPacks": 1,
+          "updatedPacks": 0,
+          "movedCards": 0,
+          "movedExamples": [],
+          "newCardsBySet": {
+            "sv01": 2
+          },
+          "setsNotInDataset": []
+        },
+        {
+          "gameSlug": "one-piece",
+          "dryRun": false,
+          "rarities": 12,
+          "sets": 1,
+          "cards": 7,
+          "packs": 1,
+          "newCards": 7,
+          "updatedCards": 0,
+          "unchangedCards": 0,
+          "newSets": 1,
+          "updatedSets": 0,
+          "newPacks": 1,
+          "updatedPacks": 0,
+          "movedCards": 0,
+          "movedExamples": [],
+          "newCardsBySet": {
+            "op01": 7
+          },
+          "setsNotInDataset": []
+        }
+      ],
+      "pilot": {
+        "gameSlug": "yugioh",
+        "dryRun": false,
+        "rarities": 5,
+        "sets": 1,
+        "cards": 127,
+        "packs": 1,
+        "newCards": 127,
+        "updatedCards": 0,
+        "unchangedCards": 0,
+        "newSets": 1,
+        "updatedSets": 0,
+        "newPacks": 1,
+        "updatedPacks": 0,
+        "movedCards": 0,
+        "movedExamples": [],
+        "newCardsBySet": {
+          "betb": 127
+        },
+        "setsNotInDataset": []
+      },
+      "repeat": {
+        "gameSlug": "yugioh",
+        "dryRun": false,
+        "rarities": 5,
+        "sets": 1,
+        "cards": 127,
+        "packs": 1,
+        "newCards": 0,
+        "updatedCards": 0,
+        "unchangedCards": 127,
+        "newSets": 0,
+        "updatedSets": 0,
+        "newPacks": 0,
+        "updatedPacks": 0,
+        "movedCards": 0,
+        "movedExamples": [],
+        "newCardsBySet": {},
+        "setsNotInDataset": []
+      },
+      "invalid": {
+        "status": "FAILED",
+        "failure": "The dataset file [C:\\dev\\GameHub\\backend\\target\\tcg-009\\broken.json] cannot be imported:\r\n - more than one card has the external id 'betb:BETB-EN001:super-rare'\r\n - set 'betb' has more than one card 'betb:BETB-EN001:super-rare'\r\n - set 'betb' pack 'arcade-pilot-booster' lists card 'betb:BETB-EN001:super-rare' more than once"
+      }
+    },
+    "players": {
+      "baseline": {
+        "id": 2,
+        "username": "tcg009baseline"
+      },
+      "api": {
+        "id": 3,
+        "username": "tcg009api"
+      },
+      "admin": {
+        "id": 1,
+        "username": "tcg009admin"
+      }
+    },
+    "failures": [],
+    "isolation": {
+      "containerId": "5b3af84772bf5b0a602ef83f48e981939d3e6b5a2e0c31c5a5bf345f15220f64",
+      "container": "tcg009-acceptance-20261114",
+      "postgres": "PostgreSQL 18.6 on x86_64-pc-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit",
+      "host": "127.0.0.1",
+      "port": 55439,
+      "database": "tcg009_acceptance",
+      "user": "tcg009"
+    },
+    "migrations": {
+      "maxVersion": 38,
+      "successful": 38
+    },
+    "baseline": {
+      "packs": {
+        "pokemon": {
+          "id": 2,
+          "cardsPerPack": 6,
+          "poolSize": 2,
+          "packDigest": "28858190bb649a46afdbffb16dd45a0fee0b17163d453eb56f559dae0d7b670b"
+        },
+        "one-piece": {
+          "id": 3,
+          "cardsPerPack": 5,
+          "poolSize": 7,
+          "packDigest": "93afd22a77d9afc86f99f3592649650759ba0959102187383083ccc9ec9e8df5"
+        }
+      },
+      "catalogDigestBefore": "31ad2a63154801b57f81653e3e43974ed4c78ded2c1fef25b4f7b1438aa0e85a",
+      "catalogDigestAfter": "31ad2a63154801b57f81653e3e43974ed4c78ded2c1fef25b4f7b1438aa0e85a"
+    },
+    "result": {
+      "passed": 18,
+      "failed": 0,
+      "blocked": 0
+    },
+    "pilot": {
+      "sets": 1,
+      "printings": 127,
+      "distinctCards": 100,
+      "packs": 1,
+      "gameActive": false,
+      "packId": 4,
+      "poolRows": 127,
+      "oddsRows": 45,
+      "odds": [
+        {
+          "rarity": {
+            "code": "common",
+            "name": "Common",
+            "tier": 1
+          },
+          "percent": 80
+        },
+        {
+          "rarity": {
+            "code": "super-rare",
+            "name": "Super Rare",
+            "tier": 3
+          },
+          "percent": 14
+        },
+        {
+          "rarity": {
+            "code": "ultra-rare",
+            "name": "Ultra Rare",
+            "tier": 4
+          },
+          "percent": 5
+        },
+        {
+          "rarity": {
+            "code": "secret-rare",
+            "name": "Secret Rare",
+            "tier": 5
+          },
+          "percent": 0.99
+        },
+        {
+          "rarity": {
+            "code": "starlight-rare",
+            "name": "Starlight Rare",
+            "tier": 5
+          },
+          "percent": 0.01
+        }
+      ]
+    },
+    "apiPlayer": {
+      "id": 3,
+      "openings": 6,
+      "collectionCopies": 54,
+      "uniqueCards": 36,
+      "replayRows": 6,
+      "historyEntries": 6
+    },
+    "calls": {
+      "api": [
+        {
+          "method": "GET",
+          "path": "/api/auth/session",
+          "status": 200
+        },
+        {
+          "method": "POST",
+          "path": "/api/auth/register",
+          "status": 201
+        },
+        {
+          "method": "POST",
+          "path": "/api/tcg/packs/4/open",
+          "status": 409
+        },
+        {
+          "method": "POST",
+          "path": "/api/tcg/packs/4/open",
+          "status": 409
+        },
+        {
+          "method": "POST",
+          "path": "/api/tcg/packs/4/open",
+          "status": 400
+        },
+        {
+          "method": "POST",
+          "path": "/api/tcg/packs/99999999/open",
+          "status": 404
+        },
+        {
+          "method": "POST",
+          "path": "/api/tcg/packs/4/open",
+          "status": 201
+        },
+        {
+          "method": "POST",
+          "path": "/api/tcg/packs/4/open",
+          "status": 201
+        },
+        {
+          "method": "POST",
+          "path": "/api/tcg/packs/4/open",
+          "status": 201
+        },
+        {
+          "method": "POST",
+          "path": "/api/tcg/packs/4/open",
+          "status": 201
+        },
+        {
+          "method": "POST",
+          "path": "/api/tcg/packs/4/open",
+          "status": 201
+        },
+        {
+          "method": "POST",
+          "path": "/api/tcg/packs/4/open",
+          "status": 201
+        },
+        {
+          "method": "POST",
+          "path": "/api/tcg/packs/4/open",
+          "status": 201
+        },
+        {
+          "method": "POST",
+          "path": "/api/tcg/packs/4/open",
+          "status": 201
+        },
+        {
+          "method": "POST",
+          "path": "/api/tcg/packs/4/open",
+          "status": 429
+        },
+        {
+          "method": "GET",
+          "path": "/api/shop/items",
+          "status": 200
+        },
+        {
+          "method": "POST",
+          "path": "/api/shop/purchases",
+          "status": 201
+        },
+        {
+          "method": "POST",
+          "path": "/api/tcg/packs/4/open",
+          "status": 500
+        },
+        {
+          "method": "POST",
+          "path": "/api/tcg/packs/4/open",
+          "status": 201
+        },
+        {
+          "method": "POST",
+          "path": "/api/tcg/packs/4/open",
+          "status": 201
+        },
+        {
+          "method": "POST",
+          "path": "/api/tcg/packs/4/open",
+          "status": 429
+        },
+        {
+          "method": "GET",
+          "path": "/api/tcg/collection?game=yugioh&size=200",
+          "status": 200
+        },
+        {
+          "method": "GET",
+          "path": "/api/tcg/openings",
+          "status": 200
+        }
+      ],
+      "baseline": [
+        {
+          "method": "GET",
+          "path": "/api/auth/session",
+          "status": 200
+        },
+        {
+          "method": "POST",
+          "path": "/api/auth/login",
+          "status": 200
+        },
+        {
+          "method": "POST",
+          "path": "/api/tcg/packs/2/open",
+          "status": 201
+        },
+        {
+          "method": "POST",
+          "path": "/api/tcg/packs/3/open",
+          "status": 201
+        }
+      ],
+      "admin": [
+        {
+          "method": "GET",
+          "path": "/api/auth/session",
+          "status": 200
+        },
+        {
+          "method": "POST",
+          "path": "/api/auth/login",
+          "status": 200
+        },
+        {
+          "method": "POST",
+          "path": "/api/admin/users/3/coins",
+          "status": 201
+        },
+        {
+          "method": "POST",
+          "path": "/api/tcg/packs/4/open",
+          "status": 201
+        },
+        {
+          "method": "POST",
+          "path": "/api/tcg/packs/4/open",
+          "status": 201
+        },
+        {
+          "method": "POST",
+          "path": "/api/tcg/packs/4/open",
+          "status": 201
+        },
+        {
+          "method": "POST",
+          "path": "/api/tcg/packs/4/open",
+          "status": 201
+        },
+        {
+          "method": "POST",
+          "path": "/api/tcg/packs/4/open",
+          "status": 201
+        },
+        {
+          "method": "POST",
+          "path": "/api/tcg/packs/4/open",
+          "status": 201
+        },
+        {
+          "method": "POST",
+          "path": "/api/tcg/packs/4/open",
+          "status": 201
+        }
+      ]
+    }
+  },
+  "browser": {
+    "kind": "database-backed browser acceptance using real APIs; no routing/interception/mocked responses",
+    "scenarios": [
+      {
+        "width": 375,
+        "theme": "light",
+        "status": "PASS",
+        "username": "tcg009b_375_light",
+        "userId": 5,
+        "openingId": 20,
+        "cards": 9,
+        "collectionCopies": 9,
+        "historyEntries": 1,
+        "rarities": [
+          "super-rare",
+          "common",
+          "super-rare",
+          "common",
+          "common",
+          "common",
+          "super-rare",
+          "common",
+          "common"
+        ],
+        "checks": [
+          "pack selection",
+          "simulated odds label and exact fine percentages",
+          "nine-card deal/individual flip/reveal-all",
+          "text cards/full effect detail",
+          "rarity tier frames",
+          "collection persisted",
+          "history persisted after reload",
+          "no artwork",
+          "no horizontal overflow"
+        ],
+        "bounds": {
+          "viewport": 375,
+          "scroll": 375
+        }
+      },
+      {
+        "width": 375,
+        "theme": "dark",
+        "status": "PASS",
+        "username": "tcg009b_375_dark",
+        "userId": 6,
+        "openingId": 26,
+        "cards": 9,
+        "collectionCopies": 9,
+        "historyEntries": 1,
+        "rarities": [
+          "common",
+          "common",
+          "common",
+          "common",
+          "common",
+          "common",
+          "ultra-rare",
+          "ultra-rare",
+          "common"
+        ],
+        "checks": [
+          "pack selection",
+          "simulated odds label and exact fine percentages",
+          "nine-card deal/individual flip/reveal-all",
+          "text cards/full effect detail",
+          "rarity tier frames",
+          "collection persisted",
+          "history persisted after reload",
+          "no artwork",
+          "no horizontal overflow"
+        ],
+        "bounds": {
+          "viewport": 375,
+          "scroll": 375
+        }
+      },
+      {
+        "width": 1280,
+        "theme": "light",
+        "status": "PASS",
+        "username": "tcg009b_1280_light",
+        "userId": 7,
+        "openingId": 27,
+        "cards": 9,
+        "collectionCopies": 9,
+        "historyEntries": 1,
+        "rarities": [
+          "common",
+          "common",
+          "common",
+          "common",
+          "common",
+          "common",
+          "common",
+          "super-rare",
+          "common"
+        ],
+        "checks": [
+          "pack selection",
+          "simulated odds label and exact fine percentages",
+          "nine-card deal/individual flip/reveal-all",
+          "text cards/full effect detail",
+          "rarity tier frames",
+          "collection persisted",
+          "history persisted after reload",
+          "no artwork",
+          "no horizontal overflow"
+        ],
+        "bounds": {
+          "viewport": 1280,
+          "scroll": 1280
+        }
+      },
+      {
+        "width": 1280,
+        "theme": "dark",
+        "status": "PASS",
+        "username": "tcg009b_1280_dark",
+        "userId": 8,
+        "openingId": 28,
+        "cards": 9,
+        "collectionCopies": 9,
+        "historyEntries": 1,
+        "rarities": [
+          "super-rare",
+          "common",
+          "super-rare",
+          "common",
+          "common",
+          "super-rare",
+          "super-rare",
+          "common",
+          "common"
+        ],
+        "checks": [
+          "pack selection",
+          "simulated odds label and exact fine percentages",
+          "nine-card deal/individual flip/reveal-all",
+          "text cards/full effect detail",
+          "rarity tier frames",
+          "collection persisted",
+          "history persisted after reload",
+          "no artwork",
+          "no horizontal overflow"
+        ],
+        "bounds": {
+          "viewport": 1280,
+          "scroll": 1280
+        }
+      }
+    ],
+    "extraChecks": [
+      {
+        "name": "Secret/Starlight labels and tier-5 frame/shimmer in real catalog detail; no forced pulls",
+        "status": "PASS"
+      },
+      {
+        "name": "Real 500 error feedback, complete rollback and successful same-key retry",
+        "status": "PASS",
+        "userId": 5,
+        "openings": 2,
+        "copies": 18
+      },
+      {
+        "name": "Real exhausted allowance response and disabled-button feedback",
+        "status": "PASS",
+        "userId": 5,
+        "openings": 5,
+        "copies": 45
+      }
+    ],
+    "errors": [],
+    "httpErrors": [
+      {
+        "path": "/api/tcg/packs/4/open",
+        "status": 500
+      }
+    ],
+    "externalRequests": [],
+    "failures": [],
+    "result": {
+      "passed": 7,
+      "failed": 0,
+      "blocked": 0
+    }
+  },
+  "rowsBeforeCleanup": {
+    "games": 3,
+    "sets": 3,
+    "cards": 136,
+    "packs": 3,
+    "poolRows": 136,
+    "oddsRows": 60,
+    "openings": 26,
+    "openingCards": 220,
+    "replayRows": 26,
+    "collectionRows": 153,
+    "collectionCopies": 220,
+    "purchases": 1
+  },
+  "perPlayer": [
+    {
+      "id": 4,
+      "username": "tcg009_375_light",
+      "openings": 1,
+      "collection_copies": 9,
+      "replay_rows": 1
+    },
+    {
+      "id": 1,
+      "username": "tcg009admin",
+      "openings": 7,
+      "collection_copies": 63,
+      "replay_rows": 7
+    },
+    {
+      "id": 3,
+      "username": "tcg009api",
+      "openings": 6,
+      "collection_copies": 54,
+      "replay_rows": 6
+    },
+    {
+      "id": 8,
+      "username": "tcg009b_1280_dark",
+      "openings": 1,
+      "collection_copies": 9,
+      "replay_rows": 1
+    },
+    {
+      "id": 7,
+      "username": "tcg009b_1280_light",
+      "openings": 1,
+      "collection_copies": 9,
+      "replay_rows": 1
+    },
+    {
+      "id": 6,
+      "username": "tcg009b_375_dark",
+      "openings": 1,
+      "collection_copies": 9,
+      "replay_rows": 1
+    },
+    {
+      "id": 5,
+      "username": "tcg009b_375_light",
+      "openings": 5,
+      "collection_copies": 45,
+      "replay_rows": 5
+    },
+    {
+      "id": 2,
+      "username": "tcg009baseline",
+      "openings": 4,
+      "collection_copies": 22,
+      "replay_rows": 4
+    }
+  ],
+  "pilotRarities": {
+    "common": 50,
+    "secret-rare": 10,
+    "starlight-rare": 25,
+    "super-rare": 26,
+    "ultra-rare": 16
+  },
+  "finalPilotState": {
+    "gameActive": false,
+    "packActive": false,
+    "publicGameListContainsPilot": false,
+    "packStatus": 404
+  },
+  "setupNotes": [
+    "Temporary launcher duplicate port/process detachment corrected.",
+    "Temporary backend allowed only http://127.0.0.1:5199 after initial CORS rejection.",
+    "Browser rarity locator narrowed to handle repeated label text.",
+    "One preliminary browser user completed one real opening before the locator correction; included in row totals."
+  ],
+  "cleanup": {
+    "status": "complete",
+    "backendStopped": true,
+    "frontendStopped": true,
+    "acceptanceContainerRemoved": true,
+    "testcontainersPostgresAutomaticallyRemoved": true,
+    "testcontainersReaperAutomaticallyRemoved": true,
+    "pilotDisabledBeforeRemoval": true,
+    "originalContainersStopped": 0,
+    "localConfigurationOverrides": 0,
+    "temporaryDirectoryRemoved": true
+  },
+  "docker": {
+    "osType": "linux",
+    "serverVersion": "29.8.1"
+  },
+  "evidenceHashes": {
+    "integrationLog": "bdb51c4679eb24e215575c647c9d1478ab309d5c324a9bdc03defc3e83e42ad6",
+    "fixtures": {
+      "pokemon": "68ee95630941e9fd76ce22cde40ee017f21ac29e78a9300e618fa94f11508223",
+      "one-piece": "6cf842559d18847dae1f452cb64c0bad87a99b98e154d7267cd1a9d8aa1825d5",
+      "yugioh": "e62cf6ea400b2d2273daa0eb09dbbe91b088d962b0850fd9d9b77d9af2d270e9"
+    },
+    "screenshots": {
+      "1280-dark-revealed.png": "3b7a0791646fcebc40679795b123b49e181d2feeb0b6ff2cb43817ea46222693",
+      "1280-light-revealed.png": "fa9d8eb7e8051385a89636faaa89e08ac443b786197a894ef39c7191d2e68f62",
+      "375-dark-revealed.png": "4f52c7ba21ab6ebc4cf90e199b515578743cdfb73aee17255dabe3df77e0077f",
+      "375-light-error.png": "be3f92ab3b13fbcb9bd2544ec3e0d73d1bcd54a740aba8457ca4405d0a99a5f7",
+      "375-light-revealed.png": "08bfb1d28b79152812120a0c5fdd4dc38799d5f5b9a576937c351c211d2ec36a",
+      "375-light-starlight-detail.png": "b45c0e1320637a6e0841c8d197b790d441b66d824bcb40945f3e64d3bbde997c"
+    }
+  }
+}
