@@ -108,6 +108,10 @@ export const openingFixture: Opening = {
 }
 
 interface TcgMockOptions {
+  game?: TcgGame
+  set?: TcgSet
+  cards?: TcgCard[]
+  pack?: TcgPack
   /** What opening a pack returns. */
   opening?: Opening
   /** Make opening a pack fail with this status instead. */
@@ -129,6 +133,10 @@ interface TcgMockOptions {
  * to the history.
  */
 export function tcgHandlers({
+  game = gameFixture,
+  set = setFixture,
+  cards = cardsFixture,
+  pack = packFixture,
   opening = openingFixture,
   openFailure,
   dailyLimit = 5,
@@ -137,6 +145,8 @@ export function tcgHandlers({
   owned = {},
   openings = [],
 }: TcgMockOptions = {}): MockHandler {
+  const gameRef = { slug: game.slug, name: game.name }
+  const setRef = { id: set.id, code: set.code, name: set.name }
   const quantities = new Map(Object.entries(owned).map(([id, quantity]) => [Number(id), quantity]))
   const history = [...openings]
   let opened = openedToday
@@ -155,25 +165,25 @@ export function tcgHandlers({
         }
 
   const collection = (setId: number | null, page: number, size: number): Collection => {
-    const ownedCards = cardsFixture.filter((candidate) => quantities.has(candidate.id))
+    const ownedCards = cards.filter((candidate) => quantities.has(candidate.id))
     const listed = setId === null || setId === setRef.id ? ownedCards : []
     const total = [...quantities.values()].reduce((sum, quantity) => sum + quantity, 0)
-    const percent = Math.round((ownedCards.length * 1000) / cardsFixture.length) / 10
+    const percent = Math.round((ownedCards.length * 1000) / cards.length) / 10
     return {
       summary: {
         uniqueCards: ownedCards.length,
         totalCards: total,
-        availableCards: cardsFixture.length,
+        availableCards: cards.length,
         completionPercent: percent,
       },
       sets: [
         {
           ...setRef,
-          imageUrl: setFixture.imageUrl,
-          coverImageUrl: setFixture.coverImageUrl,
+          imageUrl: set.imageUrl,
+          coverImageUrl: set.coverImageUrl,
           game: gameRef,
           ownedCards: ownedCards.length,
-          totalCards: cardsFixture.length,
+          totalCards: cards.length,
           completionPercent: percent,
         },
       ],
@@ -195,16 +205,16 @@ export function tcgHandlers({
     const unauthorized = () => mockProblem(401, 'UNAUTHORIZED', 'Authentication is required')
 
     // --- The catalog: public ---------------------------------------------------------------
-    if (path === '/api/tcg/games') return mockJson([gameFixture])
+    if (path === '/api/tcg/games') return mockJson([game])
     if (path === '/api/tcg/sets') {
-      return mockJson(url.searchParams.get('game') === gameRef.slug ? [setFixture] : [])
+      return mockJson(url.searchParams.get('game') === gameRef.slug ? [set] : [])
     }
-    if (path === '/api/tcg/cards') return mockJson(cardsFixture)
-    if (path === '/api/tcg/packs') return mockJson([packFixture])
-    if (path === `/api/tcg/packs/${packFixture.id}`) return mockJson(packFixture)
+    if (path === '/api/tcg/cards') return mockJson(cards)
+    if (path === '/api/tcg/packs') return mockJson([pack])
+    if (path === `/api/tcg/packs/${pack.id}`) return mockJson(pack)
 
     // --- The player's own: needs a session -------------------------------------------------
-    if (method === 'POST' && path === `/api/tcg/packs/${packFixture.id}/open`) {
+    if (method === 'POST' && path === `/api/tcg/packs/${pack.id}/open`) {
       if (!user) return unauthorized()
       if (openFailure) return mockProblem(openFailure.status, openFailure.code, openFailure.detail)
       // Like the server: past the allowance, a player uses an extra pack or is refused.
