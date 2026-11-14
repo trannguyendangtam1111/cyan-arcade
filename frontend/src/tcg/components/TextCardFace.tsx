@@ -38,7 +38,7 @@ export function TextCardFace({ card, size, missing = false }: TextCardFaceProps)
         <span className="flex min-h-0 flex-1 flex-col gap-[2.5cqw] rounded-[4%/2.9%] bg-amber-50 p-[3cqw] shadow-[inset_0_0_0_1px_rgb(120_53_15/0.25)]">
           {/* Name, with the attribute beside it. */}
           <span className="flex items-start gap-[2cqw] rounded-[3cqw] bg-white/90 px-[2.5cqw] py-[1.5cqw] shadow-[inset_0_0_0_1px_rgb(120_53_15/0.2)]">
-            <span className="line-clamp-3 min-w-0 flex-1 font-display text-[10cqw] leading-[1.05] font-bold [overflow-wrap:anywhere] @min-[7rem]:line-clamp-2 @min-[7rem]:text-[7.5cqw]">
+            <span className="line-clamp-3 min-w-0 flex-1 font-display text-[10cqw] leading-[1.05] font-bold [overflow-wrap:anywhere] @min-[7rem]:text-[7.5cqw]">
               {card.name}
             </span>
             {details.attribute && (
@@ -60,6 +60,12 @@ export function TextCardFace({ card, size, missing = false }: TextCardFaceProps)
             </span>
           )}
 
+          {details.pendulumScale !== null && (
+            <span className="hidden rounded-[2cqw] bg-cyan-100 px-[2cqw] text-[4.5cqw] font-bold text-cyan-950 @min-[7rem]:block">
+              Pendulum scale {details.pendulumScale}
+            </span>
+          )}
+
           {/* Where the artwork would be: the arcade's cyan, with the kind of card. */}
           <span
             className={cn(
@@ -78,7 +84,7 @@ export function TextCardFace({ card, size, missing = false }: TextCardFaceProps)
           )}
 
           {full && details.effect && (
-            <span className="hidden min-h-0 flex-1 overflow-hidden rounded-[2cqw] bg-white/70 px-[2.5cqw] py-[1.5cqw] text-[4.4cqw] leading-snug text-stone-800 [mask-image:linear-gradient(to_bottom,black_80%,transparent)] @min-[7rem]:block">
+            <span className="hidden min-h-0 flex-1 overflow-hidden rounded-[2cqw] bg-white/70 px-[2.5cqw] py-[1.5cqw] text-[4.8cqw] leading-snug text-stone-800 [mask-image:linear-gradient(to_bottom,black_80%,transparent)] @min-[7rem]:block">
               {details.effect}
             </span>
           )}

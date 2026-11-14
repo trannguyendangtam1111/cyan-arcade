@@ -15,6 +15,8 @@ export interface TextCardDetails {
   attribute: string | null
   /** "Level 8", "Rank 3", "Link 2". */
   levelLabel: string | null
+  /** Present only when the source supplies a finite, nonnegative Pendulum scale (including zero). */
+  pendulumScale: number | null
   /** "ATK 1000 / DEF 2400", "ATK 1800 / LINK-2". */
   stats: string | null
   effect: string | null
@@ -49,6 +51,7 @@ export function textCardDetails(card: Pick<TcgCard, 'metadata'>): TextCardDetail
   const level = count(metadata, 'level')
   const rank = count(metadata, 'rank')
   const link = count(metadata, 'linkRating')
+  const scale = count(metadata, 'pendulumScale')
   const kind = kindOf(text(metadata, 'frameType'), cardType, atk !== null || def !== null)
 
   // A monster's type comes before its card type; a Spell's or Trap's property (Quick-Play, Normal) too.
@@ -68,6 +71,7 @@ export function textCardDetails(card: Pick<TcgCard, 'metadata'>): TextCardDetail
     typeLine,
     attribute: text(metadata, 'attribute'),
     levelLabel,
+    pendulumScale: scale !== null && Number.isInteger(scale) && scale >= 0 ? scale : null,
     stats: stats.length > 0 ? stats.join(' / ') : null,
     effect: text(metadata, 'effect'),
   }

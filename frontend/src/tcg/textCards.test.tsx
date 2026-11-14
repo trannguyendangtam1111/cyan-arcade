@@ -77,6 +77,7 @@ describe('what a text card shows', () => {
       typeLine: 'Warrior / Effect Monster',
       attribute: 'EARTH',
       levelLabel: 'Level 8',
+      pendulumScale: null,
       stats: 'ATK 1000 / DEF 2400',
       effect: 'If this card is Normal or Special Summoned: you can add 1 card from your Deck to your hand.',
     })
@@ -90,6 +91,7 @@ describe('what a text card shows', () => {
       typeLine: 'Normal / Spell Card',
       attribute: null,
       levelLabel: null,
+      pendulumScale: null,
       stats: null,
       effect: null,
     })
@@ -101,16 +103,27 @@ describe('what a text card shows', () => {
       typeLine: null,
       attribute: null,
       levelLabel: null,
+      pendulumScale: null,
       stats: null,
       effect: null,
     })
     expect(
       textCardDetails({ metadata: { attribute: '  ', level: '8', atk: '?', def: Number.NaN, effect: null, cardType: 'Trap Card' } }),
-    ).toEqual({ kind: 'trap', typeLine: 'Trap Card', attribute: null, levelLabel: null, stats: null, effect: null })
+    ).toEqual({ kind: 'trap', typeLine: 'Trap Card', attribute: null, levelLabel: null, pendulumScale: null, stats: null, effect: null })
   })
 })
 
 describe('a card face', () => {
+  it.each([0, 8])('shows an explicitly supplied Pendulum scale of %s', (scale) => {
+    const card = { ...arsMagna, metadata: { ...arsMagna.metadata, pendulumScale: scale } }
+    expect(textCardDetails(card).pendulumScale).toBe(scale)
+    render(<CardFace card={card} />)
+    expect(screen.getByText(`Pendulum scale ${scale}`)).toBeInTheDocument()
+  })
+
+  it.each([undefined, null, '8', -1, Number.NaN, Infinity, 1.5])('does not invent a scale from %s', (scale) => {
+    expect(textCardDetails({ metadata: { pendulumScale: scale } }).pendulumScale).toBeNull()
+  })
   it('shows an image-backed card as its picture, unchanged', () => {
     const { container } = render(<CardFace card={pineco} size="thumb" />)
 
@@ -178,6 +191,15 @@ describe('a card face', () => {
 })
 
 describe('text cards in the collection and the closer look', () => {
+  it('keeps a narrow tile’s full printed code separate from a long name', () => {
+    render(<CardTile card={wordy} onSelect={() => {}} />)
+    const tile = screen.getByRole('button', { name: `${LONG_NAME}, Ultra Rare` })
+    const code = within(tile).getByText(wordy.number, { selector: 'span.font-mono' })
+    expect(code).toHaveClass('block')
+    expect(code.parentElement).not.toHaveClass('truncate')
+    expect(within(tile).getByTitle(LONG_NAME)).toHaveTextContent(LONG_NAME)
+    expect(within(tile).getByTitle(LONG_NAME)).toHaveClass('line-clamp-3')
+  })
   it('lists a text card in a grid like any other', async () => {
     const onSelect = vi.fn()
     render(<CardTile card={arsMagna} quantity={2} onSelect={onSelect} />)

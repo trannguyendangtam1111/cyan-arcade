@@ -27,9 +27,16 @@ export function CardTile({ card, quantity, onSelect }: CardTileProps) {
           ×{quantity}
         </span>
       )}
-      <span className={cn('truncate px-0.5 text-sm font-bold', missing && 'text-ink-soft')}>
-        <span className="font-normal text-ink-soft">{card.number}</span> {card.name}
-      </span>
+      {card.imageUrl ? (
+        <span className={cn('truncate px-0.5 text-sm font-bold', missing && 'text-ink-soft')}>
+          <span className="font-normal text-ink-soft">{card.number}</span> {card.name}
+        </span>
+      ) : (
+        <span className={cn('block min-w-0 px-0.5 [overflow-wrap:anywhere]', missing && 'text-ink-soft')}>
+          <span className="block font-mono text-[0.65rem] leading-tight text-ink-soft">{card.number}</span>
+          <span title={card.name} className="mt-1 line-clamp-3 text-xs leading-snug font-bold">{card.name}</span>
+        </span>
+      )}
     </button>
   )
 }

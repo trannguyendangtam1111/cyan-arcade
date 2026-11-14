@@ -37,7 +37,7 @@ export const pilotPack: TcgPack = {
   description: 'Nine text cards using Arcade Simulated Odds. Pilot only; no official artwork or slot layout.',
   imageUrl: null, setLogoUrl: null, coverImageUrl: null, accentColor: pilotGame.accentColor,
   game: pilotGame, set: pilotSet, cardsPerPack: 9, poolSize: 127,
-  oddsNote: "Arcade Simulated Odds: each of 9 slots independently draws Common 80%, Super Rare 14%, Ultra Rare 5%, Secret Rare 0.99%, Starlight Rare 0.01%. These are not Konami's official pull rates or pack layout.",
+  oddsNote: "Arcade Simulated Odds. The table shows configured probabilities per card slot. These are not Konami's official pull rates or an official pack layout.",
   slots: Array.from({ length: 9 }, (_, index) => ({ slot: index + 1, odds: rarities.map((rarity, i) => ({
     rarity, percent: [80, 14, 5, 0.99, 0.01][i],
   })) })),

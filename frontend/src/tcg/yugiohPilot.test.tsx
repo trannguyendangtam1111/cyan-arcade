@@ -13,7 +13,8 @@ it('opens nine text printings with exact simulated odds, records history and upd
     game: pilotGame, set: pilotSet, cards: pilotCards, pack: pilotPack, opening: pilotOpening,
   })] })
   renderRoute('/tcg/packs/80')
-  expect(await screen.findByText(pilotPack.oddsNote!)).toBeInTheDocument()
+  expect(await screen.findByText('Arcade Simulated Odds', { exact: true })).toBeInTheDocument()
+  expect(screen.getByText(/The table shows configured probabilities per card slot/)).toBeInTheDocument()
   expect(screen.getAllByText('0.01%')).toHaveLength(9)
   expect(screen.getAllByText('0.99%')).toHaveLength(9)
   const wrapper = screen.getByRole('img', { name: pilotPack.name })
@@ -44,4 +45,22 @@ it('keeps the pilot out of the default franchise list', async () => {
   renderRoute('/tcg')
   await screen.findByRole('link', { name: /Pokémon/ })
   expect(screen.queryByText(pilotGame.name)).not.toBeInTheDocument()
+})
+
+it('discloses per-slot simulation using the API values instead of copying percentages into prose', async () => {
+  const pack = {
+    ...pilotPack,
+    slots: pilotPack.slots.map((slot) => ({ ...slot, odds: slot.odds.map((odd) => ({
+      ...odd, percent: odd.rarity.code === 'common' ? 79.5 : odd.rarity.code === 'super-rare' ? 14.5 : odd.percent,
+    })) })),
+  }
+  mockApi({ user: null, handlers: [tcgHandlers({ game: pilotGame, set: pilotSet, cards: pilotCards, pack })] })
+  renderRoute('/tcg/packs/80')
+  expect(await screen.findByText('Arcade Simulated Odds', { exact: true })).toBeInTheDocument()
+  expect(screen.getByText(/Each of the 9 card slots independently draws a rarity/)).toBeInTheDocument()
+  expect(screen.getByText(/not Konami's official pull rates/)).toBeInTheDocument()
+  expect(screen.getAllByText('79.5%')).toHaveLength(9)
+  expect(screen.getAllByText('14.5%')).toHaveLength(9)
+  expect(screen.queryByText('80%', { exact: true })).not.toBeInTheDocument()
+  expect(screen.getByText('Text cards')).toBeInTheDocument()
 })

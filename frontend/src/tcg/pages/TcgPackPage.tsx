@@ -75,6 +75,10 @@ export function TcgPackPage() {
 
 /** The pack's rarity rules, in the open: what each of its cards can turn out to be. */
 function Odds({ pack }: { pack: TcgPack }) {
+  const simulatedPilot = pack.game.slug === 'yugioh'
+  const oddsNote = simulatedPilot
+    ? pack.oddsNote?.replace(/^Arcade Simulated Odds[.:]\s*/, '')
+    : pack.oddsNote
   return (
     <Card padding="none" className="mx-auto w-full max-w-xl overflow-hidden">
       <table className="w-full text-left">
@@ -84,16 +88,24 @@ function Odds({ pack }: { pack: TcgPack }) {
             {pack.cardsPerPack} cards, from {pack.poolSize} different ones. The server picks them the moment the pack
             is opened.
           </span>
+          {simulatedPilot && (
+            <span className="mt-2 block text-sm text-ink-soft">
+              Each of the {pack.cardsPerPack} card slots independently draws a rarity using the chances below.
+              These are per-slot probabilities, not a guarantee of a rare card in each pack.
+              A printing already drawn is avoided while its rarity has other printings available.
+            </span>
+          )}
           {pack.oddsNote && (
             <span className="mt-2 block rounded-control bg-amber-50 px-3 py-2 text-sm font-bold text-amber-900">
-              {pack.oddsNote}
+              {simulatedPilot && <strong className="mb-1 block">Arcade Simulated Odds</strong>}
+              {oddsNote}
             </span>
           )}
         </caption>
         <thead className="text-xs font-bold tracking-wide text-ink-soft uppercase">
           <tr>
             <th scope="col" className="w-24 py-3 pl-5">
-              Card
+              {simulatedPilot ? 'Card slot' : 'Card'}
             </th>
             <th scope="col" className="py-3 pr-5">
               Chances
