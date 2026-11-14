@@ -91,8 +91,9 @@ class PersistentSessionTests {
 	void flywayUpgradesExistingDataAndOwnsTheSessionSchema() {
 		assertThat(this.jdbc.queryForObject("SELECT count(*) FROM games", Integer.class))
 			.isEqualTo(this.gamesBeforeUpgrade);
-		assertThat(this.jdbc.queryForObject("SELECT version FROM flyway_schema_history ORDER BY installed_rank DESC LIMIT 1",
-				String.class)).isEqualTo("37");
+		assertThat(this.jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE version = '37' AND success",
+				Integer.class)).isEqualTo(1);
+		assertThat(this.application.getBean(Flyway.class).info().pending()).isEmpty();
 		assertThat(this.application.getEnvironment().getProperty("spring.session.jdbc.initialize-schema"))
 			.isEqualTo("never");
 		assertThat(this.jdbc.queryForObject("SELECT to_regclass('spring_session_attributes')::text", String.class))
