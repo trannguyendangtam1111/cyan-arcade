@@ -1947,3 +1947,21 @@ The signed-in player's cards: how complete the collection is, set by set, and on
 | ----- | ---- |
 | `401 UNAUTHORIZED` | Not signed in |
 | `400 VALIDATION_FAILED` | `page` is negative, or `size` is outside 1 to 500 |
+
+### Yu-Gi-Oh! pilot administration
+
+`GET /api/admin/tcg/pilots/yugioh` returns administrative readiness: `activationAllowed`, `dataValid`, `gameActive`, `packActive`, `counts` (`sets`, `printings`, `distinctCards`, `packs`, `poolCards`, `oddsRows`) and actionable `problems`. It can inspect a hidden/unimported pilot; it does not make the game public.
+
+`PUT /api/admin/tcg/pilots/yugioh/visibility` requires an explicit JSON boolean, for example `{ "active": true }` or `{ "active": false }`. Both routes require an authenticated ADMIN; the write also requires the existing CSRF cookie/header. Controller and service authorization apply. There is no public activation button, arbitrary game slug or content-editing operation.
+
+Activation requires the default-off `app.tcg.pilots.yugioh.activation-allowed` environment gate and a valid complete pilot matching the shipped configuration. It updates game and pack flags together in one transaction. Deactivation works even with the gate off or invalid data and does not delete player data. Re-imports preserve either decision. Successful writes return the same readiness shape; repeated desired-state requests are idempotent. The application logs admin ID and visibility.
+
+| Error | When |
+| --- | --- |
+| `401 UNAUTHORIZED` / `403 FORBIDDEN` | Guest, non-admin, or invalid/missing CSRF as applicable |
+| `400 VALIDATION_FAILED` | Missing/null `active` or invalid request shape |
+| `404 NOT_FOUND` | Visibility change requested before importing the pilot |
+| `409 PILOT_ACTIVATION_DISABLED` | Activation gate is off |
+| `409 PILOT_NOT_READY` | Activation prerequisites fail; no visibility writes occur |
+
+Readiness is technical validation, not licensing or release approval. Current work authorizes activation only in disposable environments; follow the [controlled-release runbook](docs/tcg-010-operations.md) after separate authorization for any future target. Existing browser catalog queries can be cached for five minutes; verify deactivation using fresh API requests/pages.

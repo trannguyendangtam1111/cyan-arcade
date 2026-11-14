@@ -32,15 +32,7 @@ There is no guaranteed foil or rare slot. A pack may be all Common, or have seve
 1. Use an isolated PostgreSQL database migrated through V38, never the original V27 development database. Confirm its explicit connection URL before launching anything. Do not edit V1–V38.
 2. Enable `APP_TCG_PILOTS_YUGIOH_ENABLED=true` only for the disposable importer; use the `import-tcg` profile with `TCG_IMPORT_SOURCES=yugioh`, first `TCG_IMPORT_DRY_RUN=true`. Review the report: one set, 127 printings and one pack. Then import and repeat to verify no duplicates.
 3. Verify the game and pack are inactive after import. Source enablement does not make the game visible. Keep the text-only image/licensing policy and simulated odds notice visible.
-4. Only within that disposable database, explicitly enable both rows for interactive checks:
-
-```sql
-UPDATE tcg_games SET active = TRUE WHERE slug = 'yugioh';
-UPDATE tcg_packs p SET active = TRUE
-FROM tcg_sets s, tcg_games g
-WHERE p.set_id = s.id AND s.game_id = g.id
-  AND g.slug = 'yugioh' AND s.code = 'betb' AND p.code = 'arcade-pilot-booster';
-```
+4. Only inside an explicitly approved disposable environment, use the [TCG-010 administrative readiness and visibility operation](tcg-010-operations.md). The separate activation gate defaults off; inspect `GET /api/admin/tcg/pilots/yugioh`, then use an ADMIN/CSRF-protected `PUT /api/admin/tcg/pilots/yugioh/visibility` with `{ "active": true }` only if prerequisites and approval are satisfied. Direct database-row edits are no longer the supported activation procedure. Use `{ "active": false }` to hide the pilot without deleting player data.
 
 5. Check nine-card reveals, rarity labels/effects, text details, collection and history at 375px and desktop, in light/dark themes. Verify replay, allowance exhaustion, existing purchased generic extras, admin unlimited openings and transaction rollback. Disable both rows afterwards or discard the disposable database.
 

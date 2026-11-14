@@ -33,3 +33,10 @@ Version, checksums, installation and troubleshooting: `tools/stockfish/README.md
 
 Card names, text and images are © their publishers and are loaded from the TCGdex and OPTCG API
 services at run time; see the README, "Card games" and "Licensing and usage".
+
+The hidden Yu-Gi-Oh! pilot imports metadata from YGOPRODeck and uses text cards, with no artwork,
+logos or publisher card backs. Its existing attribution names YGOPRODeck and the rights holders.
+Text-only presentation is not a grant to redistribute provider data or card text. Public-use scope,
+attribution and any future artwork/image-hosting permission remain unresolved release prerequisites;
+see [TCG-010 readiness](docs/tcg-010-release-preparation.md). The simulated arcade odds are not
+Konami's official pull rates, and this project is not affiliated with or endorsed by Konami.

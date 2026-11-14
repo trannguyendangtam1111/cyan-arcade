@@ -260,6 +260,7 @@ The backend reads further settings from environment variables when run natively 
 | `TCG_POKEMON_URL`, `TCG_POKEMON_CONFIG` | TCGdex's GraphQL API, `classpath:tcg/sources/pokemon.json` | Where Pokémon data comes from, and which sets and pack layouts to use |
 | `TCG_ONE_PIECE_URL`, `TCG_ONE_PIECE_CONFIG` | `https://optcgapi.com/api`, `classpath:tcg/sources/one-piece.json` | The same for One Piece |
 | `APP_TCG_PILOTS_YUGIOH_ENABLED` | `false` | The Yu-Gi-Oh! pilot source (YGOPRODeck). On, `TCG_IMPORT_SOURCES=yugioh` imports Beyond the Brave's text cards and one disabled nine-card pack into a hidden game; disposable databases only. See [pilot pack rules and prerequisites](docs/tcg-008-pilot-pack.md) |
+| `APP_TCG_PILOTS_YUGIOH_ACTIVATION_ALLOWED` | `false` | Separate environment gate for the ADMIN/CSRF-protected pilot visibility API. Import never grants activation permission. See [TCG-010 readiness and blockers](docs/tcg-010-release-preparation.md) and the [operations runbook](docs/tcg-010-operations.md). Keep off outside explicitly approved disposable tests |
 
 **Request limits and reverse proxies.** The three POST limits above use separate, atomic fixed
 windows starting at the first request. They return `429` problem details with code
