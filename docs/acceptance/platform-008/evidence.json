@@ -1,0 +1,1080 @@
+{
+  "date": "2026-11-14",
+  "startingCommit": "ccf0359",
+  "releaseArtifactSource": "ccf0359 (production code unchanged from 70c2fd9)",
+  "recoveryArtifactSource": "4798d0f",
+  "authorization": {
+    "source": "127.0.0.1:5435/cyan_arcade",
+    "scope": "Explicit user approval for read-only preflight and consistent V27 backup; all later work on disposable restored copies",
+    "sourceVersion": "18.6",
+    "sourceHistoryCount": 27,
+    "readOnlyEnforced": true
+  },
+  "backup": {
+    "directory": "C:\\dev\\GameHub-backups\\PLATFORM-008-20261114-125856",
+    "sha256": "7951BE05317B64E8DC289D0888CCCB6F4B8EEABCBA77573A63E4415F3926CCC8",
+    "bytes": 493824,
+    "startedUtc": "2026-11-14T05:59:18.3163634Z",
+    "clientVersion": "18.6",
+    "snapshot": "pg_dump consistent read-only logical snapshot",
+    "sourceVersion": "18.6",
+    "finishedUtc": "2026-11-14T05:59:18.859655Z",
+    "protectedAcl": true,
+    "source": "127.0.0.1:5435/cyan_arcade",
+    "authorization": "Explicit user approval, PLATFORM-008, 2026-11-14",
+    "archiveEntries": 215
+  },
+  "isolation": {
+    "image": "postgres:18-alpine",
+    "upgrade": {
+      "port": 55441,
+      "database": "platform008_upgrade",
+      "ownership": "All restored objects owned by disposable role; source ACLs not applied",
+      "container": "395c8150982b5e4cd3be93187873a90a9f18cb08f7fc32c82252407d3b2d638d",
+      "restoreSeconds": 0.7345173,
+      "archiveEntries": 215,
+      "sha256": "7951BE05317B64E8DC289D0888CCCB6F4B8EEABCBA77573A63E4415F3926CCC8"
+    },
+    "recovery": {
+      "restoreSeconds": 1.230388,
+      "container": "950b829683bb08b1be90d9ae5122d1d1eaadea4bce3d0b0fe2b1388f367ebf40",
+      "port": 55442,
+      "sha256": "7951BE05317B64E8DC289D0888CCCB6F4B8EEABCBA77573A63E4415F3926CCC8",
+      "database": "platform008_recovery"
+    },
+    "httpPorts": [
+      8101,
+      8102
+    ],
+    "ownershipMapping": "--no-owner --no-acl; disposable role owns restored objects; not a source permission recovery proof"
+  },
+  "baseline": {
+    "tables": [
+      {
+        "name": "chess_matches",
+        "rows": 134,
+        "sha256": "bd6d0c28804557ce992a6fe0d24f312310e3dadfef2783ab7d994d0965778cbb"
+      },
+      {
+        "name": "coin_transactions",
+        "rows": 217,
+        "sha256": "6442b9509667e37407593fc770ef564c0e4e94ddf956504982891d3c2c082dda"
+      },
+      {
+        "name": "daily_challenge_completions",
+        "rows": 38,
+        "sha256": "cc475e750f78e5b4618ad73cd779494299c8ce5323f1a57887d21ac7a5b33d05"
+      },
+      {
+        "name": "daily_challenge_progress",
+        "rows": 8,
+        "sha256": "70ba82b189cc1b5c839fcb506ac52b46250b0da40d32efe5fb0242af5de88832"
+      },
+      {
+        "name": "daily_challenges",
+        "rows": 372,
+        "sha256": "2df1573a40367e2959364f8ad27fcd62b2279dbda057c54bce82c561c7bc4699"
+      },
+      {
+        "name": "daily_logins",
+        "rows": 8,
+        "sha256": "ec7c793b85a0c674f5be2e58ea669b47e3d711ce33f532fee0b51b43840760ec"
+      },
+      {
+        "name": "flyway_schema_history",
+        "rows": 27,
+        "sha256": "df374011312a97ad7b37e359a9c3dd17386b7f94d4a829470d4aba6a100e1912"
+      },
+      {
+        "name": "game_sessions",
+        "rows": 101,
+        "sha256": "b89828b986c9a59a3bfabd98a1effed31d96bcffaa7320d460952be5b115a7b2"
+      },
+      {
+        "name": "games",
+        "rows": 10,
+        "sha256": "01a5af14a79a782b077948ce1ed71ce5cf94ff08de1f31b04662739b0319babc"
+      },
+      {
+        "name": "purchases",
+        "rows": 12,
+        "sha256": "c14ce4a6aaa848ec7e864a420a9c3135fc711fd3fd3fc33dc8855cfeb07d3541"
+      },
+      {
+        "name": "scores",
+        "rows": 101,
+        "sha256": "9720750844ef86864d8c1892fe8315e25d36517f79167862567dd7b8e778920b"
+      },
+      {
+        "name": "shop_items",
+        "rows": 82,
+        "sha256": "e361bb372175016a71d3dd276c2095ba8cc8d8f583cf8a313e52339de9bddb9d"
+      },
+      {
+        "name": "sudoku_daily_puzzles",
+        "rows": 4,
+        "sha256": "ec0fe65d2e56dbc1c076cacbf2988242cac349d4fb50f67e3b32bedcee3ab33d"
+      },
+      {
+        "name": "sudoku_runs",
+        "rows": 11,
+        "sha256": "bec4d7b0904c685355bb65d98e9bc193b14b044c963278bbba89394484c9f368"
+      },
+      {
+        "name": "tcg_cards",
+        "rows": 7802,
+        "sha256": "a4d6669606964dd3d8bf319df69e0cca9934ba5df4cde6addedc1e57e94efa72"
+      },
+      {
+        "name": "tcg_games",
+        "rows": 2,
+        "sha256": "4709262170ec5378bec298fd18e50b5a99ccb348f47f4aa4669d0470ab4592b6"
+      },
+      {
+        "name": "tcg_pack_cards",
+        "rows": 7802,
+        "sha256": "7be625cf0b99fb34e4465a4342d87381993c8bd12da42cd81591ae3281ce2c88"
+      },
+      {
+        "name": "tcg_pack_opening_cards",
+        "rows": 1173,
+        "sha256": "092063f12ad8ff0645b5ce899d493b3f51ea6b5fce8d9c2e2ae40ca778b1d215"
+      },
+      {
+        "name": "tcg_pack_opening_requests",
+        "rows": 6,
+        "sha256": "20e83e5115ccf8c4c2b29c47a1219157cf5afeb26ae9f903f332ac8dfc6ba1f0"
+      },
+      {
+        "name": "tcg_pack_openings",
+        "rows": 120,
+        "sha256": "73a3a159a89af46a82135f3e8cc33940da0bc751e8df727e969240fdd87ade34"
+      },
+      {
+        "name": "tcg_pack_slot_odds",
+        "rows": 854,
+        "sha256": "626c1e9c909a74ea70f0bdeeabc9eff511cb49289b0008d44852588bf577e4ce"
+      },
+      {
+        "name": "tcg_packs",
+        "rows": 46,
+        "sha256": "9eef168b745c441116fe23746047e032f8c057275c14f7b7daf85e334118c13e"
+      },
+      {
+        "name": "tcg_rarities",
+        "rows": 27,
+        "sha256": "f319ce0265fd15c855151baa1a6adc8f250dc8c54990ad51cd489db686f6c8ce"
+      },
+      {
+        "name": "tcg_sets",
+        "rows": 46,
+        "sha256": "5188204f9eb5342bfb0046dcb05c49ea5b01e713b4bb1650b5f7b43fcc09bb43"
+      },
+      {
+        "name": "tcg_user_cards",
+        "rows": 587,
+        "sha256": "5944a46cc32f9822af92089e5695352663f44135e884acdd853ce2cc1a99a6fc"
+      },
+      {
+        "name": "user_achievements",
+        "rows": 88,
+        "sha256": "9c29080219f412019052a997f81cc7276905a73b4005c2e8c2da140d6a66c5f6"
+      },
+      {
+        "name": "user_inventory",
+        "rows": 17,
+        "sha256": "19e068196fbd20e163b085b0774da3432310a990e9316aabc885b5db5119f97a"
+      },
+      {
+        "name": "user_wallets",
+        "rows": 29,
+        "sha256": "d6488512ba89df584fcff9b7e22b5704c9245bf1a0edf42a2e73074e96c044e1"
+      },
+      {
+        "name": "users",
+        "rows": 55,
+        "sha256": "8215d17ebc4d50528a3ff00b5202d1e41e1cd039daefae43595145afa0b4d02f"
+      },
+      {
+        "name": "wordle_runs",
+        "rows": 17,
+        "sha256": "a0b1d7a27831a0f23896eb980b33efb072220107182fc54b5af7b7f1d02a5e35"
+      }
+    ],
+    "totalRows": 19796,
+    "foreignKeys": 44,
+    "orphanRows": 0
+  },
+  "migration": {
+    "timings": [
+      {
+        "installed_rank": 28,
+        "version": "28",
+        "description": "add game modes",
+        "checksum": -1318778808,
+        "success": true,
+        "execution_time": 51
+      },
+      {
+        "installed_rank": 29,
+        "version": "29",
+        "description": "index scores by mode",
+        "checksum": -532124468,
+        "success": true,
+        "execution_time": 23
+      },
+      {
+        "installed_rank": 30,
+        "version": "30",
+        "description": "add minesweeper daily board",
+        "checksum": 1756393363,
+        "success": true,
+        "execution_time": 60
+      },
+      {
+        "installed_rank": 31,
+        "version": "31",
+        "description": "share minesweeper daily layout",
+        "checksum": 484988937,
+        "success": true,
+        "execution_time": 70
+      },
+      {
+        "installed_rank": 32,
+        "version": "32",
+        "description": "add minesweeper daily rewards",
+        "checksum": -1850446812,
+        "success": true,
+        "execution_time": 15
+      },
+      {
+        "installed_rank": 33,
+        "version": "33",
+        "description": "index sudoku daily runs by date",
+        "checksum": -1294100422,
+        "success": true,
+        "execution_time": 18
+      },
+      {
+        "installed_rank": 34,
+        "version": "34",
+        "description": "add sudoku daily archive",
+        "checksum": 313218229,
+        "success": true,
+        "execution_time": 30
+      },
+      {
+        "installed_rank": 35,
+        "version": "35",
+        "description": "add sudoku run notes",
+        "checksum": -1719503509,
+        "success": true,
+        "execution_time": 29
+      },
+      {
+        "installed_rank": 36,
+        "version": "36",
+        "description": "add score result snapshot",
+        "checksum": 1365417419,
+        "success": true,
+        "execution_time": 20
+      },
+      {
+        "installed_rank": 37,
+        "version": "37",
+        "description": "persist http sessions",
+        "checksum": -986291065,
+        "success": true,
+        "execution_time": 52
+      },
+      {
+        "installed_rank": 38,
+        "version": "38",
+        "description": "allow tcg cards without images",
+        "checksum": -1312207373,
+        "success": true,
+        "execution_time": 22
+      }
+    ],
+    "postTables": [
+      {
+        "name": "chess_matches",
+        "rows": 134,
+        "sha256": "bd6d0c28804557ce992a6fe0d24f312310e3dadfef2783ab7d994d0965778cbb"
+      },
+      {
+        "name": "coin_transactions",
+        "rows": 217,
+        "sha256": "6442b9509667e37407593fc770ef564c0e4e94ddf956504982891d3c2c082dda"
+      },
+      {
+        "name": "daily_challenge_completions",
+        "rows": 38,
+        "sha256": "cc475e750f78e5b4618ad73cd779494299c8ce5323f1a57887d21ac7a5b33d05"
+      },
+      {
+        "name": "daily_challenge_progress",
+        "rows": 8,
+        "sha256": "70ba82b189cc1b5c839fcb506ac52b46250b0da40d32efe5fb0242af5de88832"
+      },
+      {
+        "name": "daily_challenges",
+        "rows": 372,
+        "sha256": "2df1573a40367e2959364f8ad27fcd62b2279dbda057c54bce82c561c7bc4699"
+      },
+      {
+        "name": "daily_logins",
+        "rows": 8,
+        "sha256": "ec7c793b85a0c674f5be2e58ea669b47e3d711ce33f532fee0b51b43840760ec"
+      },
+      {
+        "name": "flyway_schema_history",
+        "rows": 38,
+        "sha256": "3b0235e6e9d2f42e4ccdb7a4bdea58e2608fe6948d975994b99a062d4b87c8ff"
+      },
+      {
+        "name": "game_sessions",
+        "rows": 101,
+        "sha256": "b89828b986c9a59a3bfabd98a1effed31d96bcffaa7320d460952be5b115a7b2"
+      },
+      {
+        "name": "games",
+        "rows": 10,
+        "sha256": "01a5af14a79a782b077948ce1ed71ce5cf94ff08de1f31b04662739b0319babc"
+      },
+      {
+        "name": "minesweeper_daily_attempts",
+        "rows": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "minesweeper_daily_boards",
+        "rows": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "minesweeper_daily_legacy_attempts",
+        "rows": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "minesweeper_daily_legacy_boards",
+        "rows": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "purchases",
+        "rows": 12,
+        "sha256": "c14ce4a6aaa848ec7e864a420a9c3135fc711fd3fd3fc33dc8855cfeb07d3541"
+      },
+      {
+        "name": "scores",
+        "rows": 101,
+        "sha256": "9720750844ef86864d8c1892fe8315e25d36517f79167862567dd7b8e778920b"
+      },
+      {
+        "name": "shop_items",
+        "rows": 82,
+        "sha256": "e361bb372175016a71d3dd276c2095ba8cc8d8f583cf8a313e52339de9bddb9d"
+      },
+      {
+        "name": "spring_session",
+        "rows": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "spring_session_attributes",
+        "rows": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "sudoku_daily_puzzles",
+        "rows": 4,
+        "sha256": "ec0fe65d2e56dbc1c076cacbf2988242cac349d4fb50f67e3b32bedcee3ab33d"
+      },
+      {
+        "name": "sudoku_run_notes",
+        "rows": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "sudoku_runs",
+        "rows": 11,
+        "sha256": "bec4d7b0904c685355bb65d98e9bc193b14b044c963278bbba89394484c9f368"
+      },
+      {
+        "name": "tcg_cards",
+        "rows": 7802,
+        "sha256": "a4d6669606964dd3d8bf319df69e0cca9934ba5df4cde6addedc1e57e94efa72"
+      },
+      {
+        "name": "tcg_games",
+        "rows": 2,
+        "sha256": "4709262170ec5378bec298fd18e50b5a99ccb348f47f4aa4669d0470ab4592b6"
+      },
+      {
+        "name": "tcg_pack_cards",
+        "rows": 7802,
+        "sha256": "7be625cf0b99fb34e4465a4342d87381993c8bd12da42cd81591ae3281ce2c88"
+      },
+      {
+        "name": "tcg_pack_opening_cards",
+        "rows": 1173,
+        "sha256": "092063f12ad8ff0645b5ce899d493b3f51ea6b5fce8d9c2e2ae40ca778b1d215"
+      },
+      {
+        "name": "tcg_pack_opening_requests",
+        "rows": 6,
+        "sha256": "20e83e5115ccf8c4c2b29c47a1219157cf5afeb26ae9f903f332ac8dfc6ba1f0"
+      },
+      {
+        "name": "tcg_pack_openings",
+        "rows": 120,
+        "sha256": "73a3a159a89af46a82135f3e8cc33940da0bc751e8df727e969240fdd87ade34"
+      },
+      {
+        "name": "tcg_pack_slot_odds",
+        "rows": 854,
+        "sha256": "626c1e9c909a74ea70f0bdeeabc9eff511cb49289b0008d44852588bf577e4ce"
+      },
+      {
+        "name": "tcg_packs",
+        "rows": 46,
+        "sha256": "9eef168b745c441116fe23746047e032f8c057275c14f7b7daf85e334118c13e"
+      },
+      {
+        "name": "tcg_rarities",
+        "rows": 27,
+        "sha256": "f319ce0265fd15c855151baa1a6adc8f250dc8c54990ad51cd489db686f6c8ce"
+      },
+      {
+        "name": "tcg_sets",
+        "rows": 46,
+        "sha256": "5188204f9eb5342bfb0046dcb05c49ea5b01e713b4bb1650b5f7b43fcc09bb43"
+      },
+      {
+        "name": "tcg_user_cards",
+        "rows": 587,
+        "sha256": "5944a46cc32f9822af92089e5695352663f44135e884acdd853ce2cc1a99a6fc"
+      },
+      {
+        "name": "user_achievements",
+        "rows": 88,
+        "sha256": "9c29080219f412019052a997f81cc7276905a73b4005c2e8c2da140d6a66c5f6"
+      },
+      {
+        "name": "user_inventory",
+        "rows": 17,
+        "sha256": "19e068196fbd20e163b085b0774da3432310a990e9316aabc885b5db5119f97a"
+      },
+      {
+        "name": "user_wallets",
+        "rows": 29,
+        "sha256": "d6488512ba89df584fcff9b7e22b5704c9245bf1a0edf42a2e73074e96c044e1"
+      },
+      {
+        "name": "users",
+        "rows": 55,
+        "sha256": "8215d17ebc4d50528a3ff00b5202d1e41e1cd039daefae43595145afa0b4d02f"
+      },
+      {
+        "name": "wordle_runs",
+        "rows": 17,
+        "sha256": "a0b1d7a27831a0f23896eb980b33efb072220107182fc54b5af7b7f1d02a5e35"
+      }
+    ],
+    "comparison": {
+      "mode": "post",
+      "comparedExistingTables": 30,
+      "changes": [
+        {
+          "name": "flyway_schema_history",
+          "before": 27,
+          "after": 38
+        }
+      ],
+      "unexpectedChanges": [],
+      "sequenceValuesUnchanged": true,
+      "foreignKeys": 50,
+      "orphanRows": 0
+    },
+    "schemaChecks": {
+      "checks": [
+        {
+          "name": "V1-V27 checksums/history preserved; V28-V38 ordered and successful",
+          "pass": true
+        },
+        {
+          "name": "All old index definitions retained",
+          "pass": true
+        },
+        {
+          "name": "Old constraints retained except intentional V34 and V38 changes",
+          "pass": true
+        },
+        {
+          "name": "Every constraint validated and every index valid",
+          "pass": true
+        },
+        {
+          "name": "V28 old modes Classic; V36 historical snapshots null",
+          "pass": true
+        },
+        {
+          "name": "V29/V33 indexes installed",
+          "pass": true
+        },
+        {
+          "name": "V30-V32/V35/V37 seven new tables empty at migration boundary",
+          "pass": true
+        },
+        {
+          "name": "V34 archive mode and unranked constraint installed",
+          "pass": true
+        },
+        {
+          "name": "V38 nullable images; all existing image rows preserved; three new guards installed",
+          "pass": true
+        },
+        {
+          "name": "Yu-Gi-Oh absent in both restored states; no import or activation",
+          "pass": true
+        },
+        {
+          "name": "Wallets reconcile with ledger, no negative balances, financial aggregates preserved",
+          "pass": true
+        }
+      ],
+      "financial": {
+        "upgrade": {
+          "wallets": 29,
+          "balanceTotal": 12750,
+          "ledgerRows": 217,
+          "ledgerNet": 12750,
+          "negativeWallets": 0,
+          "unreconciledWallets": 0
+        },
+        "recovery": {
+          "wallets": 29,
+          "balanceTotal": 12750,
+          "ledgerRows": 217,
+          "ledgerNet": 12750,
+          "negativeWallets": 0,
+          "unreconciledWallets": 0
+        }
+      },
+      "franchises": [
+        {
+          "slug": "one-piece",
+          "cards": 3023,
+          "sets": 20,
+          "packs": 20
+        },
+        {
+          "slug": "pokemon",
+          "cards": 4779,
+          "sets": 26,
+          "packs": 26
+        }
+      ],
+      "oldIndexes": 85,
+      "newIndexes": 102,
+      "oldConstraints": 366,
+      "newConstraints": 463
+    },
+    "postApiBusinessChanges": [],
+    "flywayLogSha256": "c27e8c7cea9a30a2573d5c709e269219d37cd1420aa0654e6e203db145a639f0"
+  },
+  "recovery": {
+    "comparison": {
+      "mode": "recovery",
+      "comparedExistingTables": 30,
+      "changes": [],
+      "unexpectedChanges": [],
+      "sequenceValuesUnchanged": true,
+      "foreignKeys": 44,
+      "orphanRows": 0
+    },
+    "historyCountAfterV27App": 27,
+    "applicationStarted": true,
+    "restoreSeconds": 1.230388
+  },
+  "api": {
+    "checks": [
+      {
+        "name": "recovery public /actuator/health",
+        "pass": true
+      },
+      {
+        "name": "recovery public /api/games",
+        "pass": true
+      },
+      {
+        "name": "recovery public /api/tcg/games",
+        "pass": true
+      },
+      {
+        "name": "recovery public /api/tcg/sets?game=pokemon",
+        "pass": true
+      },
+      {
+        "name": "recovery public /api/tcg/sets?game=one-piece",
+        "pass": true
+      },
+      {
+        "name": "recovery public /api/tcg/packs?set=28",
+        "pass": true
+      },
+      {
+        "name": "recovery public /api/tcg/packs?set=3",
+        "pass": true
+      },
+      {
+        "name": "recovery public /api/tcg/packs/30",
+        "pass": true
+      },
+      {
+        "name": "recovery public /api/tcg/packs/5",
+        "pass": true
+      },
+      {
+        "name": "recovery public /api/leaderboards/snake",
+        "pass": true
+      },
+      {
+        "name": "recovery public /api/daily-challenges",
+        "pass": true
+      },
+      {
+        "name": "recovery Yu-Gi-Oh hidden",
+        "pass": true
+      },
+      {
+        "name": "recovery restored account authenticates with copy-only test credential",
+        "pass": true
+      },
+      {
+        "name": "recovery authenticated /api/users/me",
+        "pass": true
+      },
+      {
+        "name": "recovery authenticated /api/users/me/coins",
+        "pass": true
+      },
+      {
+        "name": "recovery authenticated /api/users/me/transactions",
+        "pass": true
+      },
+      {
+        "name": "recovery authenticated /api/users/me/inventory",
+        "pass": true
+      },
+      {
+        "name": "recovery authenticated /api/tcg/collection",
+        "pass": true
+      },
+      {
+        "name": "recovery authenticated /api/tcg/openings",
+        "pass": true
+      },
+      {
+        "name": "recovery authenticated /api/users/me/game-history",
+        "pass": true
+      },
+      {
+        "name": "recovery authenticated /api/users/me/achievements",
+        "pass": true
+      },
+      {
+        "name": "recovery authenticated /api/daily-challenges/me",
+        "pass": true
+      },
+      {
+        "name": "recovery authenticated /api/tcg/allowance",
+        "pass": true
+      },
+      {
+        "name": "recovery wallet/collection/opening APIs match restored DB",
+        "pass": true
+      },
+      {
+        "name": "upgrade public /actuator/health",
+        "pass": true
+      },
+      {
+        "name": "upgrade public /api/games",
+        "pass": true
+      },
+      {
+        "name": "upgrade public /api/tcg/games",
+        "pass": true
+      },
+      {
+        "name": "upgrade public /api/tcg/sets?game=pokemon",
+        "pass": true
+      },
+      {
+        "name": "upgrade public /api/tcg/sets?game=one-piece",
+        "pass": true
+      },
+      {
+        "name": "upgrade public /api/tcg/packs?set=28",
+        "pass": true
+      },
+      {
+        "name": "upgrade public /api/tcg/packs?set=3",
+        "pass": true
+      },
+      {
+        "name": "upgrade public /api/tcg/packs/30",
+        "pass": true
+      },
+      {
+        "name": "upgrade public /api/tcg/packs/5",
+        "pass": true
+      },
+      {
+        "name": "upgrade public /api/leaderboards/snake",
+        "pass": true
+      },
+      {
+        "name": "upgrade public /api/daily-challenges",
+        "pass": true
+      },
+      {
+        "name": "upgrade Yu-Gi-Oh hidden",
+        "pass": true
+      },
+      {
+        "name": "upgrade restored account authenticates with copy-only test credential",
+        "pass": true
+      },
+      {
+        "name": "upgrade authenticated /api/users/me",
+        "pass": true
+      },
+      {
+        "name": "upgrade authenticated /api/users/me/coins",
+        "pass": true
+      },
+      {
+        "name": "upgrade authenticated /api/users/me/transactions",
+        "pass": true
+      },
+      {
+        "name": "upgrade authenticated /api/users/me/inventory",
+        "pass": true
+      },
+      {
+        "name": "upgrade authenticated /api/tcg/collection",
+        "pass": true
+      },
+      {
+        "name": "upgrade authenticated /api/tcg/openings",
+        "pass": true
+      },
+      {
+        "name": "upgrade authenticated /api/users/me/game-history",
+        "pass": true
+      },
+      {
+        "name": "upgrade authenticated /api/users/me/achievements",
+        "pass": true
+      },
+      {
+        "name": "upgrade authenticated /api/daily-challenges/me",
+        "pass": true
+      },
+      {
+        "name": "upgrade authenticated /api/tcg/allowance",
+        "pass": true
+      },
+      {
+        "name": "upgrade wallet/collection/opening APIs match restored DB",
+        "pass": true
+      },
+      {
+        "name": "V27/V38 API compatibility /api/tcg/games",
+        "pass": true
+      },
+      {
+        "name": "V27/V38 API compatibility /api/tcg/sets?game=pokemon",
+        "pass": true
+      },
+      {
+        "name": "V27/V38 API compatibility /api/tcg/sets?game=one-piece",
+        "pass": true
+      },
+      {
+        "name": "V27/V38 API compatibility /api/tcg/packs?set=28",
+        "pass": true
+      },
+      {
+        "name": "V27/V38 API compatibility /api/tcg/packs?set=3",
+        "pass": true
+      },
+      {
+        "name": "V27/V38 API compatibility /api/tcg/packs/30",
+        "pass": true
+      },
+      {
+        "name": "V27/V38 API compatibility /api/tcg/packs/5",
+        "pass": true
+      },
+      {
+        "name": "V27/V38 API compatibility /api/users/me/coins",
+        "pass": true
+      },
+      {
+        "name": "V27/V38 API compatibility /api/users/me/transactions",
+        "pass": true
+      },
+      {
+        "name": "V27/V38 API compatibility /api/users/me/inventory",
+        "pass": true
+      },
+      {
+        "name": "V27/V38 API compatibility /api/tcg/collection",
+        "pass": true
+      },
+      {
+        "name": "V27/V38 API compatibility /api/tcg/openings",
+        "pass": true
+      }
+    ],
+    "additiveFields": [],
+    "mutations": "One restored USER password replaced in each disposable copy after invariant snapshots; auth sessions only; no score/purchase/pack mutations",
+    "responses": {
+      "recovery": {
+        "/actuator/health": {
+          "sha256": "f5d81755935209a3ae596d4553d269cbbe8d08a27dd95b05fe0b7c544eb7ed71"
+        },
+        "/api/games": {
+          "sha256": "3475dedb549631d9d1a2aaab0489865b96f817ff4e7d097e6e1cc45294ad2bf9"
+        },
+        "/api/tcg/games": {
+          "sha256": "20db5a200ee4d743cbd0f3cef36ada8b5ef2e0d1adfc7e044d5f00903119a0b0"
+        },
+        "/api/tcg/sets?game=pokemon": {
+          "sha256": "5939b7bd9de6872f4ca82cab4f1e777d9949b49965eac255a72880731aabf785"
+        },
+        "/api/tcg/sets?game=one-piece": {
+          "sha256": "fc08bc39a847718c7402c66b0deaf0e72e57e775b3f75433db1a1198ac21fa83"
+        },
+        "/api/tcg/packs?set=28": {
+          "sha256": "148c02f8e0f40d15fc5a2523efc300733513375edef32657aafd5cc0abddda68"
+        },
+        "/api/tcg/packs?set=3": {
+          "sha256": "f7d5344a9dc4f61bcd50109b83b6c9cf6a10c7f9f7432326470beb28b20e76bb"
+        },
+        "/api/tcg/packs/30": {
+          "sha256": "e044e9ff5d9b23c6524f9e56ebf9d3605442567fefa5779ae93235d01276e3e6"
+        },
+        "/api/tcg/packs/5": {
+          "sha256": "6a50f4d955188ee1b3a8df5833c97428f0e98f89576872eaf3cc6ff41b56c8d2"
+        },
+        "/api/leaderboards/snake": {
+          "sha256": "f98247fdc1c42c340ebe471c831aa209d256cb464a56a6ecccc3a9e51a3fda5a"
+        },
+        "/api/daily-challenges": {
+          "sha256": "6ab5e669a6fe03b01ef326665493298f756cd95dc8bbfc209d9edce67c9ca704"
+        },
+        "/api/users/me": {
+          "sha256": "27ddd1f7e75a03c64661eb73fc8edeb70d4ac110c97e10b34d16dbb2a6eadf7f"
+        },
+        "/api/users/me/coins": {
+          "sha256": "e571ad25304c00605ac981b27e40fab060df20f340282c4a64f8caedd61c958b"
+        },
+        "/api/users/me/transactions": {
+          "sha256": "445ce9266a9c09f3ee7b241a1775233836a481775dbecb9d0b40b5f37ed8a979"
+        },
+        "/api/users/me/inventory": {
+          "sha256": "6bcd0f1c7e96705fde55390513afe4b84bd358908d699275e34273efc578c5d4"
+        },
+        "/api/tcg/collection": {
+          "sha256": "676fa9cd8c598c6876734e72acedb922c80f38fa71633e907d87a9eef58eda04"
+        },
+        "/api/tcg/openings": {
+          "sha256": "1cbdaae4a6f4a7eba2a0e289cd0a7fa4d111e55040c4ec42edcc7e008342de34"
+        },
+        "/api/users/me/game-history": {
+          "sha256": "17d4f9e49aa296703f34b0eb253ef21563d95e21b2e877bea01a2f7552f229e5"
+        },
+        "/api/users/me/achievements": {
+          "sha256": "f2d86677fa367a2782fd2f584bcb782088bdf712021decc9e3b9a3334e040ee9"
+        },
+        "/api/daily-challenges/me": {
+          "sha256": "946ecf8de8ce89e22b89278e2a8b6b0fd50ea4f17222dcc64606ac54323e3115"
+        },
+        "/api/tcg/allowance": {
+          "sha256": "e86c124f8511264c146feadde78f002b18444df6376f1bdbe7c3ba7732b7cc0b"
+        }
+      },
+      "upgrade": {
+        "/actuator/health": {
+          "sha256": "f5d81755935209a3ae596d4553d269cbbe8d08a27dd95b05fe0b7c544eb7ed71"
+        },
+        "/api/games": {
+          "sha256": "3475dedb549631d9d1a2aaab0489865b96f817ff4e7d097e6e1cc45294ad2bf9"
+        },
+        "/api/tcg/games": {
+          "sha256": "20db5a200ee4d743cbd0f3cef36ada8b5ef2e0d1adfc7e044d5f00903119a0b0"
+        },
+        "/api/tcg/sets?game=pokemon": {
+          "sha256": "5939b7bd9de6872f4ca82cab4f1e777d9949b49965eac255a72880731aabf785"
+        },
+        "/api/tcg/sets?game=one-piece": {
+          "sha256": "fc08bc39a847718c7402c66b0deaf0e72e57e775b3f75433db1a1198ac21fa83"
+        },
+        "/api/tcg/packs?set=28": {
+          "sha256": "148c02f8e0f40d15fc5a2523efc300733513375edef32657aafd5cc0abddda68"
+        },
+        "/api/tcg/packs?set=3": {
+          "sha256": "f7d5344a9dc4f61bcd50109b83b6c9cf6a10c7f9f7432326470beb28b20e76bb"
+        },
+        "/api/tcg/packs/30": {
+          "sha256": "e044e9ff5d9b23c6524f9e56ebf9d3605442567fefa5779ae93235d01276e3e6"
+        },
+        "/api/tcg/packs/5": {
+          "sha256": "6a50f4d955188ee1b3a8df5833c97428f0e98f89576872eaf3cc6ff41b56c8d2"
+        },
+        "/api/leaderboards/snake": {
+          "sha256": "dfdf6abe4f14f071ae652c09bdf5268ba1eb785c69fc7dbb737b07d740e5933f"
+        },
+        "/api/daily-challenges": {
+          "sha256": "b1eb2236bb078dad3b52aae9cf4b2394b7bf6f8ce68a00aa3e004bb9c53d5508"
+        },
+        "/api/users/me": {
+          "sha256": "27ddd1f7e75a03c64661eb73fc8edeb70d4ac110c97e10b34d16dbb2a6eadf7f"
+        },
+        "/api/users/me/coins": {
+          "sha256": "e571ad25304c00605ac981b27e40fab060df20f340282c4a64f8caedd61c958b"
+        },
+        "/api/users/me/transactions": {
+          "sha256": "445ce9266a9c09f3ee7b241a1775233836a481775dbecb9d0b40b5f37ed8a979"
+        },
+        "/api/users/me/inventory": {
+          "sha256": "6bcd0f1c7e96705fde55390513afe4b84bd358908d699275e34273efc578c5d4"
+        },
+        "/api/tcg/collection": {
+          "sha256": "676fa9cd8c598c6876734e72acedb922c80f38fa71633e907d87a9eef58eda04"
+        },
+        "/api/tcg/openings": {
+          "sha256": "1cbdaae4a6f4a7eba2a0e289cd0a7fa4d111e55040c4ec42edcc7e008342de34"
+        },
+        "/api/users/me/game-history": {
+          "sha256": "e402afd7ca3a8877361c477676dcdc339c24f75032cb30ff2614a3c8a3d0a6cf"
+        },
+        "/api/users/me/achievements": {
+          "sha256": "a230c8ed45169101baefed4139a6679ba59501856249270ce31709deb7cb146d"
+        },
+        "/api/daily-challenges/me": {
+          "sha256": "6510a5edc09b8993ee484ae9563103a5aef1d74125ebd038aa86fbe939d76865"
+        },
+        "/api/tcg/allowance": {
+          "sha256": "e86c124f8511264c146feadde78f002b18444df6376f1bdbe7c3ba7732b7cc0b"
+        }
+      }
+    }
+  },
+  "restart": {
+    "checks": [
+      {
+        "name": "V38 real process restart preserves the existing authenticated cookie",
+        "pass": true
+      },
+      {
+        "name": "Wallet and collection API values survive application restart",
+        "pass": true
+      },
+      {
+        "name": "CSRF-protected logout clears stored JDBC session and authentication",
+        "pass": true
+      }
+    ]
+  },
+  "tests": {
+    "initial": {
+      "passed": 47,
+      "failed": 1,
+      "errors": 0,
+      "skipped": 0
+    },
+    "staleSnapshotRetry": {
+      "passed": 8,
+      "failed": 1,
+      "errors": 0,
+      "skipped": 0,
+      "reason": "Temporary copy command used wrong cwd; original assertion reran"
+    },
+    "correctedClass": {
+      "passed": 9,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "finalUnique": {
+      "passed": 48,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "blocked": 0
+    },
+    "classes": {
+      "ArchitectureTests": 22,
+      "GameSessionApiTests": 17,
+      "PersistentSessionTests": 9
+    },
+    "totalInvocations": {
+      "passed": 64,
+      "failed": 2
+    }
+  },
+  "hashes": {
+    "candidateJar": "4a389f0169f3505439e2fcfa1b162a261eaeac773941316121651c7f5b9492e5",
+    "v27Jar": "143eafdeda741293c5f3c6b3f4d0eae16380ca359c160a413ab6c6881011aa49",
+    "logs": {
+      "focused-tests.log": "a92fd709392941239449fdfb940351298282bd6af2fdadc116c706de1a3b0e1f",
+      "session-retest.log": "e948b7cb0ae62329ee52c45b707462e7e6ea87ca1242b1fdf9d76350757fcd1d",
+      "session-fixed.log": "c7239f0b6af0dff59353b78f2319584527298b494b4c244b61fa1c75ee721d00",
+      "candidate-build.log": "9ae316c09e24e75b79dbc2bd166a25db9f32d1e8f6b025893eec0bdb0d08a238",
+      "v27-build.log": "d33f0ce1883fd72f3ab2f9ed6e6c5403e4004bc663ed635caef73aba9a2edf4b"
+    }
+  },
+  "warnings": [
+    "Daily Board secret unset in disposable process; no daily boards created",
+    "Stockfish deliberately unavailable; engine endpoints outside migration smoke scope"
+  ],
+  "helperCorrections": [
+    "Fixed local binary output file API before accepting backup",
+    "Accounted for intentional V38 removal of image NOT NULL constraint",
+    "Used actual pack-to-set relationship and required set query parameter",
+    "Used required {bcrypt} prefix for disposable test credential"
+  ],
+  "cleanup": {
+    "temporaryBuildDirectoryRemoved": true,
+    "testcontainersVerifiedAbsent": [
+      "b70822bb3a0390ab4bf8ca2d66cfe2ca1a7c78623c55042cbc340d9cc34d38e1",
+      "938b05548ee9e93356fbfef8406109a3a114a950e144cd1f4983585bc0091141",
+      "e6bfe5b78353659615cf04b631be2a2d533a81d2d8f3361b6eb8ecf9432f22bb",
+      "c46ff64ef59818075355ccc2cfcf209f2aea6f6e1694eb2f98a39993557a93d8",
+      "0fcf9739b2c1644e5b4a736b1da4ec6eae8a888befe11ac7643de4da48cae35c",
+      "3c30d7722701ee7edd277bc3b6e07e047fbf0cd9fac0c7b50aaf827129ffecd7",
+      "5c436351d800d49a312fbfbdd6f67c49cd791c2ba00e46c7f6e0d9ba15931c7f"
+    ],
+    "taskContainersRemoved": [
+      "395c8150982b5e4cd3be93187873a90a9f18cb08f7fc32c82252407d3b2d638d",
+      "950b829683bb08b1be90d9ae5122d1d1eaadea4bce3d0b0fe2b1388f367ebf40"
+    ],
+    "taskPortsClosed": true,
+    "backupHashReverified": true,
+    "temporaryCredentialsRemoved": true,
+    "backupRetained": "C:\\dev\\GameHub-backups\\PLATFORM-008-20261114-125856",
+    "processesStopped": [
+      25856,
+      8356
+    ],
+    "pending": false
+  },
+  "release": "Migration/recovery rehearsal passes; not public release authorization. Yu-Gi-Oh absent and gates remain false."
+}
