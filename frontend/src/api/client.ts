@@ -83,6 +83,19 @@ async function csrfToken(): Promise<string | null> {
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
 
 export async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const response = await send(path, options)
+  if (response.status === 204 || response.headers.get('Content-Length') === '0') {
+    return undefined as T
+  }
+  return (await response.json()) as T
+}
+
+/** The same transport for an endpoint that answers with text (e.g. a PGN attachment) instead of JSON. */
+export async function apiFetchText(path: string, options: RequestOptions = {}): Promise<string> {
+  return (await send(path, options)).text()
+}
+
+async function send(path: string, options: RequestOptions): Promise<Response> {
   const { body, headers, ...rest } = options
   const changesSomething = !SAFE_METHODS.has((rest.method ?? 'GET').toUpperCase())
 
@@ -108,11 +121,7 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
   if (!response.ok) {
     throw await toApiError(response)
   }
-
-  if (response.status === 204 || response.headers.get('Content-Length') === '0') {
-    return undefined as T
-  }
-  return (await response.json()) as T
+  return response
 }
 
 async function toApiError(response: Response): Promise<ApiError> {
