@@ -2,7 +2,7 @@
   "game": {
     "slug": "yugioh",
     "name": "Yu-Gi-Oh! Trading Card Game",
-    "description": "Pilot only: not part of the arcade's catalog.",
+    "description": "Text-only arcade pilot. Beyond the Brave printings, with simulated pack probabilities and no official artwork.",
     "accentColor": "#7b4a12",
     "attribution": "Card data from YGOPRODeck (ygoprodeck.com). Yu-Gi-Oh! is © Studio Dice/SHUEISHA, TV TOKYO, KONAMI. Cyan Arcade is not affiliated with or endorsed by Konami. No card images are used."
   },
@@ -22,7 +22,7 @@
         "code": "arcade-pilot-booster",
         "name": "Beyond the Brave Arcade Pilot Pack",
         "description": "Nine text cards using Arcade Simulated Odds. Pilot only; no official artwork or slot layout.",
-        "oddsNote": "Arcade Simulated Odds: each of 9 slots independently draws Common 80%, Super Rare 14%, Ultra Rare 5%, Secret Rare 0.99%, Starlight Rare 0.01%. These are not Konami's official pull rates or pack layout.",
+        "oddsNote": "Arcade Simulated Odds. The table shows configured probabilities per card slot. These are not Konami's official pull rates or an official pack layout.",
         "initiallyActive": false,
         "slots": [
           { "count": 9, "odds": { "common": 8000, "super-rare": 1400, "ultra-rare": 500, "secret-rare": 99, "starlight-rare": 1 } }

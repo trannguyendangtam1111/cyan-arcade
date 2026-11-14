@@ -111,7 +111,9 @@ class YugiohSource implements TcgSource {
 		List<TcgDataset.Pack> packs = configured == null ? List.of() : List.of(new TcgDataset.Pack(configured.code(),
 				configured.name(), configured.description(), null, configured.oddsNote(), configured.slots(),
 				configured.cards(), false));
-		return new TcgDataset.CardSet(set.code(), null, set.sourceName(), "", null, null, null, set.releasedOn(), cards,
+		return new TcgDataset.CardSet(set.code(), null, set.sourceName(),
+				"English printings shown as text cards. Arcade pack probabilities are simulated; no official artwork is used.",
+				null, null, null, set.releasedOn(), cards,
 				packs);
 	}
 

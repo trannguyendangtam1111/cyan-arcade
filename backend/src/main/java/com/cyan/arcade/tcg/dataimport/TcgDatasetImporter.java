@@ -15,6 +15,7 @@ import com.cyan.arcade.tcg.dataimport.TcgDataset.Card;
 import com.cyan.arcade.tcg.dataimport.TcgDataset.CardSet;
 import com.cyan.arcade.tcg.dataimport.TcgDataset.Pack;
 import com.cyan.arcade.tcg.dataimport.TcgDataset.Slot;
+import com.cyan.arcade.tcg.game.PilotCatalogLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tools.jackson.databind.json.JsonMapper;
@@ -25,7 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.interceptor.TransactionAspectSupport;
 
 /**
- * Writes a {@link TcgDataset} into the database. The only writer of the TCG catalog tables.
+ * Writes a {@link TcgDataset} into the database. Owns catalog content; pilot administration controls visibility.
  *
  * <p>Importing is an upsert on stable keys: a game by its slug, a set by its code, a card by its
  * external id (the source's own id), a pack by its code. Running the same import twice changes
@@ -51,10 +52,13 @@ public class TcgDatasetImporter {
 
 	private final JsonMapper json;
 
-	TcgDatasetImporter(JdbcClient jdbc, TcgDatasetValidator validator, JsonMapper json) {
+	private final PilotCatalogLock pilotLock;
+
+	TcgDatasetImporter(JdbcClient jdbc, TcgDatasetValidator validator, JsonMapper json, PilotCatalogLock pilotLock) {
 		this.jdbc = jdbc;
 		this.validator = validator;
 		this.json = json;
+		this.pilotLock = pilotLock;
 	}
 
 	/**
@@ -77,6 +81,9 @@ public class TcgDatasetImporter {
 		List<String> problems = this.validator.problemsOf(dataset);
 		if (!problems.isEmpty()) {
 			throw new InvalidDatasetException(source, problems);
+		}
+		if ("yugioh".equals(dataset.game().slug())) {
+			this.pilotLock.lockYugioh();
 		}
 		Map<String, String> setOfCard = setsOfCards(dataset.game().slug());
 		List<String> setsBefore = setCodes(dataset.game().slug());

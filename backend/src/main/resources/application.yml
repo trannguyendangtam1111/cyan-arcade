@@ -211,6 +211,8 @@ app:
         # in a hidden game. Only ever against a disposable database: see
         # "Yu-Gi-Oh! pilot" in ARCHITECTURE.md before changing this.
         enabled: false
+        # Separate release gate. Admin activation is refused unless explicitly allowed in that environment.
+        activation-allowed: false
         url: https://db.ygoprodeck.com/api/v7
         config: classpath:tcg/pilots/yugioh.json
   cors:
