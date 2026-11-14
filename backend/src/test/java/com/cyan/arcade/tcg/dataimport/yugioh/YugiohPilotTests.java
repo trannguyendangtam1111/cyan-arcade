@@ -73,7 +73,12 @@ class YugiohPilotTests {
 		assertThat(config.game().slug()).isEqualTo("yugioh");
 		assertThat(config.game().attribution()).contains("KONAMI").contains("No card images");
 		assertThat(config.region()).isEqualTo("EN");
-		assertThat(config.sets()).containsExactly(new PilotSet("betb", "Beyond the Brave", "BETB"));
+		assertThat(config.sets()).singleElement().satisfies((set) -> {
+			assertThat(set.code()).isEqualTo("betb");
+			assertThat(set.name()).isEqualTo("Beyond the Brave");
+			assertThat(set.prefix()).isEqualTo("BETB");
+			assertThat(set.pack().initiallyActive()).isFalse();
+		});
 		assertThat(config.rarities()).extracting(RarityRule::code)
 			.containsExactly("common", "super-rare", "ultra-rare", "secret-rare", "starlight-rare");
 		assertThat(config.rarityOf("ultra rare")).map(RarityRule::code).contains("ultra-rare");
@@ -117,7 +122,7 @@ class YugiohPilotTests {
 	}
 
 	@Test
-	void theSourceGivesACardOnlyDatasetOfTheSetsItCanReadAndReportsTheOthers() {
+	void theSourceGivesAPilotDatasetOfTheSetsItCanReadAndReportsTheOthers() {
 		RestClient.Builder builder = RestClient.builder().baseUrl(URL);
 		MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
 		server.expect(requestTo(URL + "/cardsets.php"))
@@ -139,7 +144,7 @@ class YugiohPilotTests {
 		assertThat(fetch.dataset().sets()).singleElement().satisfies((set) -> {
 			assertThat(set.code()).isEqualTo("betb");
 			assertThat(set.cards()).hasSize(9);
-			assertThat(set.packs()).isEmpty();
+			assertThat(set.packs()).hasSize(1);
 		});
 		assertThat(fetch.checks()).extracting(SetCheck::setId, SetCheck::status, SetCheck::listed, SetCheck::importable)
 			.containsExactly(org.assertj.core.groups.Tuple.tuple("betb", SetCheck.Status.IMPORTABLE, 9, 9),
@@ -147,7 +152,7 @@ class YugiohPilotTests {
 	}
 
 	@Test
-	void theDatasetIsAHiddenGameOfTextCardsWithoutPacksOrNothingAtAll() {
+	void theDatasetIsAHiddenGameOfTextCardsWithADisabledPackOrNothingAtAll() {
 		YugiohConfig shipped = YugiohConfig.load(new ClassPathResource("tcg/pilots/yugioh.json"), JSON);
 		YugiohCatalog catalog = YugiohPrintingMapper.map(shipped, YugiohPrintingMapperTests.sets(),
 				Map.of("Beyond the Brave", YugiohPrintingMapperTests.cards("cardinfo-beyond-the-brave.json")));
@@ -163,7 +168,14 @@ class YugiohPilotTests {
 		assertThat(dataset.sets()).singleElement().satisfies((set) -> {
 			assertThat(set.name()).isEqualTo("Beyond the Brave");
 			assertThat(set.imageUrl()).isNull();
-			assertThat(set.packs()).isEmpty();
+			assertThat(set.packs()).singleElement().satisfies((pack) -> {
+				assertThat(pack.code()).isEqualTo("arcade-pilot-booster");
+				assertThat(pack.initiallyActive()).isFalse();
+				assertThat(pack.imageUrl()).isNull();
+				assertThat(pack.oddsNote()).contains("Arcade Simulated Odds", "not Konami's official");
+				assertThat(pack.slots()).containsExactly(new TcgDataset.Slot(9,
+						Map.of("common", 8000, "super-rare", 1400, "ultra-rare", 500, "secret-rare", 99, "starlight-rare", 1)));
+			});
 			assertThat(set.cards()).allSatisfy((card) -> {
 				assertThat(card.imageUrl()).isNull();
 				assertThat(card.thumbnailUrl()).isNull();
@@ -174,6 +186,22 @@ class YugiohPilotTests {
 
 		YugiohCatalog nothing = YugiohPrintingMapper.map(shipped, List.of(), Map.of());
 		assertThat(YugiohSource.datasetOf(shipped, nothing)).isNull();
+	}
+
+	@Test
+	void customPilotConfigurationCannotSupplyArtworkOrActivateANewPack() {
+		YugiohConfig shipped = YugiohConfig.load(new ClassPathResource("tcg/pilots/yugioh.json"), JSON);
+		PilotSet set = shipped.sets().getFirst();
+		TcgDataset.Pack pack = set.pack();
+		TcgDataset.Pack unsafe = new TcgDataset.Pack(pack.code(), pack.name(), pack.description(),
+				"https://example.test/art.png", pack.oddsNote(), pack.slots(), pack.cards(), true);
+		YugiohConfig config = new YugiohConfig(shipped.game(), shipped.region(), shipped.rarities(), Map.of(),
+				List.of(new PilotSet(set.code(), set.name(), set.prefix(), unsafe)));
+		TcgDataset dataset = YugiohSource.datasetOf(config, YugiohPrintingMapper.map(config,
+				YugiohPrintingMapperTests.sets(), Map.of(set.name(), YugiohPrintingMapperTests.cards("cardinfo-beyond-the-brave.json"))));
+		assertThat(dataset.game().hidden()).isTrue();
+		assertThat(dataset.sets().getFirst().packs().getFirst().initiallyActive()).isFalse();
+		assertThat(dataset.sets().getFirst().packs().getFirst().imageUrl()).isNull();
 	}
 
 	private static PropertySource<?> applicationProperties() {

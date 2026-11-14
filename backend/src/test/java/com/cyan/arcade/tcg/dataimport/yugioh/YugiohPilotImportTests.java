@@ -35,7 +35,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * The Yu-Gi-Oh! pilot's printings imported as a card-only catalog, from YGOPRODeck's recorded
+ * The Yu-Gi-Oh! pilot's printings and disabled pack imported from YGOPRODeck's recorded
  * answers for Beyond the Brave. Each test imports into a game of its own, so they do not depend on
  * one another.
  */
@@ -62,7 +62,7 @@ class YugiohPilotImportTests {
 	private MockMvc mockMvc;
 
 	@Test
-	void aDryRunWritesNothingThenTheImportStoresAHiddenCardOnlyCatalogWithoutImages() {
+	void aDryRunWritesNothingThenTheImportStoresAHiddenPilotWithoutImages() {
 		String slug = "ygo-pilot-first";
 		ImportReport dry = this.importer.importDataset(dataset(slug, cards()), "test", true);
 		assertThat(dry.newCards()).isEqualTo(9);
@@ -71,7 +71,7 @@ class YugiohPilotImportTests {
 		ImportReport report = this.importer.importDataset(dataset(slug, cards()), "test");
 
 		assertThat(report.newCards()).isEqualTo(9);
-		assertThat(report.packs()).isZero();
+		assertThat(report.packs()).isEqualTo(1);
 		assertThat(this.jdbc.queryForObject("SELECT active FROM tcg_games WHERE slug = ?", Boolean.class, slug)).isFalse();
 		assertThat(this.jdbc.queryForList("""
 				SELECT c.external_id FROM tcg_cards c JOIN tcg_games g ON g.id = c.game_id
@@ -79,11 +79,11 @@ class YugiohPilotImportTests {
 		assertThat(count("""
 				tcg_cards c JOIN tcg_games g ON g.id = c.game_id
 				WHERE g.slug = ? AND c.image_url IS NULL AND c.thumbnail_url IS NULL""", slug)).isEqualTo(9);
-		// No pack, so no pool and no odds: nothing can be opened.
+		// A disabled pack, with one pool and five rarity weights per slot.
 		assertThat(count("tcg_packs p JOIN tcg_sets s ON s.id = p.set_id JOIN tcg_games g ON g.id = s.game_id WHERE g.slug = ?",
-				slug)).isZero();
+				slug)).isEqualTo(1);
 		assertThat(count("tcg_pack_slot_odds o JOIN tcg_rarities r ON r.id = o.rarity_id JOIN tcg_games g ON g.id = r.game_id WHERE g.slug = ?",
-				slug)).isZero();
+				slug)).isEqualTo(45);
 		assertThat(this.jdbc.queryForObject("""
 				SELECT c.card_number || '|' || c.name || '|' || r.code || '|' || (c.metadata->>'passcode') || '|'
 				       || (c.metadata->>'attribute') || '|' || (c.metadata->>'level') || '|' || (c.metadata->>'atk') || '|'
@@ -101,7 +101,7 @@ class YugiohPilotImportTests {
 		ImportReport again = this.importer.importDataset(dataset(slug, cards()), "test");
 
 		assertThat(List.of(again.newCards(), again.updatedCards(), again.newSets(), again.updatedSets(), again.newPacks(),
-				again.movedCards())).containsOnly(0);
+				again.updatedPacks(), again.movedCards())).containsOnly(0);
 		assertThat(again.unchangedCards()).isEqualTo(9);
 	}
 

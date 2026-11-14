@@ -16,6 +16,18 @@
   ],
   "excludedRarities": {},
   "sets": [
-    { "code": "betb", "name": "Beyond the Brave", "prefix": "BETB" }
+    {
+      "code": "betb", "name": "Beyond the Brave", "prefix": "BETB",
+      "pack": {
+        "code": "arcade-pilot-booster",
+        "name": "Beyond the Brave Arcade Pilot Pack",
+        "description": "Nine text cards using Arcade Simulated Odds. Pilot only; no official artwork or slot layout.",
+        "oddsNote": "Arcade Simulated Odds: each of 9 slots independently draws Common 80%, Super Rare 14%, Ultra Rare 5%, Secret Rare 0.99%, Starlight Rare 0.01%. These are not Konami's official pull rates or pack layout.",
+        "initiallyActive": false,
+        "slots": [
+          { "count": 9, "odds": { "common": 8000, "super-rare": 1400, "ultra-rare": 500, "secret-rare": 99, "starlight-rare": 1 } }
+        ]
+      }
+    }
   ]
 }

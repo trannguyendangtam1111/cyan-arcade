@@ -10,7 +10,7 @@ import com.cyan.arcade.tcg.dataimport.SetCheck;
 
 /**
  * The configured Yu-Gi-Oh! sets as the provider has them, printing by printing. Card data only: no
- * image of any kind. {@link YugiohSource} turns its printings into a card-only dataset.
+ * image of any kind. {@link YugiohSource} adds configured disabled packs to its printing dataset.
  */
 record YugiohCatalog(List<SetPrintings> sets) {
 

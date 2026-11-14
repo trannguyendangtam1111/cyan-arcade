@@ -329,8 +329,8 @@ public class TcgDatasetImporter {
 
 	private Upserted upsertPack(Long setId, Pack pack, int order) {
 		return this.jdbc.sql("""
-				INSERT INTO tcg_packs (set_id, code, name, description, image_url, odds_note, display_order)
-				VALUES (:setId, :code, :name, :description, :imageUrl, :oddsNote, :order)
+				INSERT INTO tcg_packs (set_id, code, name, description, image_url, odds_note, display_order, active)
+				VALUES (:setId, :code, :name, :description, :imageUrl, :oddsNote, :order, :initiallyActive)
 				ON CONFLICT (set_id, code) DO UPDATE
 				SET name = EXCLUDED.name, description = EXCLUDED.description, image_url = EXCLUDED.image_url,
 				    odds_note = EXCLUDED.odds_note, display_order = EXCLUDED.display_order
@@ -346,6 +346,7 @@ public class TcgDatasetImporter {
 			.param("description", orEmpty(pack.description()))
 			.param("imageUrl", pack.imageUrl(), Types.VARCHAR)
 			.param("oddsNote", pack.oddsNote(), Types.VARCHAR)
+			.param("initiallyActive", pack.initiallyActive())
 			.param("order", order)
 			.query(Upserted::of)
 			.optional()

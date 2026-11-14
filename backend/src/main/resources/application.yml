@@ -207,8 +207,8 @@ app:
         config: ${TCG_ONE_PIECE_CONFIG:classpath:tcg/sources/one-piece.json}
     pilots:
       yugioh:
-        # Yu-Gi-Oh! from YGOPRODeck: a pilot that is off. On, TCG_IMPORT_SOURCES=yugioh imports its cards
-        # only (no images, no packs) into a hidden game. Only ever against a disposable database: see
+        # Yu-Gi-Oh! from YGOPRODeck: off. Importing creates text cards and a disabled simulated pack
+        # in a hidden game. Only ever against a disposable database: see
         # "Yu-Gi-Oh! pilot" in ARCHITECTURE.md before changing this.
         enabled: false
         url: https://db.ygoprodeck.com/api/v7

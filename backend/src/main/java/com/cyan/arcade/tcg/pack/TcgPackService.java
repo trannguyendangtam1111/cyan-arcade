@@ -73,11 +73,12 @@ public class TcgPackService {
 				pack.poolSize(), slots, pack.oddsNote());
 	}
 
-	/** Turns a slot's weights into percentages, to one decimal place. */
+	/** Keep two decimal places for fine odds (e.g. 0.01%); other slots retain their usual display. */
 	private static List<Chance> chances(List<OddsRow> slot) {
 		int total = slot.stream().mapToInt(OddsRow::weight).sum();
+		double precision = slot.stream().anyMatch((odds) -> odds.weight() * 100.0 / total < 0.1) ? 100.0 : 10.0;
 		return slot.stream()
-			.map((odds) -> new Chance(odds.rarity(), Math.round(odds.weight() * 1000.0 / total) / 10.0))
+			.map((odds) -> new Chance(odds.rarity(), Math.round(odds.weight() * 100.0 * precision / total) / precision))
 			.toList();
 	}
 

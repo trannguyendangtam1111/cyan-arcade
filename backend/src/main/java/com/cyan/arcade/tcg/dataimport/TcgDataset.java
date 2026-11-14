@@ -156,11 +156,22 @@ public record TcgDataset(@NotNull @Valid Game game, @NotEmpty List<@Valid @NotNu
 	 * @param slots the pack's rarity rules, in the order the cards come out
 	 * @param cards the {@link Card#key() keys} of the cards that can come out of the pack; leave it
 	 * out for "every card of the set"
+	 * @param initiallyActive whether a newly created pack can be opened; defaults to true for existing
+	 * datasets. Re-importing never changes a pack's activation state.
 	 */
 	public record Pack(@NotNull @Pattern(regexp = CODE) @Size(max = 50) String code,
 			@NotBlank @Size(max = 100) String name, @Size(max = 500) String description,
 			@Size(max = 500) String imageUrl, @Size(max = 300) String oddsNote,
-			@NotEmpty List<@Valid @NotNull Slot> slots, List<@NotBlank String> cards) {
+			@NotEmpty List<@Valid @NotNull Slot> slots, List<@NotBlank String> cards, Boolean initiallyActive) {
+
+		public Pack {
+			initiallyActive = !Boolean.FALSE.equals(initiallyActive);
+		}
+
+		public Pack(String code, String name, String description, String imageUrl, String oddsNote, List<Slot> slots,
+				List<String> cards) {
+			this(code, name, description, imageUrl, oddsNote, slots, cards, true);
+		}
 
 		public Pack(String code, String name, String description, String imageUrl, List<Slot> slots,
 				List<String> cards) {

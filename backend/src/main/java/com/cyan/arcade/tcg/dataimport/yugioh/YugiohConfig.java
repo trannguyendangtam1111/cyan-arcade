@@ -13,6 +13,7 @@ import java.util.Set;
 import com.cyan.arcade.tcg.dataimport.SourceConfig.GameInfo;
 import com.cyan.arcade.tcg.dataimport.SourceConfig.RarityRule;
 import com.cyan.arcade.tcg.dataimport.TcgSourceException;
+import com.cyan.arcade.tcg.dataimport.TcgDataset.Pack;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -20,8 +21,8 @@ import org.springframework.core.io.Resource;
 
 /**
  * Which Yu-Gi-Oh! sets to read and what their printings' rarities are called here. Unlike the other
- * games' configurations it has no pack layouts: Konami publishes no pull rates, and packs are a
- * later step. Read from a JSON file kept apart from the active games' ones.
+ * games' configurations its optional packs are disabled pilots with Arcade Simulated Odds.
+ * Read from a JSON file kept apart from the active games' ones.
  *
  * @param region the region code a printing code must carry after its set prefix ({@code EN} in
  * {@code BETB-EN018}); printings for other regions are counted and left out
@@ -52,7 +53,11 @@ record YugiohConfig(GameInfo game, String region, List<RarityRule> rarities, Map
 	 * @param prefix the set code its printings carry ({@code BETB}); a provider set of that name with
 	 * another code is refused rather than guessed at
 	 */
-	record PilotSet(String code, String name, String prefix) {
+	record PilotSet(String code, String name, String prefix, Pack pack) {
+
+		PilotSet(String code, String name, String prefix) {
+			this(code, name, prefix, null);
+		}
 	}
 
 	static YugiohConfig load(Resource resource, JsonMapper json) {

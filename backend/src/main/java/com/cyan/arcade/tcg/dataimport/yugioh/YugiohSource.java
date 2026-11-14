@@ -20,13 +20,13 @@ import com.cyan.arcade.tcg.dataimport.yugioh.YugiohConfig.PilotSet;
  * The Yu-Gi-Oh! Trading Card Game, read from YGOPRODeck: a pilot. It only exists when
  * {@code app.tcg.pilots.yugioh.enabled} is set (see {@link YugiohPilotConfiguration}).
  *
- * <p>What it imports is a card catalog and nothing else:
+ * <p>What it imports is a hidden pilot catalog:
  * <ul>
  * <li>One card per printing, its id the printing's ({@code betb:BETB-EN018:ultra-rare}), its number
  * the printed code, its metadata the card's text, for the arcade's text cards.
  * <li>No image: the artwork is Konami's and YGOPRODeck forbids hotlinking it, so the game says its
  * cards come without one ({@code cardImagesOptional}).
- * <li>No packs, so no odds: Konami publishes no pull rates.
+ * <li>An optional disabled pack with explicitly simulated arcade odds, never official pull rates.
  * <li>The game starts hidden: no page or API lists it until it is activated in the database on
  * purpose, so a pilot import never puts Yu-Gi-Oh! in front of players.
  * </ul>
@@ -81,14 +81,14 @@ class YugiohSource implements TcgSource {
 	}
 
 	/**
-	 * The sets that have printings, as a card-only dataset in the configuration's order; {@code null}
+	 * The sets that have printings, as a dataset in the configuration's order; {@code null}
 	 * when none has. Sets held back (not at the source, or empty) are left out and left alone.
 	 */
 	static TcgDataset datasetOf(YugiohConfig config, YugiohCatalog catalog) {
 		List<TcgDataset.CardSet> sets = catalog.sets()
 			.stream()
 			.filter((set) -> set.status() == SetCheck.Status.IMPORTABLE && !set.printings().isEmpty())
-			.map(YugiohSource::cardSetOf)
+			.map((set) -> cardSetOf(config, set))
 			.toList();
 		if (sets.isEmpty()) {
 			return null;
@@ -103,10 +103,16 @@ class YugiohSource implements TcgSource {
 		return new TcgDataset(game, rarities, sets);
 	}
 
-	private static TcgDataset.CardSet cardSetOf(SetPrintings set) {
+	private static TcgDataset.CardSet cardSetOf(YugiohConfig config, SetPrintings set) {
 		List<TcgDataset.Card> cards = set.printings().stream().map(YugiohSource::cardOf).toList();
+		TcgDataset.Pack configured = config.sets().stream().filter((pilot) -> pilot.code().equals(set.code()))
+			.findFirst().orElseThrow().pack();
+		// Safety belongs to the source too: a custom configuration cannot activate a pilot pack or add art.
+		List<TcgDataset.Pack> packs = configured == null ? List.of() : List.of(new TcgDataset.Pack(configured.code(),
+				configured.name(), configured.description(), null, configured.oddsNote(), configured.slots(),
+				configured.cards(), false));
 		return new TcgDataset.CardSet(set.code(), null, set.sourceName(), "", null, null, null, set.releasedOn(), cards,
-				List.of());
+				packs);
 	}
 
 	private static TcgDataset.Card cardOf(Printing printing) {
