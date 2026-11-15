@@ -1,32 +1,45 @@
 package com.cyan.arcade.sudoku;
 
 import java.net.URI;
+import java.time.LocalDate;
 import java.util.UUID;
 
 import com.cyan.arcade.common.error.ApiException;
+import com.cyan.arcade.common.error.ErrorCodes;
 import com.cyan.arcade.common.security.AuthenticatedUser;
 import com.cyan.arcade.common.security.GuestPlayer;
 import com.cyan.arcade.sudoku.SudokuRun.Owner;
+import com.cyan.arcade.sudoku.SudokuViews.ArchivePuzzleResponse;
 import com.cyan.arcade.sudoku.SudokuViews.BindSessionRequest;
+import com.cyan.arcade.sudoku.SudokuViews.DailyHistoryResponse;
+import com.cyan.arcade.sudoku.SudokuViews.DailyLeaderboardResponse;
 import com.cyan.arcade.sudoku.SudokuViews.HintRequest;
 import com.cyan.arcade.sudoku.SudokuViews.HintResponse;
 import com.cyan.arcade.sudoku.SudokuViews.MovesRequest;
+import com.cyan.arcade.sudoku.SudokuViews.NotesResponse;
 import com.cyan.arcade.sudoku.SudokuViews.RunResponse;
+import com.cyan.arcade.sudoku.SudokuViews.SaveNotesRequest;
+import com.cyan.arcade.sudoku.SudokuViews.StartArchiveRequest;
 import com.cyan.arcade.sudoku.SudokuViews.StartDailyRequest;
 import com.cyan.arcade.sudoku.SudokuViews.StartPracticeRequest;
 import com.cyan.arcade.sudoku.SudokuViews.StatsResponse;
 import com.cyan.arcade.sudoku.SudokuViews.TodayResponse;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -39,8 +52,38 @@ class SudokuController {
 
 	private final SudokuService sudoku;
 
-	SudokuController(SudokuService sudoku) {
+	private final DailyLeaderboard dailyLeaderboard;
+
+	private final DailyHistory dailyHistory;
+
+	SudokuController(SudokuService sudoku, DailyLeaderboard dailyLeaderboard, DailyHistory dailyHistory) {
 		this.sudoku = sudoku;
+		this.dailyLeaderboard = dailyLeaderboard;
+		this.dailyHistory = dailyHistory;
+	}
+
+	/**
+	 * The caller's Daily Sudoku over the last 30 UTC dates. Signed-in players only (security answers
+	 * anyone else with 401): a guest's id is not proof enough to show their history.
+	 */
+	@GetMapping("/daily/history")
+	DailyHistoryResponse dailyHistory(@AuthenticationPrincipal AuthenticatedUser user) {
+		if (user == null) {
+			throw new ApiException(HttpStatus.UNAUTHORIZED, ErrorCodes.UNAUTHORIZED,
+					"Sign in to see your Daily history");
+		}
+		return this.dailyHistory.of(user.id());
+	}
+
+	/** The Daily leaderboard of one puzzle date (UTC), today's when none is named. Open to everyone. */
+	@GetMapping("/daily/leaderboard")
+	DailyLeaderboardResponse dailyLeaderboard(
+			@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+			@RequestParam(defaultValue = "0") @Min(0) int page,
+			@RequestParam(defaultValue = "20") @Min(1) @Max(DailyLeaderboard.MAX_PAGE_SIZE) int size,
+			@AuthenticationPrincipal AuthenticatedUser user,
+			@RequestHeader(name = GuestPlayer.HEADER, required = false) UUID playerId) {
+		return this.dailyLeaderboard.board(date, page, size, ownerOrNull(user, playerId));
 	}
 
 	@GetMapping("/today")
@@ -60,6 +103,24 @@ class SudokuController {
 			@AuthenticationPrincipal AuthenticatedUser user,
 			@RequestHeader(name = GuestPlayer.HEADER, required = false) UUID playerId) {
 		RunResponse run = this.sudoku.startPractice(owner(user, playerId), request.difficulty(), request.sessionId());
+		return ResponseEntity.created(URI.create("/api/sudoku/runs/" + run.id())).body(run);
+	}
+
+	/**
+	 * A past Daily puzzle by its UTC date: number, difficulty and clues, never the solution. Open to
+	 * everyone; 404 {@code NOT_IN_ARCHIVE} for today, a later date or one before the first Daily.
+	 */
+	@GetMapping("/archive/{date}")
+	ArchivePuzzleResponse archivePuzzle(@PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+		return this.sudoku.archivePuzzle(date);
+	}
+
+	/** Replays a past Daily puzzle, unranked: no session, score, rewards or streak. */
+	@PostMapping("/archive/runs")
+	ResponseEntity<RunResponse> startArchive(@Valid @RequestBody StartArchiveRequest request,
+			@AuthenticationPrincipal AuthenticatedUser user,
+			@RequestHeader(name = GuestPlayer.HEADER, required = false) UUID playerId) {
+		RunResponse run = this.sudoku.startArchive(owner(user, playerId), request.date());
 		return ResponseEntity.created(URI.create("/api/sudoku/runs/" + run.id())).body(run);
 	}
 
@@ -96,10 +157,35 @@ class SudokuController {
 		return this.sudoku.resume(owner(user, playerId), id);
 	}
 
+	/**
+	 * The pencil marks saved for one of the signed-in player's runs, so another device can pick them up.
+	 * Signed-in players only (security answers anyone else with 401): a guest's notes stay in their
+	 * browser.
+	 */
+	@GetMapping("/runs/{id}/notes")
+	NotesResponse notes(@PathVariable UUID id, @AuthenticationPrincipal AuthenticatedUser user) {
+		return this.sudoku.notes(signedIn(user).id(), id);
+	}
+
+	/** Saves the pencil marks of a run in play, if still at {@code baseRevision}; 409 {@code NOTES_STALE} if not. */
+	@PutMapping("/runs/{id}/notes")
+	NotesResponse saveNotes(@PathVariable UUID id, @Valid @RequestBody SaveNotesRequest request,
+			@AuthenticationPrincipal AuthenticatedUser user) {
+		return this.sudoku.saveNotes(signedIn(user).id(), id, request.baseRevision(), request.cells(),
+				request.baseCells());
+	}
+
 	@GetMapping("/stats")
 	StatsResponse stats(@AuthenticationPrincipal AuthenticatedUser user,
 			@RequestHeader(name = GuestPlayer.HEADER, required = false) UUID playerId) {
 		return this.sudoku.stats(ownerOrNull(user, playerId));
+	}
+
+	private static AuthenticatedUser signedIn(AuthenticatedUser user) {
+		if (user == null) {
+			throw new ApiException(HttpStatus.UNAUTHORIZED, ErrorCodes.UNAUTHORIZED, "Sign in to keep notes across devices");
+		}
+		return user;
 	}
 
 	private static Owner ownerOrNull(AuthenticatedUser user, UUID playerId) {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   createSnakeGame,
+  hasWalls,
   inBounds,
   legalMoves,
   step,
@@ -8,6 +9,7 @@ import {
   type Point,
   type SnakeState,
 } from '../engine/snakeEngine'
+import { SNAKE_MAPS, snakeMap } from '../engine/snakeMaps'
 import { buildHamiltonianCycle } from './hamiltonian'
 import { createGrid, reachableArea, shortestPath } from './pathfinding'
 import { createSnakeAi, loopSpan } from './snakeAi'
@@ -232,5 +234,147 @@ describe('Snake AI full games', () => {
     const end = playToEnd(createSnakeGame({ width: 9, height: 9, seed: 4 }), 3_000)
 
     expect(end.score).toBeGreaterThanOrEqual(25)
+  })
+})
+
+/** 32-bit FNV-1a, to pin a long move sequence in one number. */
+function fingerprint(text: string): number {
+  let hash = 0x811c9dc5
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i)
+    hash = Math.imul(hash, 0x01000193) >>> 0
+  }
+  return hash
+}
+
+describe('Classic regression (golden seeds)', () => {
+  // Recorded with the engine and AI as they were before maps existed: the first 15 apples, and every
+  // move and strategy of the first 3000 steps. Classic must keep producing exactly these.
+  it.each([
+    [1, 100, 304553386, 1723875482, '1,10 0,0 9,8 11,15 6,15 5,4 13,9 11,11 13,6 14,15 0,7 4,8 6,2 8,6 1,4'],
+    [42, 104, -959117913, 3518959645, '11,9 0,7 10,13 9,10 11,2 8,8 7,4 3,10 15,13 3,7 5,4 3,14 14,11 9,4 12,3'],
+    [2026, 100, 304555411, 4071283098, '3,7 13,4 10,10 15,9 5,2 15,3 1,11 15,12 7,4 1,1 13,1 3,10 7,6 11,1 12,2'],
+  ])('seed %i plays the same apples and moves as before', (seed, score, finalSeed, moves, apples) => {
+    const ai = createSnakeAi()
+    let state = createSnakeGame({ seed })
+    const eaten = [state.food!]
+    let played = ''
+    while (state.status === 'playing' && state.steps < 3000) {
+      const decision = ai.decide(state)
+      played += decision.action[0] + decision.strategy[0]
+      const before = state.score
+      state = updateSnake(updateSnake(state, { type: 'turn', direction: decision.action }), { type: 'tick' })
+      if (state.score !== before && state.food && eaten.length < 15) eaten.push(state.food)
+    }
+
+    expect(eaten.map((cell) => `${cell.x},${cell.y}`).join(' ')).toBe(apples)
+    expect({ status: state.status, score: state.score, seed: state.seed, moves: fingerprint(played) }).toEqual({
+      status: 'playing',
+      score,
+      seed: finalSeed,
+      moves,
+    })
+  })
+
+  it('creates Classic games without walls', () => {
+    const state = createSnakeGame({ seed: 1 })
+
+    expect('walls' in state).toBe(false)
+    expect(hasWalls(state)).toBe(false)
+  })
+})
+
+describe('Snake AI on maps', () => {
+  const isWall = (state: SnakeState, cell: Point) => state.walls!.some((wall) => wall.x === cell.x && wall.y === cell.y)
+
+  it('turns away from a wall directly ahead', () => {
+    const state = stateOf({ snake: [{ x: 2, y: 2 }, { x: 1, y: 2 }], walls: [{ x: 3, y: 2 }], food: { x: 4, y: 2 } })
+
+    const move = createSnakeAi().getNextAction(state)
+    expect(legalMoves(state)).toContain(move)
+    expect(isWall(state, step(state.snake[0], move))).toBe(false)
+  })
+
+  it('routes around walls to reach the food', () => {
+    // A wall between the head and the food: the straight line is blocked.
+    const walls = [{ x: 3, y: 1 }, { x: 3, y: 2 }, { x: 3, y: 3 }]
+    const state = stateOf({ snake: [{ x: 2, y: 2 }, { x: 1, y: 2 }, { x: 0, y: 2 }], walls, food: { x: 4, y: 2 } })
+
+    const end = playToEnd(state, 12)
+    expect(end.score).toBeGreaterThanOrEqual(1)
+    expect(end.status).toBe('playing')
+  })
+
+  it('does not use the Hamiltonian loop on a walled map, even when the body lies along it', () => {
+    // Pillars starts the snake exactly where Classic does, lined up along the open-board loop.
+    const classic = createSnakeGame({ seed: 4 })
+    const pillars = createSnakeGame({ seed: 4, map: snakeMap('pillars') })
+    expect(pillars.snake).toEqual(classic.snake)
+    expect(['loop', 'shortcut']).toContain(createSnakeAi().decide(classic).strategy)
+
+    expect(['path', 'survive']).toContain(createSnakeAi().decide(pillars).strategy)
+  })
+
+  it.each(SNAKE_MAPS.flatMap((map) => [1, 2, 3].map((seed) => [map.id, seed] as const)))(
+    '%s, seed %i: never moves into a wall, never dies, never uses the loop',
+    (id, seed) => {
+      const ai = createSnakeAi()
+      let state = createSnakeGame({ seed, map: snakeMap(id) })
+      while (state.status === 'playing' && state.steps < 3000) {
+        const decision = ai.decide(state)
+        expect(legalMoves(state)).toContain(decision.action)
+        expect(isWall(state, step(state.snake[0], decision.action))).toBe(false)
+        expect(['path', 'survive']).toContain(decision.strategy)
+        state = updateSnake(updateSnake(state, { type: 'turn', direction: decision.action }), { type: 'tick' })
+      }
+
+      expect(state.status).not.toBe('over')
+      // Not a promise to clear the map, just a floor well under what it reaches (66 to 152 apples).
+      expect(state.score).toBeGreaterThanOrEqual(50)
+    },
+  )
+
+  // Seeds that used to stall: the snake circled a loop its own body walled off from the food and never
+  // ate again (39, 22 and 31 apples, then nothing for over 2500 steps). It must keep eating now.
+  it.each([
+    ['pillars', 4],
+    ['tunnels', 19],
+    ['rooms', 10],
+  ] as const)('%s, seed %i: keeps eating instead of circling a loop', (id, seed) => {
+    const ai = createSnakeAi()
+    let state = createSnakeGame({ seed, map: snakeMap(id) })
+    let lastApple = 0
+    let longestWait = 0
+    while (state.status === 'playing' && state.steps < 3000) {
+      const move = ai.getNextAction(state)
+      expect(legalMoves(state)).toContain(move)
+      const before = state.score
+      state = updateSnake(updateSnake(state, { type: 'turn', direction: move }), { type: 'tick' })
+      if (state.score > before) {
+        longestWait = Math.max(longestWait, state.steps - lastApple)
+        lastApple = state.steps
+      }
+    }
+    longestWait = Math.max(longestWait, state.steps - lastApple)
+
+    expect(state.status).toBe('playing')
+    expect(state.score).toBeGreaterThanOrEqual(100) // reaches 130 to 142
+    expect(longestWait).toBeLessThan(1000) // at most 277 steps between apples
+  })
+
+  it('stays deterministic on maps: the same game always plays the same moves', () => {
+    const play = () => {
+      const ai = createSnakeAi()
+      let state = createSnakeGame({ seed: 10, map: snakeMap('rooms') })
+      let moves = ''
+      while (state.steps < 1500) {
+        const move = ai.getNextAction(state)
+        moves += move[0]
+        state = updateSnake(updateSnake(state, { type: 'turn', direction: move }), { type: 'tick' })
+      }
+      return moves
+    }
+
+    expect(play()).toBe(play())
   })
 })

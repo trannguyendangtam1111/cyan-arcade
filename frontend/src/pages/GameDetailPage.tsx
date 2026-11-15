@@ -9,10 +9,12 @@ import {
   Target,
   Trophy,
 } from 'lucide-react'
-import { Suspense, useCallback } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { Suspense, useCallback, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router'
-import { useSession } from '@/api/auth'
+import { useSession, userKeys } from '@/api/auth'
 import { ApiError } from '@/api/client'
+import { homeBoard, useGameModes } from '@/api/games'
 import { useDailyChallenges } from '@/api/dailyChallenges'
 import type { Rewards } from '@/api/gameSessions'
 import { Badge } from '@/components/ui/Badge'
@@ -23,13 +25,14 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { LoadingState } from '@/components/ui/LoadingState'
 import { categoryLabels } from '@/games/registry'
-import type { GameDefinition, GameModule } from '@/games/types'
+import type { GameDefinition, GameModule, GameResult } from '@/games/types'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useGameAi } from '@/hooks/useGameAi'
 import { useGameDefinition } from '@/hooks/useGameCatalog'
 import { useGameCosmetics } from '@/hooks/useGameCosmetics'
 import { useScoreSubmission, type ScoreSubmission } from '@/hooks/useScoreSubmission'
 import { accentStyle } from '@/lib/accent'
+import { formatGameTime } from '@/lib/format'
 import { recordRecentGame } from '@/lib/recentGames'
 import { NotFoundPage } from './NotFoundPage'
 
@@ -142,13 +145,43 @@ function GameStage({ game, gameModule }: { game: GameDefinition; gameModule: Gam
   const ai = useGameAi(gameModule)
   // Skins from the shop, for a game that has them.
   const cosmetics = useGameCosmetics(gameModule)
+  // The modes the server declares, so a game offers only those; an unscored game has none.
+  const { data: declaredModes } = useGameModes(game.slug, { enabled: game.scored })
+  const modes = useMemo(() => declaredModes?.map((mode) => mode.id), [declaredModes])
+  // The mode of the latest run, so its result reads as its mode counts: a time (Sprint) or points.
+  const [runMode, setRunMode] = useState<string>()
+  // The puzzle date of the latest run, for a board ranked by date (Sudoku's Daily).
+  const [boardDate, setBoardDate] = useState<string>()
+  const timedResult = declaredModes?.find((mode) => mode.id === runMode)?.unit === 'MILLISECONDS'
+  // An unranked mode (a Tetris Challenge stage) has no leaderboard and earns nothing: its result says only that it was kept.
+  const rankedResult = declaredModes?.find((mode) => mode.id === runMode)?.ranked !== false
+  // A ranked mode outside Classic progression (Tetris Ultra) has its own board but leaves achievements
+  // and daily challenges alone: the result says so, since the rewards alone would not.
+  const progressionResult = declaredModes?.find((mode) => mode.id === runMode)?.classicProgression !== false
+  // A reward paid outside a score session (a won Daily Board): the player's coins, XP and history
+  // are read again, as after a submitted run.
+  const queryClient = useQueryClient()
+  const onRewarded = useCallback(() => void queryClient.invalidateQueries({ queryKey: userKeys.all }), [queryClient])
 
-  const handleGameStart = useCallback(() => {
-    // Remembered on this device, for the hub's "Jump back in" row.
-    recordRecentGame(game.slug)
-    // An unscored game opens no score session: there is nothing to submit.
-    if (game.scored) onGameStart()
-  }, [game.slug, game.scored, onGameStart])
+  const handleGameStart = useCallback(
+    (mode?: unknown) => {
+      setRunMode(typeof mode === 'string' ? mode : undefined)
+      setBoardDate(undefined)
+      // Remembered on this device, for the hub's "Jump back in" row.
+      recordRecentGame(game.slug)
+      // An unscored game opens no score session: there is nothing to submit.
+      if (game.scored) onGameStart(mode)
+    },
+    [game.slug, game.scored, onGameStart],
+  )
+
+  const handleGameOver = useCallback(
+    (result: GameResult) => {
+      setBoardDate(result.boardDate)
+      onGameOver(result)
+    },
+    [onGameOver],
+  )
 
   return (
     <Card padding="none" className="overflow-hidden border-t-8 border-(--accent)">
@@ -156,13 +189,24 @@ function GameStage({ game, gameModule }: { game: GameDefinition; gameModule: Gam
         {/* The module pairs the component with its own AI (defineGameModule), so this is that AI. */}
         <gameModule.Component
           onGameStart={handleGameStart}
-          onGameOver={game.scored ? onGameOver : ignoreResult}
+          modes={game.scored ? modes : undefined}
+          onGameOver={game.scored ? handleGameOver : ignoreResult}
           currentSession={currentSession}
+          onRewarded={onRewarded}
           ai={ai as (() => never) | undefined}
           cosmetics={cosmetics}
         />
       </Suspense>
-      <ScoreStatus submission={submission} onRetry={retry} gameSlug={game.slug} />
+      <ScoreStatus
+        submission={submission}
+        onRetry={retry}
+        gameSlug={game.slug}
+        mode={runMode}
+        boardDate={boardDate}
+        timed={timedResult}
+        ranked={rankedResult}
+        progression={progressionResult}
+      />
     </Card>
   )
 }
@@ -171,14 +215,26 @@ interface ScoreStatusProps {
   submission: ScoreSubmission
   onRetry: () => void
   gameSlug: string
+  /** The mode of the run, so its leaderboard link opens that mode's board (Classic when unset). */
+  mode?: string
+  /** The run's puzzle date, for a board ranked by date: the link opens that day's board. */
+  boardDate?: string
+  /** Whether the run's score is a time in milliseconds (a mode ranked by time), shown as one. */
+  timed: boolean
+  /** Whether the run's mode is ranked: an unranked one has no leaderboard to link and no rewards to show. */
+  ranked: boolean
+  /** Whether the run's mode counts towards achievements and daily challenges, as Classic does. */
+  progression: boolean
 }
 
 /** What an unscored game's results go to: nowhere. */
 function ignoreResult() {}
 
 /** Tells the player what happened to the score of the run that just ended. */
-function ScoreStatus({ submission, onRetry, gameSlug }: ScoreStatusProps) {
+function ScoreStatus({ submission, onRetry, gameSlug, mode, boardDate, timed, ranked, progression }: ScoreStatusProps) {
   if (submission.status === 'idle') return null
+  const noun = timed ? 'time' : 'score'
+  const value = (score: number) => <strong>{timed ? formatGameTime(score) : score}</strong>
 
   return (
     <div
@@ -188,26 +244,56 @@ function ScoreStatus({ submission, onRetry, gameSlug }: ScoreStatusProps) {
       {submission.status === 'saving' && (
         <>
           <LoaderCircle aria-hidden className="size-4 animate-spin text-ink-soft" />
-          <span className="text-ink-soft">Saving your score…</span>
+          <span className="text-ink-soft">
+            {submission.recovering ? 'Loading your saved result…' : `Saving your ${noun}…`}
+          </span>
         </>
       )}
       {submission.status === 'saved' && (
         <>
           <CircleCheck aria-hidden className="size-4 text-success" />
           <span>
-            Score <strong>{submission.score}</strong> {submission.alreadySaved ? 'was already saved.' : 'saved.'}
+            {timed ? 'Time' : 'Score'} {value(submission.score)}{' '}
+            {submission.alreadySaved ? 'was already saved.' : 'saved.'}
           </span>
-          {submission.rewards ? (
-            <RewardBadges rewards={submission.rewards} />
-          ) : (
-            !submission.alreadySaved && <GuestHint gameSlug={gameSlug} />
+          {submission.recoveryError && ranked && (
+            <span className="text-ink-soft">
+              Result details couldn't be loaded.
+              {submission.recoveryError === 'retryable' && (
+                <button
+                  type="button"
+                  onClick={onRetry}
+                  className="ml-2 rounded font-bold text-brand-700 underline underline-offset-2 hover:text-brand-900"
+                >
+                  Retry result details
+                </button>
+              )}
+            </span>
           )}
-          <Link
-            to={`/leaderboard?game=${encodeURIComponent(gameSlug)}`}
-            className="ml-auto rounded font-bold text-brand-700 hover:text-brand-900"
-          >
-            View leaderboard →
-          </Link>
+          {!ranked ? (
+            <span className="text-ink-soft">Unranked: no leaderboard, XP or coins.</span>
+          ) : (
+            <>
+              {submission.rewards ? (
+                <>
+                  <RewardBadges rewards={submission.rewards} />
+                  {!progression && (
+                    <span className="text-ink-soft">Achievements and daily challenges count Classic runs only.</span>
+                  )}
+                </>
+              ) : (
+                !submission.alreadySaved && <GuestHint gameSlug={gameSlug} />
+              )}
+              <Link
+                to={`/leaderboard?game=${encodeURIComponent(gameSlug)}${
+                  mode && mode !== homeBoard(gameSlug).id ? `&mode=${encodeURIComponent(mode)}` : ''
+                }${boardDate ? `&date=${encodeURIComponent(boardDate)}` : ''}`}
+                className="ml-auto rounded font-bold text-brand-700 hover:text-brand-900"
+              >
+                View leaderboard →
+              </Link>
+            </>
+          )}
         </>
       )}
       {submission.status === 'failed' && (
@@ -216,13 +302,18 @@ function ScoreStatus({ submission, onRetry, gameSlug }: ScoreStatusProps) {
           <span>
             {submission.reason === 'rejected' ? (
               <>
-                Your score of <strong>{submission.score}</strong> couldn't be accepted.
+                Your {noun} of {value(submission.score)} couldn't be accepted.
               </>
             ) : submission.reason === 'expired' ? (
-              <>This game was left open too long to save its score. Start a new game to play on.</>
+              <>This game was left open too long to save its {noun}. Start a new game to play on.</>
+            ) : submission.reason === 'mode-mismatch' ? (
+              <>
+                This game was started in a different mode than the one chosen, so your {noun} of{' '}
+                {value(submission.score)} wasn't saved.
+              </>
             ) : (
               <>
-                Your score of <strong>{submission.score}</strong> couldn't be saved.
+                Your {noun} of {value(submission.score)} couldn't be saved.
               </>
             )}
           </span>

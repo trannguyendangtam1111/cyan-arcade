@@ -59,10 +59,13 @@ describe('profile page when signed in', () => {
     renderRoute('/profile')
 
     const value = (label: string) => screen.getByText(label, { selector: 'dt' }).closest('div')!.querySelector('dd')
-    await screen.findByText('Games played')
-    expect(value('Games played')).toHaveTextContent('12')
-    expect(value('Total score')).toHaveTextContent('4,321')
+    await screen.findByText('Games played (Classic)')
+    expect(value('Games played (Classic)')).toHaveTextContent('12')
+    expect(value('Total score (Classic)')).toHaveTextContent('4,321')
     expect(value('Achievements')).toHaveTextContent('1 / 3')
+    expect(screen.getByText(/Games played, total score and play time count Classic results only/)).toBeInTheDocument()
+    expect(screen.queryByText('Coins (Classic)')).not.toBeInTheDocument()
+    expect(screen.queryByText('Achievements (Classic)')).not.toBeInTheDocument()
   })
 
   it('lists recent games with their result', async () => {
@@ -110,7 +113,7 @@ describe('profile page when signed in', () => {
     renderRoute('/profile')
 
     const achievements = await section(/^Achievements/)
-    const cards = await achievements.findAllByRole('listitem')
+    const cards = within(await achievements.findByRole('list', { name: 'All achievements' })).getAllByRole('listitem')
     expect(cards).toHaveLength(3)
     expect(achievements.getByRole('heading', { name: /Achievements/ })).toHaveTextContent('1 of 3')
     expect(within(cards[0]).getByRole('heading', { name: 'First Coin' })).toBeInTheDocument()

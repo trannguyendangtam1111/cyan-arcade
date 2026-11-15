@@ -149,7 +149,7 @@ export function PackOpening({ userId, pack, allowance, cardBackUrl }: PackOpenin
         <>
           <ul aria-label="Your cards" className="flex w-full max-w-3xl flex-wrap justify-center gap-3 sm:gap-4">
             {opening.cards.map((pulled, index) => (
-              <li key={pulled.position} className="w-[29%] sm:w-[18%]">
+              <li key={pulled.position} className={pulled.card.imageUrl ? 'w-[29%] sm:w-[18%]' : 'w-[44%] sm:w-[29%]'}>
                 <RevealCard
                   pulled={pulled}
                   index={index}

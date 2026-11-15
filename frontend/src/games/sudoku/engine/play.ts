@@ -1,4 +1,4 @@
-import { bit, CELLS, peersOf } from './grid'
+import { bit, candidates, CELLS, peersOf } from './grid'
 
 /**
  * The board as the player edits it: digits, pencil marks and which cells are locked (clues and
@@ -98,6 +98,23 @@ export function removeNotes(board: PlayBoard, eliminations: readonly { cell: num
   notes.forEach((mask, cell) => {
     if (mask !== board.notes[cell]) changes.push(change(board, cell, board.values[cell], mask))
   })
+  return changes.length ? { changes } : null
+}
+
+/**
+ * Pencils in every empty cell's candidates: the digits its row, column and box do not hold yet, as the
+ * board stands (the player's digits count, right or wrong; the solution is never consulted). Replaces
+ * the notes of each empty cell; clues, revealed digits and filled cells are left alone. One edit, so
+ * one undo takes it all back.
+ * @returns the edit, or `null` when every empty cell already has exactly its candidates
+ */
+export function fillCandidates(board: PlayBoard): Edit | null {
+  const changes: CellChange[] = []
+  for (let cell = 0; cell < CELLS; cell++) {
+    if (board.locked[cell] || board.values[cell] !== 0) continue
+    const mask = candidates(board.values, cell)
+    if (mask !== board.notes[cell]) changes.push(change(board, cell, 0, mask))
+  }
   return changes.length ? { changes } : null
 }
 

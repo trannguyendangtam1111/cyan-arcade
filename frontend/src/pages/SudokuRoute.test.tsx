@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type { ShopItem } from '@/api/economy'
-import type { GameResponse } from '@/api/games'
+import { CLASSIC, type GameMode, type GameResponse } from '@/api/games'
 import { admin, catalogFixture, mockApi, pixel, SESSION_ID, shopItemsFixture } from '@/test/mockApi'
 import { renderRoute } from '@/test/renderWithProviders'
 import { NEARLY_DONE, sudokuServer } from '@/test/sudokuServer'
@@ -53,6 +53,10 @@ const shopItems = [
   skin(91, 'SUDOKU_PAD_CANDY', 'Candy Pad', 'pad', 'candy', 300),
 ]
 
+const sudokuModes: GameMode[] = [CLASSIC, ...['daily', 'easy', 'medium', 'hard', 'expert'].map(
+  (id): GameMode => ({ id, name: id[0].toUpperCase() + id.slice(1), ranked: true, order: 'DESC', unit: 'POINTS' }),
+)]
+
 const requests = (fetchSpy: ReturnType<typeof mockApi>, path: string) =>
   fetchSpy.mock.calls.filter(([input]) => new URL(String(input), 'http://localhost').pathname === path)
 
@@ -65,7 +69,8 @@ describe('Sudoku in the arcade', () => {
 
   it('submits a solved daily puzzle through the platform\'s session, with the server\'s score', async () => {
     const server = sudokuServer({ givens: NEARLY_DONE })
-    const fetchSpy = mockApi({ games, user: pixel, shopItems, handlers: [server.handler] })
+    // Sudoku's boards (SDK-001): the daily puzzle's session is opened in Daily.
+    const fetchSpy = mockApi({ games, user: pixel, shopItems, modes: { sudoku: sudokuModes }, handlers: [server.handler] })
     renderRoute('/games/sudoku')
     fireEvent.click(await screen.findByRole('button', { name: 'Start' }))
     const board = await screen.findByRole('grid', { name: /Sudoku board/ })
@@ -79,7 +84,11 @@ describe('Sudoku in the arcade', () => {
     expect(server.dailyRun?.sessionId).toBe(SESSION_ID)
     const [finish] = requests(fetchSpy, `/api/game-sessions/${SESSION_ID}/finish`)
     expect(JSON.parse(String(finish[1]?.body))).toMatchObject({ score: 5250, details: { solvedLevel: 3, dailyGrade: 4, streak: 1 } })
+    const [start] = requests(fetchSpy, '/api/game-sessions')
     expect(requests(fetchSpy, '/api/game-sessions')).toHaveLength(1)
+    expect(JSON.parse(String(start[1]?.body))).toMatchObject({ gameSlug: 'sudoku', mode: 'daily' })
+    // The way to the board opens this puzzle's date, even when today is another (finished after midnight UTC).
+    expect(screen.getByRole('link', { name: /View leaderboard/ })).toHaveAttribute('href', '/leaderboard?game=sudoku&date=2026-10-09')
   })
 
   it('has a leaderboard tab like every game', async () => {

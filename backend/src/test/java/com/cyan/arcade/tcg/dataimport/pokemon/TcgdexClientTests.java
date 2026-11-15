@@ -110,6 +110,14 @@ class TcgdexClientTests {
 			.withMessageContaining("no set 'sv99'");
 	}
 
+	@Test
+	void lookingForASetTcgdexDoesNotHaveFindsNothing() {
+		// How the source tells a set to hold back from one it cannot read at all.
+		this.server.expect(requestTo(URL)).andRespond(withSuccess("{\"data\":{\"set\":null}}", MediaType.APPLICATION_JSON));
+
+		assertThat(this.client.findSet("sv99")).isNull();
+	}
+
 	private static String page(int first, int count) {
 		return IntStream.range(first, first + count)
 			.mapToObj((number) -> """

@@ -4,8 +4,10 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
+import com.cyan.arcade.tcg.dataimport.SetCheck;
 import com.cyan.arcade.tcg.dataimport.SourceConfig;
 import com.cyan.arcade.tcg.dataimport.SourceConfig.SetChoice;
+import com.cyan.arcade.tcg.dataimport.SourceFetch;
 import com.cyan.arcade.tcg.dataimport.TcgDataset;
 import com.cyan.arcade.tcg.dataimport.TcgDataset.Card;
 import com.cyan.arcade.tcg.dataimport.TcgDataset.CardSet;
@@ -21,6 +23,7 @@ import org.springframework.core.io.ClassPathResource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
+import static org.assertj.core.api.Assertions.tuple;
 
 /**
  * TCGdex's answers, as recorded for real cards, turned into a dataset with the configuration that
@@ -118,12 +121,36 @@ class PokemonDatasetMapperTests {
 	}
 
 	@Test
-	void aCardWithoutAnImageIsLeftOut() {
-		TcgDataset dataset = map(new FetchedSet(modern("sv01"), SCARLET_VIOLET,
-				List.of(pineco(), new TcgdexCard("sv01-999", "999", "No Picture", "Common", null, "Pokemon", 10,
-						List.of(), null, null, new TcgdexCard.SetId("sv01")))));
+	void aSetWithACardWithoutAnImageIsHeldBackUntilItIsComplete() {
+		TcgdexSet next = new TcgdexSet("sv02", "Paldea Evolved", "2023-06-09", null, null);
+		SourceFetch fetched = PokemonDatasetMapper.mapChecked(CONFIG,
+				List.of(new FetchedSet(modern("sv01"), SCARLET_VIOLET, List.of(pineco())), new FetchedSet(modern("sv02"),
+						next, List.of(card("sv02", "001", "Hoppip", "Common", "Pokemon", 40),
+								new TcgdexCard("sv02-999", "999", "No Picture", "Common", null, "Pokemon", 10, List.of(), null,
+										null, new TcgdexCard.SetId("sv02"))))));
 
-		assertThat(dataset.sets().get(0).cards()).extracting(Card::externalId).containsExactly("sv01-001");
+		// No pack is made of part of a set: sv02 waits, sv01 is imported.
+		assertThat(fetched.dataset().sets()).extracting(CardSet::externalId).containsExactly("sv01");
+		assertThat(fetched.checks()).extracting(SetCheck::setId, SetCheck::status, SetCheck::listed,
+				SetCheck::importable, SetCheck::withoutImage)
+			.containsExactly(tuple("sv01", SetCheck.Status.IMPORTABLE, 1, 1, 0),
+					tuple("sv02", SetCheck.Status.PENDING_IMAGES, 2, 1, 1));
+		assertThat(fetched.hasHeldBackSets()).isTrue();
+	}
+
+	@Test
+	void aSetTcgdexDoesNotListIsHeldBackAndTheOthersAreImported() {
+		SourceFetch fetched = PokemonDatasetMapper.mapChecked(CONFIG,
+				List.of(new FetchedSet(modern("sv01"), SCARLET_VIOLET, List.of(pineco())),
+						new FetchedSet(modern("sv99"), null, List.of())));
+
+		assertThat(fetched.dataset().sets()).extracting(CardSet::externalId).containsExactly("sv01");
+		assertThat(fetched.checks()).extracting(SetCheck::setId, SetCheck::status)
+			.containsExactly(tuple("sv01", SetCheck.Status.IMPORTABLE), tuple("sv99", SetCheck.Status.NOT_AT_SOURCE));
+
+		// With nothing importable at all there is no dataset, and nothing to write.
+		assertThat(PokemonDatasetMapper.mapChecked(CONFIG, List.of(new FetchedSet(modern("sv99"), null, List.of())))
+			.dataset()).isNull();
 	}
 
 	@Test
@@ -153,6 +180,37 @@ class PokemonDatasetMapperTests {
 	}
 
 	@Test
+	void theRgbMewsTcgdexAddedToTheThirtiethCelebrationAreLeftOutOnPurpose() {
+		// TCGdex lists 161 cards for "30th" since three RGB Rare Mews (localIds R, G and B) were added;
+		// the rarity is excluded in the shipped configuration, so the set imports as before.
+		TcgdexSet celebration = new TcgdexSet("30th", "30th Celebration", "2026-09-16", null,
+				new TcgdexSet.Serie("me", "Mega Evolution"));
+		TcgDataset dataset = map(new FetchedSet(new SetChoice("30th", "celebration", null), celebration,
+				List.of(card("30th", "001", "Exeggcute", "Common", "Pokemon", 50),
+						card("30th", "023", "Pikachu", "Pikachu Rare", "Pokemon", 60),
+						card("30th", "R", "Mew", "RGB Rare", "Pokemon", 70), card("30th", "G", "Mew", "RGB Rare", "Pokemon", 70),
+						card("30th", "B", "Mew", "RGB Rare", "Pokemon", 70))));
+
+		assertThat(CONFIG.excludedRarities()).containsOnlyKeys("RGB Rare");
+		assertThat(dataset.sets().get(0).cards()).extracting(Card::externalId).containsExactly("30th-001", "30th-023");
+		assertThat(dataset.rarities()).extracting(TcgDataset.Rarity::code).doesNotContain("rgb-rare");
+	}
+
+	@Test
+	void ascendedHeroesMegaAttackRaresStayTheUltraRaresTheyWereImportedAs() {
+		// TCGdex first listed me02.5-265 to 271 as "Ultra Rare" and later renamed their rarity to
+		// "Mega Attack Rare"; they keep the rarity, and so the pack odds, they were imported with.
+		TcgdexSet ascendedHeroes = new TcgdexSet("me02.5", "Ascended Heroes", "2026-01-30", null,
+				new TcgdexSet.Serie("me", "Mega Evolution"));
+		TcgDataset dataset = map(new FetchedSet(modern("me02.5"), ascendedHeroes,
+				List.of(card("me02.5", "265", "Mega Froslass ex", "Mega Attack Rare", "Pokemon", 300),
+						card("me02.5", "001", "Pinsir", "Common", "Pokemon", 110))));
+
+		assertThat(dataset.sets().get(0).cards()).extracting((card) -> card.externalId() + ":" + card.rarity())
+			.containsExactly("me02.5-001:common", "me02.5-265:ultra-rare");
+	}
+
+	@Test
 	void aSetWithoutAnyImagesIsLeftOutRatherThanShownWithout() {
 		// TCGdex lists the 30th Classic Collection's 30 reprints without images (or a rarity).
 		TcgdexSet classic = new TcgdexSet("30th-c", "30th Classic Collection", "2026-09-16", null,
@@ -163,6 +221,19 @@ class PokemonDatasetMapperTests {
 								null, new TcgdexCard.SetId("30th-c")))));
 
 		assertThat(dataset.sets()).extracting(TcgDataset.CardSet::externalId).containsExactly("sv01");
+	}
+
+	@Test
+	void anUnknownRarityInASetThatIsHeldBackAnywayDoesNotStopTheImport() {
+		// Counted in the set's check, so it is known before the set's images arrive.
+		TcgdexSet next = new TcgdexSet("sv02", "Paldea Evolved", "2023-06-09", null, null);
+		SourceFetch fetched = PokemonDatasetMapper.mapChecked(CONFIG,
+				List.of(new FetchedSet(modern("sv01"), SCARLET_VIOLET, List.of(pineco())),
+						new FetchedSet(modern("sv02"), next, List.of(new TcgdexCard("sv02-001", "001", "Mystery",
+								"Galaxy Rare", null, "Pokemon", 10, List.of(), null, null, new TcgdexCard.SetId("sv02"))))));
+
+		assertThat(fetched.checks().get(1).unknownRarities()).containsExactly(Map.entry("Galaxy Rare", 1));
+		assertThat(fetched.dataset().sets()).hasSize(1);
 	}
 
 	private static TcgDataset map(FetchedSet... sets) {

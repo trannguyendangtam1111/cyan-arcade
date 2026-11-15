@@ -266,3 +266,24 @@ export interface EngineStatus {
   maxLines: number
   hintsPerGame: number
 }
+
+/** Retained account-owned match metadata; plyCount counts individual half-moves. */
+export interface ArchivedMatch {
+  id: string
+  mode: MatchView['mode']
+  status: MatchView['status']
+  playerColor: Side | null
+  difficulty: Difficulty | null
+  result: string
+  plyCount: number
+  createdAt: string | null
+  updatedAt: string | null
+  finishedAt: string | null
+}
+
+export interface ArchivePage {
+  content: ArchivedMatch[]
+  page: number
+  size: number
+  hasNext: boolean
+}

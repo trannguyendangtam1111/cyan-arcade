@@ -18,6 +18,8 @@ interface ItemCardProps {
   item: ShopItem
   /** The player's coins, or `null` for a guest. */
   balance: number | null
+  /** The player's level, or `null` for a guest: a locked item says how far off it is. */
+  level?: number | null
   signedIn: boolean
   /** The player's avatar, to show a frame on. */
   avatar: AvatarKey
@@ -32,7 +34,7 @@ interface ItemCardProps {
  * to buy. What is shown comes from the server's answer; the server checks all of it again on a
  * purchase.
  */
-export function ItemCard({ item, balance, signedIn, avatar, busy, onBuy, onToggleWear }: ItemCardProps) {
+export function ItemCard({ item, balance, level = null, signedIn, avatar, busy, onBuy, onToggleWear }: ItemCardProps) {
   const category = categoryOf(item.type)
   const owned = item.owned ?? 0
   const locked = item.unlocked === false
@@ -156,7 +158,13 @@ export function ItemCard({ item, balance, signedIn, avatar, busy, onBuy, onToggl
           </Button>
         )}
       </div>
-      {reason && <p className="-mt-2 text-sm font-bold text-ink-soft">{reason}</p>}
+      {reason && (
+        <p className="-mt-2 text-sm font-bold text-ink-soft">
+          <span>{reason}</span>
+          {/* How far off a locked item is: the level comes with the shop, for a signed-in player. */}
+          {locked && !included && level !== null && <span className="font-normal"> · you're level {level}</span>}
+        </p>
+      )}
     </article>
   )
 }

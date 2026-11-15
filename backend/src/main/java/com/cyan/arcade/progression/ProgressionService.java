@@ -82,14 +82,17 @@ public class ProgressionService {
 
 		int coinsEarned = 0;
 		// Only so many games a day pay coins just for being played, so a stream of very short runs
-		// earns XP but cannot be farmed for coins.
-		if (this.coins.countToday(userId, CoinTransactionType.GAME_COMPLETION) < this.rewards.rewardedGamesPerDay()) {
+		// earns XP but cannot be farmed for coins. A run that ended before its mode's own end (an early
+		// top-out in Tetris Ultra) has not finished the game and earns neither.
+		if (run.earnsCompletionReward() && this.coins.countToday(userId,
+				CoinTransactionType.GAME_COMPLETION) < this.rewards.rewardedGamesPerDay()) {
 			coinsEarned += pay(userId, CoinTransactionType.GAME_COMPLETION, this.rewards.gameCompletedCoins(),
 					session, "Finished a game of " + run.gameSlug());
 		}
 		// Likewise for new bests: a string of runs each a little better than the last still earns their
-		// XP, but only so many pay coins in a day.
-		if (run.personalBest() && this.coins.countToday(userId,
+		// XP, but only so many pay coins in a day. Only Classic bests pay: a new mode starts with no
+		// best at all, so its first runs would otherwise be a stream of easy bonuses.
+		if (run.earnsPersonalBestBonus() && this.coins.countToday(userId,
 				CoinTransactionType.HIGH_SCORE) < this.rewards.rewardedPersonalBestsPerDay()) {
 			coinsEarned += pay(userId, CoinTransactionType.HIGH_SCORE, this.rewards.personalBestCoins(), session,
 					"New best score in " + run.gameSlug());
@@ -129,6 +132,27 @@ public class ProgressionService {
 		this.users.addXp(userId, bonus.xp());
 	}
 
+	/**
+	 * Pays a fixed reward for a game completed outside the game-session flow, such as a won Minesweeper
+	 * Daily Board: its XP, and its coins as a game completion, which count towards the same daily limit
+	 * of paid games as every other finished game (over it, the XP is still paid and the coins are not).
+	 * No achievement, personal best or daily challenge is looked at.
+	 *
+	 * <p>The coins are paid at most once for {@code reference}, but the XP is not: the caller pays each
+	 * completion once, in the transaction that records it.
+	 */
+	@Transactional
+	public CompletionReward rewardCompletion(Long userId, int xp, int coins, CoinReference reference,
+			String description) {
+		lockPlayer(userId);
+		int paid = 0;
+		if (this.coins.countToday(userId, CoinTransactionType.GAME_COMPLETION) < this.rewards.rewardedGamesPerDay()) {
+			paid = pay(userId, CoinTransactionType.GAME_COMPLETION, coins, reference, description);
+		}
+		this.users.addXp(userId, xp);
+		return new CompletionReward(xp, paid);
+	}
+
 	/** Every achievement in the catalog, with whether and when this player unlocked it. */
 	@Transactional(readOnly = true)
 	public List<AchievementStatus> achievementsOf(Long userId) {
@@ -139,6 +163,33 @@ public class ProgressionService {
 					achievement.description(), achievement.reward().xp(), achievement.reward().coins(),
 					unlockedAt.containsKey(achievement.code()), unlockedAt.get(achievement.code())))
 			.toList();
+	}
+
+	/**
+	 * Every achievement, as {@link #achievementsOf(Long)}, and for each locked one with a measurable
+	 * goal how far the player is towards it (capped at the target). Shown only: a run still unlocks
+	 * an achievement by its rule alone.
+	 */
+	@Transactional(readOnly = true)
+	public List<AchievementStatus> achievementsOf(Long userId, AchievementProgress progress) {
+		Map<String, Instant> unlockedAt = this.unlocked.of(userId);
+		return this.catalog.all().stream().map((achievement) -> {
+			boolean unlocked = unlockedAt.containsKey(achievement.code());
+			Achievement.Goal goal = achievement.goal();
+			Integer current = (unlocked || goal == null) ? null : progressTowards(goal, progress);
+			return new AchievementStatus(achievement.code(), achievement.name(), achievement.description(),
+					achievement.reward().xp(), achievement.reward().coins(), unlocked,
+					unlockedAt.get(achievement.code()), current, (current == null) ? null : goal.target(),
+					(current == null) ? null : goal.kind());
+		}).toList();
+	}
+
+	private static int progressTowards(Achievement.Goal goal, AchievementProgress progress) {
+		long value = switch (goal.kind()) {
+			case GAMES_PLAYED -> progress.gamesPlayed();
+			case BEST_SCORE -> Math.max(0, progress.bestScore(goal.gameSlug()).orElse(0));
+		};
+		return (int) Math.min(value, goal.target());
 	}
 
 	private int payBonus(Long userId, Bonus bonus) {

@@ -1,8 +1,9 @@
 import { cn } from '@/lib/cn'
+import { Layers } from 'lucide-react'
 import type { PackRef } from '../api'
 import { gameAccent } from '../accent'
 
-type PackLook = Pick<PackRef, 'name' | 'imageUrl' | 'setLogoUrl' | 'coverImageUrl' | 'accentColor' | 'set'>
+type PackLook = Pick<PackRef, 'name' | 'imageUrl' | 'setLogoUrl' | 'coverImageUrl' | 'accentColor' | 'set' | 'game'>
 
 interface PackArtProps {
   pack: PackLook
@@ -49,11 +50,19 @@ export function PackArt({ pack, className, label }: PackArtProps) {
         />
       )}
 
+      {pack.game.slug === 'yugioh' && !pack.coverImageUrl && !pack.setLogoUrl && (
+        <span className="absolute inset-x-[9%] top-[38%] flex flex-col items-center gap-[3cqw] text-center font-display font-bold text-(--accent-ink)">
+          <Layers aria-hidden className="size-[24cqw]" />
+          <span className="text-[8cqw]">Text cards</span>
+          <span className="text-[5cqw] font-medium">No official artwork</span>
+        </span>
+      )}
+
       <span className="absolute inset-x-[9%] top-[9%] grid h-[19%] place-items-center rounded-[1.2rem] bg-white/92 px-[6%] py-[3%] shadow-md">
         {pack.setLogoUrl ? (
           <img src={pack.setLogoUrl} alt="" loading="lazy" draggable={false} className="max-h-full max-w-full object-contain" />
         ) : (
-          <span className="line-clamp-2 text-center font-display text-[9cqw] leading-tight font-bold text-ink">
+          <span className="line-clamp-2 text-center font-display text-[9cqw] leading-tight font-bold text-[#16323f]">
             {pack.set.name}
           </span>
         )}

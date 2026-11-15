@@ -349,3 +349,45 @@ describe('Tetris in Human mode', () => {
     expect(vi.getTimerCount()).toBe(0)
   })
 })
+
+describe('Tetris in AI mode', () => {
+  /** The next-pieces preview: it moves on exactly when a piece locks. */
+  const preview = () =>
+    screen
+      .getAllByRole('img', { name: /^[IOTSZJL] piece$/ })
+      .map((piece) => piece.getAttribute('aria-label'))
+      .join()
+
+  /** Steps the game in AI frames (40 ms each at `speed`) until the first piece locks; returns what the board showed. */
+  function framesOfFirstPiece(speed: number) {
+    const first = preview()
+    const frames: string[] = []
+    for (let frame = 0; frame < 300 && preview() === first; frame++) {
+      frames.push(boardMarkup())
+      advance(40 / speed)
+    }
+    expect(preview()).not.toBe(first)
+    return frames
+  }
+
+  it('shows the piece falling row by row before the next one comes in', () => {
+    tetris()
+    click('AI')
+
+    // A hard-dropped piece would show a handful of pictures; a falling one shows one per row.
+    expect(new Set(framesOfFirstPiece(1)).size).toBeGreaterThanOrEqual(15)
+  })
+
+  it('shows the same fall at a higher speed, only faster', () => {
+    const slow = tetris()
+    click('AI')
+    const atNormalSpeed = framesOfFirstPiece(1)
+    slow.unmount()
+
+    tetris()
+    click('AI')
+    fireEvent.click(screen.getByRole('radio', { name: '4x' }))
+
+    expect(framesOfFirstPiece(4)).toEqual(atNormalSpeed)
+  })
+})

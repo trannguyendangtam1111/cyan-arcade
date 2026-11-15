@@ -79,6 +79,7 @@
     { "id": "OP-03", "profile": "booster" },
     { "id": "OP-02", "profile": "booster" },
     { "id": "OP-01", "profile": "booster" },
+    { "id": "EB-05", "profile": "extra-booster" },
     { "id": "EB-03", "profile": "extra-booster" },
     { "id": "EB-02", "profile": "extra-booster" },
     { "id": "EB-01", "profile": "extra-booster" }

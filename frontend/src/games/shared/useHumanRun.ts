@@ -7,25 +7,28 @@ import { useRunStart } from './useRunStart'
  * The life cycle of one human run, identical for every game:
  *
  *   begin()            first input     → tells the platform the run started (once)
- *   finish(score, ..)  game over       → updates the best score and reports the result (once)
+ *   finish(score, ..)  game over       → updates the best score and reports the result (once);
+ *                                       `onSaved`, if given, runs once the server has recorded it
  *   reset()            a new game      → ready for the next run
  *
  * Games call these three and nothing else, so none of them contains its own score-reporting code.
  * AI runs simply never call `begin` or `finish`.
+ *
+ * @param lowerIsBetter for a score that is a time to finish: the device's best is the lowest
  */
-export function useHumanRun(gameSlug: string, { onGameStart, onGameOver }: GameProps) {
+export function useHumanRun(gameSlug: string, { onGameStart, onGameOver }: GameProps, lowerIsBetter = false) {
   const { started, begin, reset: resetStart, elapsedMs } = useRunStart(onGameStart)
-  const { best, record } = useHighScore(gameSlug)
+  const { best, record } = useHighScore(gameSlug, lowerIsBetter)
   const [newBest, setNewBest] = useState(false)
   // A ref, for the same reason as in useRunStart: several ticks can fire before a re-render.
   const finished = useRef(false)
 
   const finish = useCallback(
-    (score: number, metadata?: Record<string, unknown>) => {
+    (score: number, metadata?: Record<string, unknown>, onSaved?: () => void) => {
       if (finished.current) return
       finished.current = true
       setNewBest(record(score))
-      onGameOver({ score, durationMs: elapsedMs(), metadata })
+      onGameOver({ score, durationMs: elapsedMs(), metadata, ...(onSaved && { onSaved }) })
     },
     [record, onGameOver, elapsedMs],
   )

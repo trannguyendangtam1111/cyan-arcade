@@ -207,13 +207,14 @@ class ChessAiService {
 	/**
 	 * Has Stockfish play its move. The request names only the match and its revision; the move is the
 	 * engine's, checked and played by the rules. A failed search changes nothing, so the request can
-	 * simply be sent again.
+	 * simply be sent again. It is not counted against the per-minute limit: the game cannot go on
+	 * without it, and it is already bounded, one per move of the player's (only on the engine's turn,
+	 * at the current revision) and by the engine pool's queue.
 	 */
 	MatchResponse engineMove(Owner owner, UUID matchId, int revision) {
 		requireAdmin(owner);
 		ChessMatch match = this.chess.owned(owner, matchId);
 		ChessGame game = checkEngineTurn(match, revision);
-		this.limiter.check(owner.userId());
 
 		Difficulty difficulty = match.difficulty();
 		SearchRequest request = EnginePositions.request(game, game.moves().size(), difficulty.limits(), 1,
@@ -284,14 +285,16 @@ class ChessAiService {
 			return new EvaluationResponse(match.revision(), at, position.turn(), EngineViews.evaluation(finished), null,
 					List.of(), 0, requestedDepth, true, true, result.termination(), this.engine.knownEngineName());
 		}
-		this.limiter.check(owner.userId());
-
 		SearchRequest request = EnginePositions.request(game, at,
 				new SearchRequest.Limits(requestedDepth, (int) limits.maxMovetime().toMillis(), null), requestedLines,
 				SearchRequest.Strength.FULL);
 		try {
 			String key = this.cache.key(this.engine.knownEngineName(), request);
 			SearchResult cached = this.cache.get(key);
+			// Only a search counts against the per-minute limit; a position seen before is free.
+			if (cached == null) {
+				this.limiter.check(owner.userId());
+			}
 			SearchResult result = (cached != null) ? cached
 					: this.engine.search(request, limits.maxMovetime().plus(MARGIN), () -> false);
 			// Checked before it is kept: an unusable answer is never served again from the cache.

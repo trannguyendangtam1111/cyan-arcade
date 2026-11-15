@@ -1,4 +1,4 @@
-import { Activity, Bot, CircleHelp, CornerUpLeft, Flag, GitBranch, GraduationCap, Handshake, LoaderCircle, Palette, Plus, Redo2, RotateCcw, SearchCheck, SlidersHorizontal, Undo2, X } from 'lucide-react'
+import { Activity, Archive, Bot, CircleHelp, CornerUpLeft, Flag, GitBranch, GraduationCap, Handshake, LoaderCircle, Palette, Plus, Redo2, RotateCcw, SearchCheck, SlidersHorizontal, Undo2, X } from 'lucide-react'
 import { useCallback, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { Button } from '@/components/ui/Button'
 import { ErrorState } from '@/components/ui/ErrorState'
@@ -22,6 +22,7 @@ import { HelpDialog } from './components/HelpDialog'
 import { HintButton, HintCard } from './components/HintPanel'
 import { LookPicker } from './components/LookPicker'
 import { MoveList, type MoveLabel } from './components/MoveList'
+import { MatchArchive } from './components/MatchArchive'
 import { NavStrip } from './components/NavStrip'
 import { PlayerBar } from './components/PlayerBar'
 import { ReviewPanel } from './components/ReviewPanel'
@@ -53,6 +54,12 @@ type Dialog = null | 'help' | 'skin' | 'engine'
  * review, and open the Skin, Help, Display and "vs Stockfish" panels; none of them touches the game.
  */
 export default function ChessGame(props: GameProps<ChessAi>) {
+  const [archive, setArchive] = useState(false)
+  return archive ? <MatchArchive onBack={() => setArchive(false)} cosmetics={props.cosmetics} />
+    : <CurrentChessGame {...props} onArchive={() => setArchive(true)} />
+}
+
+function CurrentChessGame(props: GameProps<ChessAi> & { onArchive: () => void }) {
   const admin = props.ai !== undefined
   const game = useChessGame(props.onGameStart)
   const look = useLook(props.cosmetics)
@@ -226,6 +233,13 @@ export default function ChessGame(props: GameProps<ChessAi>) {
   let board: ReactNode
   if (game.loading && !match) {
     board = <LoadingState label="Setting up the board…" className="min-h-80 w-full" />
+  } else if (!match && !game.loadError) {
+    board = (
+      <div className="flex min-h-80 w-full flex-col items-center justify-center gap-3 rounded-control bg-surface-muted p-4 text-center">
+        <p>{game.recovery ? 'Waiting for the saved game before showing a board.' : game.notice?.text ?? 'No saved game was found.'}</p>
+        {!game.recovery && <Button onClick={() => void game.newGame()}>New game</Button>}
+      </div>
+    )
   } else if (game.loadError || !match || !view) {
     board = (
       <ErrorState
@@ -309,9 +323,9 @@ export default function ChessGame(props: GameProps<ChessAi>) {
         ) : (
           <StatusLine match={match} onNewGame={requestNewGame} busy={game.busy} thinking={game.engineThinking} />
         )}
-        {game.engineFailed && game.engineTurn && (
+        {game.engineFailed && game.engineTurn && !game.recovery && (
           <div className="flex w-full flex-wrap items-center gap-2 rounded-control bg-amber-100 px-3 py-1.5 text-sm text-amber-900">
-            <span className="font-semibold">Stockfish could not move. The game is unchanged.</span>
+            <span className="font-semibold">Stockfish has not completed its turn on this board. Sync before retrying its move.</span>
             <Button size="sm" className="ml-auto" onClick={game.retryEngine} disabled={game.busy}>
               <RotateCcw aria-hidden className="size-4" />
               Retry Stockfish&apos;s move
@@ -365,7 +379,7 @@ export default function ChessGame(props: GameProps<ChessAi>) {
               }}
             />
           </div>
-          {game.notice && (
+          {game.notice && game.notice.placement !== 'above-board' && (
             <div
               key={game.notice.id}
               role={game.notice.tone === 'error' ? 'alert' : 'status'}
@@ -423,12 +437,36 @@ export default function ChessGame(props: GameProps<ChessAi>) {
 
   return (
     <div className="chess-page mx-auto flex w-full max-w-[74rem] flex-col gap-4 p-3 sm:p-4 lg:flex-row lg:items-start lg:gap-5">
-      <div className="mx-auto flex w-full max-w-[40rem] min-w-0 flex-col gap-2 lg:mx-0 lg:flex-1">{board}</div>
+      <div className="mx-auto flex w-full max-w-[40rem] min-w-0 flex-col gap-2 lg:mx-0 lg:flex-1">
+        {match && !game.recovery && game.notice?.placement === 'above-board' && (
+          <div role="status" className="flex items-start gap-2 rounded-control bg-surface p-3 text-sm font-semibold text-ink ring-1 ring-line">
+            <p className="min-w-0 flex-1">{game.notice.text}</p>
+            <button type="button" onClick={game.dismissNotice} aria-label="Dismiss" className="grid size-6 shrink-0 place-items-center rounded-full hover:bg-black/5">
+              <X aria-hidden className="size-3.5" />
+            </button>
+          </div>
+        )}
+        {game.recovery && (
+          <div role={game.recovery === 'failed' ? 'alert' : 'status'} className="flex flex-wrap items-center gap-2 rounded-control bg-amber-100 p-3 text-sm text-amber-900">
+            <p className="min-w-0 flex-1">
+              {game.recovery === 'syncing'
+                ? 'Syncing with the server… No action will be repeated.'
+                : "Couldn't sync the game. The board may be out of date. Retry Sync before playing; your previous action will not be repeated."}
+            </p>
+            <Button size="sm" variant="secondary" disabled={game.recovery === 'syncing'} onClick={() => void game.retrySync()}>
+              <RotateCcw aria-hidden className="size-4" />
+              Retry Sync
+            </Button>
+          </div>
+        )}
+        {board}
+      </div>
 
       {match && view && (
         <aside className="flex w-full max-w-[40rem] min-w-0 flex-col gap-3 self-center lg:sticky lg:top-20 lg:max-h-[calc(100dvh-6rem)] lg:w-[22rem] lg:shrink-0 lg:self-start lg:overflow-y-auto lg:pr-1" aria-label="Game controls and tools">
           <Controls game={game} match={match} onResign={() => setConfirm({ kind: 'resign' })} onNewGame={requestNewGame} loginPath={loginPath} />
           <div className="flex flex-wrap gap-1.5" role="toolbar" aria-label="Tools">
+            {match.hints.allowed && <Tool icon={<Archive aria-hidden className="size-4" />} label="Match archive" onClick={props.onArchive} title="Browse and export your retained matches" />}
             <Tool icon={<GraduationCap aria-hidden className="size-4" />} label="Coach" pressed={settings.coach} onClick={() => change('coach', !settings.coach)} title="Coach Mode: Stockfish rates each of your moves as you play" />
             {admin && <Tool icon={<Activity aria-hidden className="size-4" />} label="Analysis" pressed={settings.analysis} onClick={() => change('analysis', !settings.analysis)} title="Engine analysis of the position on the board" />}
             {admin && (

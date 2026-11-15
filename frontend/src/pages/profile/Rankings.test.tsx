@@ -23,6 +23,8 @@ describe('the profile rankings', () => {
     const section = await rankings()
     expect(await section.findByText('#3', { selector: 'span' })).toBeInTheDocument()
     expect(section.getByText(/in Tetris, of all time/)).toBeInTheDocument()
+    expect(section.getByText('Best Classic rank')).toBeInTheDocument()
+    expect(section.getByText('Classic leaderboards only. Other modes have their own rankings.')).toBeInTheDocument()
 
     const table = within(section.getByRole('table', { name: /your rank in every game/i }))
     expect(table.getAllByRole('columnheader').map((header) => header.textContent)).toEqual([
@@ -54,7 +56,20 @@ describe('the profile rankings', () => {
     renderRoute('/profile')
 
     const section = await rankings()
-    expect(await section.findByText('Not ranked yet.')).toBeInTheDocument()
+    expect(await section.findByText('No Classic rank yet.')).toBeInTheDocument()
+    expect(section.getByText(/Classic results appear here once ranked/)).toBeInTheDocument()
     expect(section.queryByRole('link')).not.toBeInTheDocument()
+  })
+
+  it('links a Classic Sudoku rank to Classic even though the game opens on Daily by default', async () => {
+    mockApi({ user: pixel, ranks: {
+      bestRank: 2, bestRankGame: { slug: 'sudoku', name: 'Sudoku' },
+      games: [{ game: { slug: 'sudoku', name: 'Sudoku' }, daily: null, weekly: null, allTime: { rank: 2, score: 7500 } }],
+    } })
+    renderRoute('/profile')
+    const section = await rankings()
+    expect(await section.findByRole('link', { name: '#2' })).toHaveAttribute(
+      'href', '/leaderboard?game=sudoku&period=all-time&mode=classic',
+    )
   })
 })

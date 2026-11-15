@@ -1,8 +1,11 @@
 package com.cyan.arcade;
 
 import com.cyan.arcade.score.GameSessionService;
+import com.cyan.arcade.score.ModeSpec;
 import com.cyan.arcade.score.RunRules;
 import com.cyan.arcade.score.RunSession;
+import com.tngtech.archunit.base.DescribedPredicate;
+import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
@@ -22,6 +25,13 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
  */
 @AnalyzeClasses(packages = "com.cyan.arcade", importOptions = ImportOption.DoNotIncludeTests.class)
 class ArchitectureTests {
+
+	/** What a game brings to the server and nothing more: its rules, and the modes those rules declare. */
+	private static final DescribedPredicate<JavaClass> THE_GAME_CONTRACT = equivalentTo(RunRules.class)
+		.or(equivalentTo(ModeSpec.class))
+		.or(equivalentTo(ModeSpec.Order.class))
+		.or(equivalentTo(ModeSpec.Unit.class))
+		.as("the game contract (RunRules, ModeSpec)");
 
 	/** Feature packages (game, score, ...) may depend on each other, but never in a circle. */
 	@ArchTest
@@ -91,7 +101,8 @@ class ArchitectureTests {
 
 	/**
 	 * A game's server-side rules ({@code gamerules}) are about its runs and nothing else. Of the
-	 * platform they may use only the contract a game implements, {@link RunRules}: never coins,
+	 * platform they may use only the contract a game implements, {@link RunRules} and the
+	 * {@link ModeSpec}s it declares: never coins,
 	 * rewards, achievements, leaderboards, inventories or accounts, which the platform handles for
 	 * every game alike.
 	 */
@@ -100,7 +111,7 @@ class ArchitectureTests {
 		.resideInAPackage("com.cyan.arcade.gamerules..")
 		.should()
 		.dependOnClassesThat(resideInAPackage("com.cyan.arcade..").and(not(resideInAPackage("com.cyan.arcade.gamerules..")))
-			.and(not(equivalentTo(RunRules.class))));
+			.and(not(THE_GAME_CONTRACT)));
 
 	/**
 	 * Word Guess is played on the server (the hidden word must not reach the browser), so it is a
@@ -124,7 +135,7 @@ class ArchitectureTests {
 		.should()
 		.dependOnClassesThat(resideInAPackage("com.cyan.arcade..").and(not(resideInAPackage("com.cyan.arcade.wordle..")))
 			.and(not(resideInAPackage("com.cyan.arcade.common..")))
-			.and(not(equivalentTo(RunRules.class)))
+			.and(not(THE_GAME_CONTRACT))
 			.and(not(equivalentTo(GameSessionService.class)))
 			.and(not(equivalentTo(RunSession.class))));
 
@@ -167,7 +178,7 @@ class ArchitectureTests {
 		.should()
 		.dependOnClassesThat(resideInAPackage("com.cyan.arcade..").and(not(resideInAPackage("com.cyan.arcade.sudoku..")))
 			.and(not(resideInAPackage("com.cyan.arcade.common..")))
-			.and(not(equivalentTo(RunRules.class)))
+			.and(not(THE_GAME_CONTRACT))
 			.and(not(equivalentTo(GameSessionService.class)))
 			.and(not(equivalentTo(RunSession.class))));
 

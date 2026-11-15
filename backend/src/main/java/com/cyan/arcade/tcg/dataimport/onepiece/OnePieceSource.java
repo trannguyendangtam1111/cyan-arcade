@@ -4,9 +4,12 @@ import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import com.cyan.arcade.tcg.dataimport.SourceConfig;
 import com.cyan.arcade.tcg.dataimport.SourceConfig.SetChoice;
+import com.cyan.arcade.tcg.dataimport.SourceFetch;
 import com.cyan.arcade.tcg.dataimport.SourceHttp;
 import com.cyan.arcade.tcg.dataimport.TcgDataset;
 import com.cyan.arcade.tcg.dataimport.TcgSource;
@@ -59,14 +62,23 @@ class OnePieceSource implements TcgSource {
 
 	@Override
 	public TcgDataset fetch() {
+		return fetchChecked().dataset();
+	}
+
+	@Override
+	public SourceFetch fetchChecked() {
 		List<OptcgSet> sets = this.client.sets();
+		Set<String> listed = sets.stream().map(OptcgSet::id).collect(Collectors.toSet());
 		Map<String, List<OptcgCard>> cards = new LinkedHashMap<>();
 		for (SetChoice choice : this.config.sets()) {
+			if (!listed.contains(choice.id())) {
+				continue;
+			}
 			List<OptcgCard> ofSet = this.client.cardsOf(choice.id());
 			log.info("Fetched One Piece set {}: {} cards", choice.id(), ofSet.size());
 			cards.put(choice.id(), ofSet);
 		}
-		return OnePieceDatasetMapper.map(this.config, sets, cards);
+		return OnePieceDatasetMapper.mapChecked(this.config, sets, cards);
 	}
 
 }

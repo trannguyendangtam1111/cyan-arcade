@@ -3,11 +3,16 @@ package com.cyan.arcade.leaderboard;
 import java.time.Instant;
 import java.util.List;
 
+import com.cyan.arcade.score.ModeSpec;
 import com.cyan.arcade.user.Avatar;
 
 /**
- * One page of a game's leaderboard for a period: each player once, with their best score in it.
+ * One page of the leaderboard of one mode of a game for a period: each player once, with their best
+ * score in it.
  *
+ * @param mode the mode the board ranks; only its scores are on it
+ * @param order which way it ranks: {@code DESC} highest first, {@code ASC} lowest first (times)
+ * @param unit what its scores count
  * @param periodStart the first moment the period counts, or {@code null} for all time
  * @param periodEnd when the period ends and a new board starts, or {@code null} for all time
  * @param page zero-based page number
@@ -16,8 +21,8 @@ import com.cyan.arcade.user.Avatar;
  * no score in the period; never made up
  * @param myScore the caller's best score in the period, or {@code null} likewise
  */
-public record LeaderboardResponse(String gameSlug, LeaderboardPeriod period, Instant periodStart, Instant periodEnd,
-		List<Entry> entries, int page, int size, long totalEntries, int totalPages, Long myRank, Integer myScore) {
+public record LeaderboardResponse(String gameSlug, String mode, ModeSpec.Order order, ModeSpec.Unit unit,
+		LeaderboardPeriod period, Instant periodStart, Instant periodEnd, List<Entry> entries, int page, int size, long totalEntries, int totalPages, Long myRank, Integer myScore) {
 
 	/**
 	 * @param rank 1 for the best; no two entries share one (equal scores: whoever set it first)

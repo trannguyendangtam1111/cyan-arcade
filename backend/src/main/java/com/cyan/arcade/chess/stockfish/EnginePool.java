@@ -7,6 +7,7 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
+import java.util.function.LongSupplier;
 
 /**
  * A fixed number of engine processes, each lent to one search at a time. Engines are started when
@@ -24,7 +25,12 @@ public final class EnginePool implements AutoCloseable {
 
 	private final AtomicInteger waiting = new AtomicInteger();
 
-	private final Deque<UciEngine> idle = new ArrayDeque<>();
+	private record IdleEngine(UciEngine engine, long returnedAt) {
+	}
+
+	private final Deque<IdleEngine> idle = new ArrayDeque<>();
+
+	private final LongSupplier nanoTime;
 
 	private volatile boolean closed;
 
@@ -33,6 +39,11 @@ public final class EnginePool implements AutoCloseable {
 	 * @param maxWaiting requests that may wait for an engine at once
 	 */
 	public EnginePool(Supplier<UciEngine> factory, int size, int maxWaiting) {
+		this(factory, size, maxWaiting, System::nanoTime);
+	}
+
+	EnginePool(Supplier<UciEngine> factory, int size, int maxWaiting, LongSupplier nanoTime) {
+		this.nanoTime = nanoTime;
 		if (size < 1) {
 			throw new IllegalArgumentException("A pool needs at least one engine");
 		}
@@ -97,7 +108,11 @@ public final class EnginePool implements AutoCloseable {
 		try {
 			UciEngine engine;
 			synchronized (this.idle) {
-				engine = this.idle.pollFirst();
+				if (this.closed) {
+					throw new EngineException(EngineException.Kind.UNAVAILABLE, "The engine pool is shut down");
+				}
+				IdleEngine available = this.idle.pollFirst();
+				engine = (available == null) ? null : available.engine();
 			}
 			if (engine == null || !engine.isHealthy()) {
 				if (engine != null) {
@@ -105,7 +120,13 @@ public final class EnginePool implements AutoCloseable {
 				}
 				engine = this.factory.get();
 			}
-			return new Lease(engine);
+			synchronized (this.idle) {
+				if (this.closed) {
+					engine.close();
+					throw new EngineException(EngineException.Kind.UNAVAILABLE, "The engine pool is shut down");
+				}
+				return new Lease(engine);
+			}
 		}
 		catch (RuntimeException ex) {
 			this.permits.release();
@@ -115,17 +136,38 @@ public final class EnginePool implements AutoCloseable {
 
 	private void giveBack(UciEngine engine) {
 		try {
-			if (this.closed || !engine.isHealthy()) {
-				engine.close();
-				return;
-			}
 			synchronized (this.idle) {
-				this.idle.addFirst(engine);
+				if (this.closed || !engine.isHealthy()) {
+					engine.close();
+					return;
+				}
+				this.idle.addFirst(new IdleEngine(engine, this.nanoTime.getAsLong()));
 			}
 		}
 		finally {
 			this.permits.release();
 		}
+	}
+
+	/** Retire only engines currently idle; borrowed engines and their searches are untouched. */
+	public int evictIdle(Duration timeout) {
+		if (timeout.isZero() || timeout.isNegative()) {
+			return 0;
+		}
+		long now = this.nanoTime.getAsLong();
+		int retired = 0;
+		synchronized (this.idle) {
+			var iterator = this.idle.iterator();
+			while (iterator.hasNext()) {
+				IdleEngine candidate = iterator.next();
+				if (now - candidate.returnedAt() >= timeout.toNanos()) {
+					iterator.remove();
+					candidate.engine().close();
+					retired++;
+				}
+			}
+		}
+		return retired;
 	}
 
 	/** Engines started and idle now (for tests and status). */
@@ -139,7 +181,7 @@ public final class EnginePool implements AutoCloseable {
 	public void close() {
 		this.closed = true;
 		synchronized (this.idle) {
-			this.idle.forEach(UciEngine::close);
+			this.idle.forEach((entry) -> entry.engine().close());
 			this.idle.clear();
 		}
 	}

@@ -10,6 +10,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -154,6 +155,76 @@ class EnginePoolTests {
 		assertThatThrownBy(() -> engines.acquire(Duration.ofSeconds(1))).isInstanceOf(EngineException.class);
 	}
 
+	@Test
+	void idleExpiryUsesTimeSinceReturnAndTheNextRequestCanRestartTheEngine() {
+		AtomicLong now = new AtomicLong();
+		this.pool = new EnginePool(() -> {
+			FakeUciProcess process = new FakeUciProcess();
+			this.processes.add(process);
+			return UciEngine.start(process, 1, 8, Duration.ofSeconds(1), Duration.ofMillis(200));
+		}, 1, 0, now::get);
+		this.pool.acquire(Duration.ZERO).close();
+		now.set(Duration.ofSeconds(59).toNanos());
+		assertThat(this.pool.evictIdle(Duration.ofSeconds(60))).isZero();
+		this.pool.acquire(Duration.ZERO).close();
+		now.set(Duration.ofSeconds(118).toNanos());
+		assertThat(this.pool.evictIdle(Duration.ofSeconds(60))).isZero();
+		now.set(Duration.ofSeconds(119).toNanos());
+		assertThat(this.pool.evictIdle(Duration.ofSeconds(60))).isEqualTo(1);
+		assertThat(this.processes.get(0).destroyed).isTrue();
+		assertThat(this.pool.idleEngines()).isZero();
+		this.pool.acquire(Duration.ZERO).close();
+		assertThat(this.processes).hasSize(2);
+	}
+
+	@Test
+	void idleCleanupNeverClosesALeasedEngineAndCanBeDisabled() {
+		AtomicLong now = new AtomicLong();
+		FakeUciProcess process = new FakeUciProcess();
+		this.pool = new EnginePool(() -> UciEngine.start(process, 1, 8, Duration.ofSeconds(1),
+				Duration.ofMillis(200)), 1, 0, now::get);
+		try (EnginePool.Lease lease = this.pool.acquire(Duration.ZERO)) {
+			now.set(Duration.ofHours(1).toNanos());
+			assertThat(this.pool.evictIdle(Duration.ofSeconds(1))).isZero();
+			assertThat(lease.engine().isHealthy()).isTrue();
+		}
+		now.addAndGet(Duration.ofHours(1).toNanos());
+		assertThat(this.pool.evictIdle(Duration.ZERO)).isZero();
+		assertThat(process.destroyed).isFalse();
+		assertThat(this.pool.evictIdle(Duration.ofSeconds(60))).isEqualTo(1);
+	}
+
+	@Test
+	void shutdownWhileAnEngineIsStartingDoesNotLeaveTheNewProcessRunning() throws Exception {
+		CountDownLatch starting = new CountDownLatch(1);
+		CountDownLatch continueStart = new CountDownLatch(1);
+		FakeUciProcess process = new FakeUciProcess();
+		this.pool = new EnginePool(() -> {
+			starting.countDown();
+			try {
+				if (!continueStart.await(2, TimeUnit.SECONDS)) throw new IllegalStateException("test start timed out");
+			}
+			catch (InterruptedException ex) {
+				Thread.currentThread().interrupt();
+				throw new IllegalStateException(ex);
+			}
+			return UciEngine.start(process, 1, 8, Duration.ofSeconds(1), Duration.ofMillis(200));
+		}, 1, 0);
+		try (ExecutorService thread = Executors.newSingleThreadExecutor()) {
+			Future<?> loan = thread.submit(() -> {
+				assertThatThrownBy(() -> this.pool.acquire(Duration.ZERO)).isInstanceOf(EngineException.class);
+			});
+			try {
+				assertThat(starting.await(2, TimeUnit.SECONDS)).isTrue();
+				this.pool.close();
+			}
+			finally {
+				continueStart.countDown();
+			}
+			loan.get(3, TimeUnit.SECONDS);
+		}
+		assertThat(process.destroyed).isTrue();
+	}
 	private static void sleep(long millis) {
 		try {
 			Thread.sleep(millis);

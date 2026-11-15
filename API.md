@@ -16,7 +16,7 @@ Base path: `/api`. JSON in and out.
 
 ## Authentication
 
-Signing in creates a **server-side session**. The browser holds only its id, in a cookie it cannot read from JavaScript:
+Signing in creates a **server-side session**, stored in PostgreSQL (Spring Session JDBC), so it survives a backend restart. The browser holds only its id, in a cookie it cannot read from JavaScript:
 
 | Cookie | Set when | Properties |
 | ------ | -------- | ---------- |
@@ -112,9 +112,11 @@ Platform codes: `VALIDATION_FAILED`, `BAD_REQUEST`, `UNAUTHORIZED`, `FORBIDDEN`,
 | `GET` | `/api/daily-challenges` | public |
 | `GET` | `/api/daily-challenges/me` | signed in |
 | `GET` | `/api/games`, `/api/games/{slug}` | public |
+| `GET` | `/api/games/{slug}/modes` | public |
 | `POST` | `/api/game-sessions` | public |
 | `POST` | `/api/game-sessions/{id}/finish` | public; a signed-in player's session only by that player, a guest's only with the same `X-Player-Id` |
-| `GET` | `/api/leaderboards/{gameSlug}?period=…` | public |
+| `GET` | `/api/game-sessions/{id}/result` | signed in; only the session's own player |
+| `GET` | `/api/leaderboards/{gameSlug}?mode=…&period=…` | public |
 | `GET` | `/api/users/me/ranks` | signed in |
 | `GET` | `/api/tcg/games`, `/api/tcg/games/{slug}` | public |
 | `GET` | `/api/tcg/sets`, `/api/tcg/sets/{id}` | public |
@@ -134,12 +136,20 @@ Platform codes: `VALIDATION_FAILED`, `BAD_REQUEST`, `UNAUTHORIZED`, `FORBIDDEN`,
 | `GET` | `/api/sudoku/today`, `/api/sudoku/stats` | public (a guest's own with `X-Player-Id`) |
 | `POST` | `/api/sudoku/daily/runs`, `/api/sudoku/practice/runs` | public; a guest needs `X-Player-Id` |
 | `POST` | `/api/sudoku/runs/{id}/session`, `/moves`, `/hints`, `/pause`, `/resume` | public; only the run's own player |
+| `GET` | `/api/sudoku/daily/leaderboard?date=…`, `/api/sudoku/archive/{date}` | public |
+| `GET` | `/api/sudoku/daily/history` | signed in |
+| `POST` | `/api/sudoku/archive/runs` | public; a guest needs `X-Player-Id` |
+| `GET`, `PUT` | `/api/sudoku/runs/{id}/notes` | signed in; only the run's own player |
+| `GET` | `/api/minesweeper/daily`, `/api/minesweeper/daily/leaderboard?date=…` | signed in |
+| `POST` | `/api/minesweeper/daily/attempts` | signed in |
+| `GET`, `POST` | `/api/minesweeper/daily/attempts/{id}`, `…/reveal`, `…/flag` | signed in; only the attempt's own player |
 | `POST` | `/api/chess/matches` | public; a guest needs `X-Player-Id` |
 | `GET` | `/api/chess/matches/current` | public (a guest's own with `X-Player-Id`) |
 | `GET` | `/api/chess/matches/{id}` | public; only the match's own player |
 | `POST` | `/api/chess/matches/{id}/moves`, `/undo`, `/redo`, `/resign`, `/draw`, `/variations` | public; only the match's own player |
 | `POST` | `/api/chess/matches/{id}/hint` | signed in; only the match's own player; a player 3 per match, an admin no limit |
 | `POST` | `/api/chess/matches/{id}/coach` | signed in; only the match's own player, their own moves |
+| `GET` | `/api/chess/archive`, `/api/chess/archive/{id}`, `/api/chess/archive/{id}/pgn` | signed in; only the match's own player |
 | `GET` | `/api/ai/access` | admin |
 | `POST`, `GET` | `/api/ai/wordle/solve`, `/api/ai/wordle/benchmark` | admin |
 | `POST` | `/api/ai/sudoku/solve` | admin |
@@ -223,7 +233,7 @@ proxy addresses. Without that setup, clients behind nginx share its IP budget.
 
 #### `POST /api/auth/logout`
 
-Ends the session and clears it on the server. Responds `204 No Content`, also when nobody was signed in.
+Ends the session and deletes it from the server's session store. Responds `204 No Content`, also when nobody was signed in.
 
 #### `GET /api/auth/session`
 
@@ -332,6 +342,7 @@ The caller's finished games, newest first.
     {
       "gameSlug": "snake",
       "gameName": "Snake",
+      "mode": "classic",
       "score": 31,
       "durationMs": 48211,
       "playedAt": "2026-09-30T14:05:40.102Z",
@@ -346,7 +357,7 @@ The caller's finished games, newest first.
 }
 ```
 
-`xpEarned` is everything the run earned, achievements and daily challenges included. `400 VALIDATION_FAILED` when `page` or `size` is out of range.
+`xpEarned` is everything the run earned, achievements and daily challenges included. `mode` is the [mode](#game-modes) the run was played under (`classic` for every run from before modes existed). `400 VALIDATION_FAILED` when `page` or `size` is out of range.
 
 #### `GET /api/users/me/achievements`
 
@@ -370,10 +381,15 @@ Every achievement in the arcade, in display order, with whether the caller has i
     "xp": 100,
     "coins": 150,
     "unlocked": false,
-    "unlockedAt": null
+    "unlockedAt": null,
+    "progress": 3,
+    "target": 10,
+    "goal": "GAMES_PLAYED"
   }
 ]
 ```
+
+A locked achievement whose goal the kept scores can measure also has `progress` and `target`: games finished under Classic rules (Classic runs and Sudoku's boards, as the achievement counts them) for a games-played goal, the best Classic score of its game for a score goal. `progress` stops at `target`; reaching it unlocks the achievement on the next qualifying run. `goal` says what `progress` counts: `GAMES_PLAYED` or `BEST_SCORE`. All three are absent once unlocked, and for a goal that depends on what a single run reported (a 2048 tile, Tetris lines), since those details are not kept.
 
 #### `GET /api/users/me/stats`
 
@@ -463,7 +479,7 @@ Today's challenges. Public.
       "id": 3,
       "title": "Tidy Up",
       "description": "Clear 5 lines in one game of Tetris.",
-      "game": { "slug": "tetris", "name": "Tetris" },
+      "game": { "slug": "tetris", "name": "Tetris", "classicRunsOnly": true },
       "activity": null,
       "target": 5,
       "xpReward": 30,
@@ -490,6 +506,7 @@ Today's challenges. Public.
 | `date` | The day these challenges belong to, in UTC |
 | `resetsAt` | When the next set takes over |
 | `challenges[].game` | The game the challenge is played in; `null` for an activity's challenge |
+| `challenges[].game.classicRunsOnly` | Whether the game has other modes whose runs do not count towards the challenge, so only its Classic runs do (Tetris, Snake, 2048, Minesweeper). `false` for a game with Classic alone and for Sudoku, whose every board counts |
 | `challenges[].activity` | What an activity's challenge counts (`TCG_PACK_OPENED`); `null` for a game's |
 | `challenges[].target` | The number to reach: in one run for a game (`1` for "finish a game"), over the day for an activity. `description` says what is counted |
 | `challenges[].xpReward`, `challenges[].coinReward` | XP and coins for completing it |
@@ -510,7 +527,7 @@ The same challenges with the caller's own progress. `401 UNAUTHORIZED` without a
       "id": 3,
       "title": "Tidy Up",
       "description": "Clear 5 lines in one game of Tetris.",
-      "game": { "slug": "tetris", "name": "Tetris" },
+      "game": { "slug": "tetris", "name": "Tetris", "classicRunsOnly": true },
       "activity": null,
       "target": 5,
       "xpReward": 30,
@@ -577,6 +594,33 @@ Returns one game in the same shape. Responds `404 NOT_FOUND` when the slug is un
 }
 ```
 
+#### Game modes
+
+A **mode** is a way to play a game with its own rules and, when ranked, its own leaderboard. Every scored game has **Classic** (`classic`), the default wherever a mode can be named. Tetris also offers **Ultra** (`ultra`: two minutes of game time, ranked highest score first), its runs reporting `lines`, `level`, `pieces`, `gameMs` (game time played, whole 40 ms steps) and `timeUp` (1 if the time ran out, 0 for a top-out), and **Sprint** (`sprint`: clear 40 lines, ranked lowest time first; the score is the game time in ms, below the five-minute limit of 300,000 ms), its runs reporting `lines` (40 to 43: the clear that reaches the goal ends the run), `level`, `pieces` and `gameMs` (equal to the score); a Sprint run that tops out or reaches the limit before 40 lines is refused (`SCORE_REJECTED`) and never ranked. Tetris also has six unranked **Challenge** stages (`challenge-1` to `challenge-6`: Clean-up, Ten on top, Deep dig, Rising tide, Pressure, Last stand; each starts with garbage rows and has its own objective and a limit of 2 to 4 minutes; timed, lowest first, no leaderboard). **Snake** has three ranked maps (`map-pillars`, `map-tunnels`, `map-rooms`, highest score first, at most 237, 229 and 209) and six unranked **Adventure** stages (`adventure-1` to `adventure-6`). **2048** has **Moves Limit** (`moves`: the best score in 300 moves, ranked), **Time Attack** (`time-attack`: two minutes of game time, ranked; `gameMs` and `timeUp` as for Ultra) and six unranked **Puzzles** (`puzzle-1` to `puzzle-6`: First Steps, Chain Reaction, Clutter, Half Built, Locked Column, Endgame). **Minesweeper** has three timed boards, ranked lowest game time first with a limit of 999,999 ms: **Beginner** (`beginner`, 9 × 9, 10 mines), **Intermediate** (`intermediate`, 16 × 16, 40) and **Expert** (`expert`, 16 × 30, 99); only a won board is accepted. **Sudoku** ranks its runs on **Daily** (`daily`) and one board per practice difficulty (`easy`, `medium`, `hard`, `expert`); its Classic board keeps the scores recorded before those boards existed, and no new run is tied to it. Every other scored game offers Classic alone; the list for each game is `GET /api/games/{slug}/modes`. Mode IDs are lowercase: a letter, then letters, digits or `-`, 24 characters at most. Each run keeps the mode it started with, and so does its score. Achievements, daily challenges, personal-best bonuses and profile stats and ranks count Classic runs only (and Sudoku's Daily and difficulty boards, which carry its Classic progression); completion XP and coins are earned by a run that reached its mode's own end, under the same daily caps: every Classic run; an Ultra or Time Attack run only when `timeUp` is 1 (so an early end is recorded and ranked but earns 0 XP and 0 coins); a Moves Limit run only when it used all 300 moves; every accepted Sprint, Snake map, Minesweeper timed and Sudoku run. Unranked stages (Challenge, Adventure, Puzzle) are recorded but never complete, so they earn no completion reward and have no leaderboard.
+
+#### `GET /api/games/{slug}/modes`
+
+The modes a game offers, as its rules on the server declare them: the only list a client should go by (none is built into the client). Public.
+
+```json
+[
+  { "id": "classic", "name": "Classic", "ranked": true, "order": "DESC", "unit": "POINTS", "classicProgression": true }
+]
+```
+
+| Field | Notes |
+| ----- | ----- |
+| `id` | What `POST /api/game-sessions` and `GET /api/leaderboards/{gameSlug}` take as `mode` |
+| `name` | To show |
+| `ranked` | Whether the mode has a leaderboard. An unranked mode's runs are still recorded |
+| `order` | `DESC` (highest score first) or `ASC` (lowest first, such as a fastest time) |
+| `unit` | What a score counts: `POINTS`, or `MILLISECONDS` (a time) |
+| `classicProgression` | Whether the mode's runs count where Classic runs do: achievements, daily challenges and the personal-best bonus. `true` for Classic and for Sudoku's boards; `false` for every other mode |
+
+Classic is always ranked, `DESC` and `POINTS`. An unscored game (`scored: false`) answers `[]`; `404 NOT_FOUND` when no active game has that slug. Score limits stay on the server.
+
+**Compatibility.** A backend from before modes has no such endpoint (`404`): a client treats every game there as Classic alone, without sending `mode`. Any other failure (unreachable, `5xx`) says nothing about the modes and is retried, not taken for Classic only.
+
 ### Game sessions and scores
 
 A score is never sent on its own. A run is opened as a **session** when it starts, and the score is accepted only by **finishing** that session, once. Both endpoints are open to guests.
@@ -588,8 +632,10 @@ Who a run belongs to is decided when it **starts**: the signed-in player if ther
 Starts a run.
 
 ```json
-{ "gameSlug": "snake" }
+{ "gameSlug": "snake", "mode": "classic" }
 ```
+
+`mode` is optional: one of the game's [modes](#get-apigamesslugmodes). Missing or `null` means `classic`, so a client from before modes starts Classic runs as it always did. The run is played and recorded under this mode; it cannot be changed afterwards (a `mode` sent when finishing is ignored).
 
 Responds `201 Created` with a `Location` header:
 
@@ -597,13 +643,17 @@ Responds `201 Created` with a `Location` header:
 {
   "id": "0eec4e83-12db-41a4-9164-016466722a9f",
   "gameSlug": "snake",
+  "mode": "classic",
   "startedAt": "2026-09-30T13:12:01.314Z"
 }
 ```
 
+`mode` is the mode the server opened the run under. A client checks it against the one it asked for and, if they differ, does not finish the session: the score would go to another mode's board.
+
 | Error | When |
 | ----- | ---- |
-| `400 VALIDATION_FAILED` | `gameSlug` is missing or blank |
+| `400 VALIDATION_FAILED` | `gameSlug` is missing or blank, or `mode` is not a well-formed mode ID |
+| `400 UNKNOWN_MODE` | The game has no such mode ("Snake has no mode 'ultra'"). Nothing is started |
 | `404 NOT_FOUND` | No active game has that slug |
 | `409 GAME_NOT_SCORED` | The game is not scored (`scored: false` in the catalog), so it has no score sessions |
 
@@ -628,6 +678,7 @@ Responds `200 OK` with the recorded result:
 {
   "sessionId": "0eec4e83-12db-41a4-9164-016466722a9f",
   "gameSlug": "snake",
+  "mode": "classic",
   "score": 6,
   "durationMs": 8669,
   "recordedAt": "2026-09-30T13:12:09.983Z",
@@ -649,6 +700,7 @@ Responds `200 OK` with the recorded result:
 }
 ```
 
+- `mode` is the session's, the one the run started with.
 - `durationMs` is measured by the server, from the session's start to this request. The client does not report a duration; the server uses its own to judge the run (see [Score integrity](#score-integrity)).
 - `rewards` is `null` for a run that was started by a guest. Otherwise it says what this run earned and where the player stands afterwards. `achievements` lists only those unlocked by this run, and `bonuses` the daily challenges it completed. `xpEarned` and `coinsEarned` are the totals of everything; every coin is also a transaction in the player's [ledger](#coins). Finishing the same session again is refused, so nothing is paid twice.
 
@@ -662,7 +714,31 @@ Responds `200 OK` with the recorded result:
 | `409 SESSION_ALREADY_FINISHED` | The session was finished before. The first score stands, and nothing is earned again (a retry after a lost answer gets this) |
 | `410 SESSION_EXPIRED` | The session was opened more than 24 hours ago (`GAME_SESSIONS_ABANDONED_AFTER`). Nothing is recorded |
 
-There is no endpoint to read or list sessions.
+#### `GET /api/game-sessions/{id}/result`
+
+Retrieves a completed session's recorded result. Requires a signed-in account and returns the same
+`ScoreResponse` shape as a successful finish, including its original rewards. Only the account that
+started the session may retrieve it; admins have no ownership bypass, and `X-Player-Id` does not
+authorize retrieval. This endpoint never submits a score or calculates or grants rewards.
+
+New finishes store the original public response in the score's transaction. Later play, purchases,
+or reward-rule changes do not change it: `totalXp`, `level` and `coinBalance` are historical values
+immediately after that finish. Older completed scores without a snapshot return their recorded
+score, mode, duration and timestamp with `rewards: null`; missing historical rewards are never
+inferred from current account state.
+
+| Error | When |
+| ----- | ---- |
+| `400 BAD_REQUEST` | The id is not a UUID |
+| `401 UNAUTHORIZED` | No signed-in session |
+| `404 NOT_FOUND` | No such session, or the caller is not its account owner (including guest-owned sessions) |
+| `409 SESSION_NOT_FINISHED` | The owner's session has not committed a result yet; a concurrent finish may still be in progress |
+
+After a lost finish response, a retry still receives `409 SESSION_ALREADY_FINISHED`. The client then
+reads this endpoint and refreshes the same leaderboard and player caches as a normal successful
+finish. A failed result read does not mean saving failed; any further recovery retry is a GET only.
+Guest finishes retain the existing already-saved acknowledgement without result retrieval access.
+There is no endpoint to list sessions.
 
 #### Score integrity
 
@@ -686,10 +762,11 @@ The time is the server's, from opening the session to finishing it, with 2 secon
 
 #### `GET /api/leaderboards/{gameSlug}`
 
-One page of a game's leaderboard for a period. Public and read-only: there is no endpoint that writes to a leaderboard, and every entry is read from scores recorded through game sessions. An unscored game has no leaderboard (`404 NOT_FOUND`), and `/api/users/me/ranks` leaves it out.
+One page of a game's leaderboard for a mode and a period. Public and read-only: there is no endpoint that writes to a leaderboard, and every entry is read from scores recorded through game sessions. An unscored game has no leaderboard (`404 NOT_FOUND`), and `/api/users/me/ranks` leaves it out (it counts Classic boards only).
 
 | Query parameter | Default | Notes |
 | --------------- | ------- | ----- |
+| `mode` | `classic` | A ranked [mode](#get-apigamesslugmodes) of the game. Each ranked mode has a board of its own: one mode's scores never appear on another's. A client from before modes, which sends none, gets the Classic board as before |
 | `period` | `ALL_TIME` | `DAILY`, `WEEKLY` or `ALL_TIME` |
 | `page` | `0` | Zero-based |
 | `size` | `20` | 1 to 100 |
@@ -697,6 +774,9 @@ One page of a game's leaderboard for a period. Public and read-only: there is no
 ```json
 {
   "gameSlug": "2048",
+  "mode": "classic",
+  "order": "DESC",
+  "unit": "POINTS",
   "period": "WEEKLY",
   "periodStart": "2026-10-05T00:00:00Z",
   "periodEnd": "2026-10-12T00:00:00Z",
@@ -722,7 +802,8 @@ One page of a game's leaderboard for a period. Public and read-only: there is no
 
 - **Periods are the server's, in UTC.** `DAILY` counts scores set from 00:00 UTC today, `WEEKLY` from Monday 00:00 UTC this week (ISO weeks), `ALL_TIME` every score. `periodStart` is the first moment counted and `periodEnd` the moment the next board starts (both `null` for all time). No request carries a date. In Vietnam (UTC+7) a new day's board starts at 07:00 local time, and a new week's on Monday at 07:00.
 - **Each player once.** An entry is a player's best score in the period: the account for a signed-in player, the browser's `X-Player-Id` for a guest (a guest run without one is an entry of its own). `totalEntries` is how many players are on the board.
-- **Ranks are deterministic and never shared.** Entries are ordered by score (highest first), then by when it was set (earlier first), then by the score's id, and numbered 1, 2, 3, ... over the whole board, not just the page. The order is total, so a rank never changes between requests unless a new score arrives, and pages never overlap or skip anyone.
+- **The mode decides the order and the unit.** `mode`, `order` and `unit` are the board's, from its mode: `DESC` boards put the highest score first and `ASC` boards the lowest (a fastest time); `POINTS` scores are points and `MILLISECONDS` scores are times (`score`, `myScore`). The server has already ranked the entries; a client only writes the scores in the board's unit.
+- **Ranks are deterministic and never shared.** Entries are ordered by score (in the mode's order: highest first for Classic), then by when it was set (earlier first), then by the score's id, and numbered 1, 2, 3, ... over the whole board, not just the page. The order is total, so a rank never changes between requests unless a new score arrives, and pages never overlap or skip anyone.
 - An entry's `player` is the account's username (its identity, for a link to the public profile), display name and avatar, or `null` for a guest. Nothing else about an account is public. Entries are grouped by account, so changing a display name changes nothing about whose scores they are.
 - `you` marks the caller's entry. `myRank` and `myScore` are the caller's place and best score on this board, even when the entry is on another page, and `null` when the caller is unknown or has no score in the period; a rank is never made up. The caller is the signed-in player; for a guest it is the `X-Player-Id` header, matched only against scores made as a guest.
 - A page past the end returns an empty `entries` list, not an error.
@@ -730,9 +811,10 @@ One page of a game's leaderboard for a period. Public and read-only: there is no
 
 | Error | When |
 | ----- | ---- |
-| `400 VALIDATION_FAILED` | `page` is negative, or `size` is outside 1 to 100 |
+| `400 VALIDATION_FAILED` | `page` is negative, `size` is outside 1 to 100, or `mode` is not a well-formed mode ID |
 | `400 BAD_REQUEST` | `period` is not one of the three (they are case-sensitive), or `X-Player-Id` is not a UUID |
 | `404 NOT_FOUND` | No active game has that slug |
+| `404 UNKNOWN_MODE` | The game has no ranked mode with that ID: an unknown mode, or an unranked one ("Snake has no leaderboard for mode 'ultra'") |
 
 #### `GET /api/users/me/ranks`
 
@@ -898,11 +980,11 @@ Today's daily puzzle (UTC) without its digits (they come with a run, when the cl
 }
 ```
 
-`daily` is the caller's run of today's puzzle; `practice` their practice game in progress. A run:
+`daily` is the caller's run of today's puzzle; `practice` their practice game in progress; `archive` their replay of a past daily puzzle in progress (each `null` when there is none). A run:
 
 | Field | |
 | ----- | - |
-| `id`, `mode` (`DAILY`/`PRACTICE`), `ranked`, `difficulty`, `puzzleNumber`, `date` | Which game |
+| `id`, `mode` (`DAILY`/`PRACTICE`/`ARCHIVE`), `ranked`, `difficulty`, `puzzleNumber`, `date` | Which game |
 | `status` | `PLAYING`, `SOLVED`, `FAILED` (third mistake of a ranked game) or `ABANDONED` |
 | `givens`, `values`, `revealed` | The clues, the board now, and the cells a hint revealed (locked) |
 | `wrong` | Ranked runs: cells holding a digit that is not the solution's. Relaxed: always empty |
@@ -920,6 +1002,26 @@ Today's daily puzzle (UTC) without its digits (they come with a run, when the cl
 #### `POST /api/sudoku/practice/runs`
 
 `{ "difficulty": "EXPERT", "sessionId": "…" }` starts a ranked practice game; without `sessionId`, a relaxed one (no score, no statistics, conflicts as mistakes, no limit). A new practice game abandons the caller's practice game in progress. `201` with the run; `503 PUZZLE_UNAVAILABLE` if no puzzle could be made.
+
+#### `GET /api/sudoku/daily/leaderboard?date=2026-10-09&page=0&size=20`
+
+The Daily leaderboard of one puzzle date (UTC; today's when `date` is left out), open to everyone: `{ date, puzzleNumber, difficulty, today, nextPuzzleAt, entries, page, size, totalEntries, totalPages, myRank, myScore }`, each entry written as on every leaderboard. A score belongs to the date of the daily run it finished, whenever it arrived, so a puzzle solved after midnight UTC stays on its own date's board. Each player once, with their best score, higher first; equal scores to whoever set theirs first. `size` 1 to 100. `404` for a date before the first Daily (2026-01-01) or after today.
+
+#### `GET /api/sudoku/daily/history`
+
+Signed-in players only (`401` otherwise). The caller's last 30 UTC days: `{ from, today, days: [{ date, puzzleNumber, difficulty, status, seconds, mistakes, hints, streak }] }`, `status` being `COMPLETED`, `FAILED`, `IN_PROGRESS`, `NOT_ATTEMPTED` or `NO_PUZZLE`.
+
+#### `GET /api/sudoku/archive/{date}`
+
+A past daily puzzle, open to everyone: `{ date, puzzleNumber, difficulty, givens }`, never its solution. `404 NOT_IN_ARCHIVE` for today, a later date or one before the first Daily.
+
+#### `POST /api/sudoku/archive/runs`
+
+`{ "date": "2026-10-01" }` replays that past daily puzzle: `201` with a run of mode `ARCHIVE`, unranked (conflicts as mistakes, no limit), with no game session, score, leaderboard place, rewards or streak. Replays are unlimited and never use up the day's official attempt; a new replay abandons the caller's replay in progress. `404 NOT_IN_ARCHIVE` as above; `409 DAILY_IN_PROGRESS` while the caller's official run of that date is still being played.
+
+#### `GET /api/sudoku/runs/{id}/notes`, `PUT /api/sudoku/runs/{id}/notes`
+
+Signed-in players only (`401` otherwise; a guest's notes stay in their browser), and only for their own run (`404`). The run's pencil marks, so another device can pick them up: `{ "revision": 3, "cells": [{ "cell": 0, "digits": [1, 4, 9] }] }` (only cells that have marks; `revision` 0 while nothing is saved). `PUT` with `{ "baseRevision": 3, "cells": […], "baseCells": […] }` replaces them if the server is still at `baseRevision` (and, when the optional `baseCells` is sent, still holds those marks), answering the new revision; otherwise `409 NOTES_STALE` and nothing changes. `409 RUN_OVER` once the run is no longer being played. Notes never count for anything.
 
 #### `POST /api/sudoku/runs/{id}/session`
 
@@ -1117,6 +1219,18 @@ Judged like a review (see below and ARCHITECTURE.md, Coach Mode) from two short 
 | `429 TOO_MANY_ENGINE_REQUESTS` | More than `app.chess.coach.requests-per-minute` judgements needing the engine in a minute (cached ones are free) |
 | `503 ENGINE_…` | As for hints; nothing changed |
 
+#### `GET /api/chess/archive?page=0&size=20`
+
+Signed-in players only (`401 SIGN_IN_REQUIRED` for a guest). The caller's retained matches, most recently changed first: `{ content: [{ id, mode, status, playerColor, difficulty, result, plyCount, createdAt, updatedAt, finishedAt }], page, size, hasNext }`. `page` 0 to 1,000 and `size` 1 to 50 (`400 INVALID_PAGE`). Read-only: matches untouched for 30 days are deleted when their player starts a new one, and the archive shows only what is kept.
+
+#### `GET /api/chess/archive/{id}`, `GET /api/chess/archive/{id}/pgn`
+
+One of the caller's matches, as `GET /api/chess/matches/{id}` answers it, or exported as PGN (`application/x-chess-pgn`, sent as an attachment, `Cache-Control: no-store`). Another account's match is `404`, for an admin too.
+
+#### Engine limits
+
+Stockfish runs as separate processes on the backend: a bounded pool of single-threaded engines (`STOCKFISH_POOL_SIZE`: 2 by default, 1 with 8 MB of hash under the `prod` profile, where an engine unused for 60 s is stopped and started again on the next request). Every engine request waits briefly for a free engine (`503 ENGINE_BUSY`), is bounded by its search time, and fails safely without changing the match (`503 ENGINE_FAILED`); without an installed engine every engine feature answers `503 ENGINE_UNAVAILABLE` while the rest of Chess works. One account may make `app.chess.requests-per-minute` (30) engine requests a minute (`429 TOO_MANY_ENGINE_REQUESTS`): hints, evaluations that need a new search, and reviews count; Stockfish's own moves and evaluations answered from the analysis cache do not. The limiter and the cache are in memory and per instance.
+
 ### Chess AI mode (admins)
 
 Everything under `/api/ai/chess/**` is for admins: a player gets `403`, a guest `401`. Requests name a match the caller owns; the server replays its moves itself, and no endpoint takes a position, a score or UCI. The engine errors above apply to every one that searches.
@@ -1145,7 +1259,7 @@ Difficulties: `BEGINNER` (`Skill Level` 0), `CASUAL` (`Skill Level` 6), `CLUB` (
 
 #### `POST /api/ai/chess/matches/{id}/engine-move`
 
-`{ "revision": 0 }`. Stockfish plays its move: searched with the difficulty's settings, checked by the rules and played like a player's move. Answers with the match. `409 NOT_ENGINE_TURN` when it is the player's turn, `409 NOT_AN_ENGINE_GAME` for a local match, `409 STALE_REVISION`/`MATCH_OVER` as for moves. A failure changes nothing; send it again to retry.
+`{ "revision": 0 }`. Stockfish plays its move: searched with the difficulty's settings, checked by the rules and played like a player's move. Answers with the match. `409 NOT_ENGINE_TURN` when it is the player's turn, `409 NOT_AN_ENGINE_GAME` for a local match, `409 STALE_REVISION`/`MATCH_OVER` as for moves. A failure changes nothing; send it again to retry. It is not counted against `app.chess.requests-per-minute` (it is already one per move of the player's), so it is never refused with `429`.
 
 #### `POST /api/ai/chess/matches/{id}/evaluation`
 
@@ -1169,7 +1283,7 @@ Difficulties: `BEGINNER` (`Skill Level` 0), `CASUAL` (`Skill Level` 6), `CLUB` (
 }
 ```
 
-`kind` is `CENTIPAWNS` (with `centipawns`, positive for White) or `MATE` (`mateIn` moves, `matingSide`; `mateIn: 0` is mate on the board). `display` is `+0.34`, `-1.20`, `#3`, `#-2`, `1-0` or `0-1`. `whiteWinPercent` (0 to 100) is for an evaluation bar. `complete: false` means the search was cut short or reported only a bound: the numbers are provisional. For a finished game, `finished: true` and the evaluation is the result, without a search: a won game is `mateIn: 0` for the winner (`1-0` or `0-1`) and a draw is `0.00`, while `termination` (`CHECKMATE`, `RESIGNATION`, `STALEMATE`, …) says how it ended, so a resignation is not mistaken for mate. It is `null` for a game still in progress.
+`kind` is `CENTIPAWNS` (with `centipawns`, positive for White) or `MATE` (`mateIn` moves, `matingSide`; `mateIn: 0` is mate on the board). `display` is `+0.34`, `-1.20`, `#3`, `#-2`, `1-0` or `0-1`. `whiteWinPercent` (0 to 100) is for an evaluation bar. `complete: false` means the search was cut short or reported only a bound: the numbers are provisional. A position already evaluated with the same depth and lines is answered from the cache and is not counted against `app.chess.requests-per-minute`. For a finished game, `finished: true` and the evaluation is the result, without a search: a won game is `mateIn: 0` for the winner (`1-0` or `0-1`) and a draw is `0.00`, while `termination` (`CHECKMATE`, `RESIGNATION`, `STALEMATE`, …) says how it ended, so a resignation is not mistaken for mate. It is `null` for a game still in progress.
 
 #### `POST /api/ai/chess/matches/{id}/review`, `GET …/review`, `DELETE …/review`
 
@@ -1205,6 +1319,35 @@ A review of a finished game (`409 REVIEW_NEEDS_FINISHED_GAME` otherwise; `400 RE
 ```
 
 `status`: `QUEUED`, `RUNNING`, `DONE`, `CANCELLED`, `FAILED`. A move appears once both positions around it are analysed. `classification`: `BEST`, `EXCELLENT`, `GOOD`, `INACCURACY`, `MISTAKE`, `BLUNDER`, `FORCED` (the only legal move) or `UNRATED` (the analysis was too shallow to judge); `loss` is the mover's lost winning chances in percentage points (see ARCHITECTURE.md, Move labels). Reviewing changes nothing in the match, and earns nothing (no coins, XP, sessions or achievements). `summary`: each side's `accuracy` (the average move accuracy `103.1668 × e^(−0.04354 × loss) − 3.1669` over its `rated` moves, forced and unrated ones left out; `null` without any; not Chess.com's formula) and its labels' `counts`, over the moves reviewed so far: final once `status` is `DONE`.
+
+### Minesweeper Daily Board
+
+One 16 × 16 board with 40 mines per UTC date (from 2026-11-01), the same layout for every player, played on the server: the mines never reach the browser. Signed-in players only (`401` for a guest), one attempt per account and date. It opens no game session, so it is not on the Minesweeper mode leaderboards.
+
+#### `GET /api/minesweeper/daily`
+
+Today's board: `{ date, boardNumber, rows, columns, mines, startCell, timeLimitMs, resetsAt, serverTime, attempt }`. `startCell` is the day's opening, picked by the server (never on the edge); `timeLimitMs` is 999,999; `attempt` is the caller's attempt today, `null` before they start one.
+
+#### `POST /api/minesweeper/daily/attempts`
+
+Starts today's attempt (`201`), or answers the one the caller already has (`200`). The clock is the server's, from this request. An attempt:
+
+| Field | |
+| ----- | - |
+| `id`, `date`, `boardNumber`, `rows`, `columns`, `mines`, `startCell` | Which board |
+| `status` | `PLAYING`, `WON`, `LOST` or `EXPIRED` (not finished within the limit) |
+| `cells` | One character per cell, row by row: `H` covered, `F` flagged, `0`–`8` uncovered with that many mines around, `X` the mine that went off. Other mines are never shown, even once the attempt is over. A new attempt already shows the opening uncovered |
+| `moves`, `revealedCells`, `flags`, `minesLeft` | Counters |
+| `startedAt`, `deadline`, `finishedAt`, `elapsedMs`, `serverTime` | The server's times; `elapsedMs` from the start to the reveal that won or lost, `null` while playing and for an expired attempt |
+| `reward` | `{ xp, coins }` once won, `null` otherwise |
+
+#### `GET /api/minesweeper/daily/attempts/{id}`, `POST …/reveal`, `POST …/flag`
+
+`GET` reads the attempt. `POST …/reveal` with `{ "cell": 37 }` (cells numbered row by row from 0) and `POST …/flag` with `{ "cell": 37, "flagged": true }` answer with the attempt. `400 VALIDATION_FAILED` for a cell off the board, `409 ATTEMPT_OVER` once it has ended, `404` for another player's attempt. A win pays 10 XP and 5 coins once, in the transaction that records it; the coins count towards the day's paid games (0 once they are used up), the XP is always paid.
+
+#### `GET /api/minesweeper/daily/leaderboard?date=2026-11-10&page=0&size=20`
+
+One date's wins (today's when `date` is left out), fastest first, ties to whoever finished first: `{ date, boardNumber, entries: [{ rank, player, elapsedMs, finishedAt, you }], page, size, totalEntries, totalPages, myRank, myElapsedMs }`. `size` 1 to 100. `404` for a date with no board.
 
 ### Health
 
@@ -1586,8 +1729,8 @@ An alternate art is a card of its own that **shares the number** of the card it 
 | ----- | ----- |
 | `externalId` | The card's id in the source it was imported from; unique within its game |
 | `number` | Printed on the card; text, because real sets number cards like `TG03` or `OP01-120`. Not unique: alternate arts share it |
-| `imageUrl` | The full-size image, for a closer look and pack openings |
-| `thumbnailUrl` | A smaller image for grids, or `null` when the source has one size only (One Piece) |
+| `imageUrl` | The full-size image, for a closer look and pack openings; `null` for a card shown as text (a game whose artwork the arcade may not show), never blank. Pokémon and One Piece cards always have one |
+| `thumbnailUrl` | A smaller image for grids, or `null` when the source has one size only (One Piece) or the card has no image |
 | `metadata` | The game's own fields: a Pokémon's HP, types, stage and illustrator; a One Piece card's color, cost, power, counter, types, effect, printed rarity and kind of print |
 
 #### `GET /api/tcg/packs?set={id}`
@@ -1804,3 +1947,21 @@ The signed-in player's cards: how complete the collection is, set by set, and on
 | ----- | ---- |
 | `401 UNAUTHORIZED` | Not signed in |
 | `400 VALIDATION_FAILED` | `page` is negative, or `size` is outside 1 to 500 |
+
+### Yu-Gi-Oh! pilot administration
+
+`GET /api/admin/tcg/pilots/yugioh` returns administrative readiness: `activationAllowed`, `dataValid`, `gameActive`, `packActive`, `counts` (`sets`, `printings`, `distinctCards`, `packs`, `poolCards`, `oddsRows`) and actionable `problems`. It can inspect a hidden/unimported pilot; it does not make the game public.
+
+`PUT /api/admin/tcg/pilots/yugioh/visibility` requires an explicit JSON boolean, for example `{ "active": true }` or `{ "active": false }`. Both routes require an authenticated ADMIN; the write also requires the existing CSRF cookie/header. Controller and service authorization apply. There is no public activation button, arbitrary game slug or content-editing operation.
+
+Activation requires the default-off `app.tcg.pilots.yugioh.activation-allowed` environment gate and a valid complete pilot matching the shipped configuration. It updates game and pack flags together in one transaction. Deactivation works even with the gate off or invalid data and does not delete player data. Re-imports preserve either decision. Successful writes return the same readiness shape; repeated desired-state requests are idempotent. The application logs admin ID and visibility.
+
+| Error | When |
+| --- | --- |
+| `401 UNAUTHORIZED` / `403 FORBIDDEN` | Guest, non-admin, or invalid/missing CSRF as applicable |
+| `400 VALIDATION_FAILED` | Missing/null `active` or invalid request shape |
+| `404 NOT_FOUND` | Visibility change requested before importing the pilot |
+| `409 PILOT_ACTIVATION_DISABLED` | Activation gate is off |
+| `409 PILOT_NOT_READY` | Activation prerequisites fail; no visibility writes occur |
+
+Readiness is technical validation, not licensing or release approval. Current work authorizes activation only in disposable environments; follow the [controlled-release runbook](docs/tcg-010-operations.md) after separate authorization for any future target. Existing browser catalog queries can be cached for five minutes; verify deactivation using fresh API requests/pages.

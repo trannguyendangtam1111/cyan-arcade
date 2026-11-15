@@ -1,5 +1,15 @@
 import { randomInt } from '@/games/shared/random'
-import type { Cell, Piece, PieceType, Point, TetrisAction, TetrisState } from '../types/tetrisTypes'
+import type {
+  Cell,
+  Garbage,
+  Piece,
+  PieceType,
+  Point,
+  TetrisAction,
+  TetrisChallenge,
+  TetrisClock,
+  TetrisState,
+} from '../types/tetrisTypes'
 
 /**
  * Tetris rules as pure functions. `updateTetris(state, action)` always returns the same result for
@@ -10,7 +20,20 @@ import type { Cell, Piece, PieceType, Point, TetrisAction, TetrisState } from '.
  * the very same state object, so callers can detect it with `===`.
  */
 
-export type { Cell, Piece, PieceType, Point, TetrisAction, TetrisState } from '../types/tetrisTypes'
+export type {
+  Cell,
+  Garbage,
+  Piece,
+  PieceType,
+  Point,
+  TetrisAction,
+  TetrisChallenge,
+  TetrisClock,
+  TetrisState,
+} from '../types/tetrisTypes'
+
+/** The cell of a garbage block. */
+export const GARBAGE: Garbage = 'G'
 
 export const PIECE_TYPES: readonly PieceType[] = ['I', 'O', 'T', 'S', 'Z', 'J', 'L']
 
@@ -60,10 +83,53 @@ const LINES_PER_LEVEL = 10
 const SOFT_DROP_POINTS = 1
 const HARD_DROP_POINTS = 2
 
-export function createTetrisGame(seed: number): TetrisState {
+/**
+ * Game time of one `STEP` of a timed game: 25 steps make a second. The same as the AI's frame
+ * (`AI_FRAME_MS`), so a timed game's clock moves the same way for a player and for the AI.
+ */
+export const STEP_MS = 40
+
+/** What makes a game timed. A Classic game has none. */
+export interface TimedRules {
+  /** Game time at which the run ends, a whole number of steps; `null` to keep time without a limit. */
+  limitMs: number | null
+  /**
+   * Lines that end the run the moment a clear reaches them (Sprint's 40): the race is finished, at
+   * the game time of that clear. Absent for a run without a goal.
+   */
+  lineGoal?: number
+}
+
+/** What makes a timed game a Challenge stage: garbage, a fixed gravity, and perhaps a dig objective. */
+export interface ChallengeRules {
+  /** The fixed level the stage is played at: its gravity, which clearing lines never changes. */
+  level: number
+  /** Rows of garbage the stage starts with, at the bottom. */
+  garbageRows: number
+  /** A row of garbage rises from the bottom after every this many pieces locked, or `null` for none. */
+  riseEvery: number | null
+  /** Won by clearing every garbage block; otherwise by the clock's `lineGoal`. */
+  dig: boolean
+}
+
+/**
+ * Mixed into a stage's seed to seed its garbage gaps, so the garbage and the piece bag draw from
+ * streams of their own: the pieces of a stage are the same however its garbage falls.
+ */
+const GARBAGE_SEED_MIX = 0x9e3779b9
+
+/** The most rows of garbage a stage may start with: room is left for the pieces to spawn and move. */
+export const MOST_STARTING_GARBAGE = HEIGHT - 4
+
+/**
+ * A new game. Without `timed` it is Classic, exactly as before timed games existed: no clock, and
+ * gravity is the `TICK` its player's timer sends. With `challenge` too (a timed game only) it is a
+ * Challenge stage, the one kind of game with garbage.
+ */
+export function createTetrisGame(seed: number, timed?: TimedRules, challenge?: ChallengeRules): TetrisState {
   const bag = refillQueue([], seed)
   const [first, ...queue] = bag.queue
-  return {
+  const state: TetrisState = {
     board: new Array<Cell>(WIDTH * HEIGHT).fill(null),
     piece: spawnPiece(first),
     queue,
@@ -74,6 +140,74 @@ export function createTetrisGame(seed: number): TetrisState {
     status: 'playing',
     seed: bag.seed,
   }
+  if (challenge && !timed) throw new Error('A Challenge stage is a timed game: it needs a clock')
+  if (!timed) return state
+
+  const { limitMs, lineGoal = null } = timed
+  if (limitMs !== null && !(Number.isInteger(limitMs / STEP_MS) && limitMs > 0)) {
+    throw new Error(`A time limit must be a positive whole number of ${STEP_MS} ms steps, not ${limitMs}`)
+  }
+  if (lineGoal !== null && !(Number.isInteger(lineGoal) && lineGoal > 0)) {
+    throw new Error(`A line goal must be a positive whole number of lines, not ${lineGoal}`)
+  }
+  const clock: TetrisClock = { elapsedMs: 0, sinceGravityMs: 0, limitMs, timeUp: false, lineGoal, goalReached: false }
+  if (!challenge) return { ...state, clock }
+  return startChallenge({ ...state, clock }, seed, challenge)
+}
+
+/** Puts a stage's starting garbage on the empty board and sets its fixed level. */
+function startChallenge(state: TetrisState, seed: number, rules: ChallengeRules): TetrisState {
+  const { level, garbageRows, riseEvery, dig } = rules
+  if (!(Number.isInteger(level) && level >= 1)) throw new Error(`A stage's level must be 1 or more, not ${level}`)
+  if (!(Number.isInteger(garbageRows) && garbageRows >= 0 && garbageRows <= MOST_STARTING_GARBAGE)) {
+    throw new Error(`A stage starts with 0 to ${MOST_STARTING_GARBAGE} rows of garbage, not ${garbageRows}`)
+  }
+  if (riseEvery !== null && !(Number.isInteger(riseEvery) && riseEvery > 0)) {
+    throw new Error(`Garbage rises after a positive whole number of pieces, not ${riseEvery}`)
+  }
+  if (dig && garbageRows === 0) throw new Error('A dig stage needs garbage to dig')
+  if (!dig && state.clock?.lineGoal == null) throw new Error('A stage needs an objective: a line goal, or to dig')
+
+  let challenge: TetrisChallenge = {
+    level,
+    riseEvery,
+    dig,
+    garbageAdded: 0,
+    garbageCleared: 0,
+    lastGap: -1,
+    garbageSeed: (seed ^ GARBAGE_SEED_MIX) | 0,
+  }
+  // Top row first, each row's gap away from the one above it; the bottom row is the latest.
+  const board = [...state.board]
+  for (let y = HEIGHT - garbageRows; y < HEIGHT; y++) {
+    const row = nextGarbageRow(challenge)
+    board.splice(y * WIDTH, WIDTH, ...row.cells)
+    challenge = row.challenge
+  }
+  return { ...state, board, level, challenge }
+}
+
+/** The next row of garbage: full but for one gap, in a different column from the previous row's. */
+function nextGarbageRow(challenge: TetrisChallenge): { cells: Cell[]; challenge: TetrisChallenge } {
+  const first = challenge.lastGap < 0
+  const pick = randomInt(challenge.garbageSeed, first ? WIDTH : WIDTH - 1)
+  const gap = !first && pick.value >= challenge.lastGap ? pick.value + 1 : pick.value
+  const cells = new Array<Cell>(WIDTH).fill(GARBAGE)
+  cells[gap] = null
+  return {
+    cells,
+    challenge: { ...challenge, garbageAdded: challenge.garbageAdded + 1, lastGap: gap, garbageSeed: pick.seed },
+  }
+}
+
+/**
+ * Pushes the board up one row and puts a row of garbage under it. `null` when the top row holds a
+ * block, which the push would carry off the board: the stack has reached the top.
+ */
+function riseGarbage(board: Cell[], challenge: TetrisChallenge): { board: Cell[]; challenge: TetrisChallenge } | null {
+  for (let x = 0; x < WIDTH; x++) if (board[x] !== null) return null
+  const row = nextGarbageRow(challenge)
+  return { board: [...board.slice(WIDTH), ...row.cells], challenge: row.challenge }
 }
 
 export function updateTetris(state: TetrisState, action: TetrisAction): TetrisState {
@@ -89,7 +223,10 @@ export function updateTetris(state: TetrisState, action: TetrisAction): TetrisSt
     case 'ROTATE_CCW':
       return rotate(state, 3)
     case 'TICK':
-      return stepDown(state, 0)
+      // A timed game's gravity comes with its clock (`STEP`) alone, so nothing can add more.
+      return state.clock ? state : stepDown(state, 0)
+    case 'STEP':
+      return state.clock ? step(state, state.clock) : state
     case 'SOFT_DROP':
       return stepDown(state, SOFT_DROP_POINTS)
     case 'HARD_DROP': {
@@ -155,6 +292,24 @@ function rotate(state: TetrisState, quarterTurns: number): TetrisState {
   return state
 }
 
+/**
+ * One step of a timed game's clock: `STEP_MS` of game time, then gravity if a gravity interval of
+ * game time has passed since the last one (the rest carries over, so on average gravity keeps
+ * `gravityDelay` exactly). The step that reaches the limit ends the run there, at exactly the limit.
+ */
+function step(state: TetrisState, clock: TetrisClock): TetrisState {
+  const elapsedMs = clock.elapsedMs + STEP_MS
+  if (clock.limitMs !== null && elapsedMs >= clock.limitMs) {
+    return { ...state, status: 'over', clock: { ...clock, elapsedMs: clock.limitMs, timeUp: true } }
+  }
+
+  // At most one gravity step per clock step: the fastest gravity (90 ms) is slower than a step.
+  const sinceGravityMs = clock.sinceGravityMs + STEP_MS
+  const delay = gravityDelay(state.level)
+  if (sinceGravityMs < delay) return { ...state, clock: { ...clock, elapsedMs, sinceGravityMs } }
+  return stepDown({ ...state, clock: { ...clock, elapsedMs, sinceGravityMs: sinceGravityMs - delay } }, 0)
+}
+
 function stepDown(state: TetrisState, points: number): TetrisState {
   const moved = { ...state.piece, y: state.piece.y + 1 }
   if (collides(state.board, moved)) return lock(state)
@@ -172,34 +327,69 @@ function lock(state: TetrisState): TetrisState {
 
   const cleared = clearLines(board)
   const lines = state.lines + cleared.count
+  const pieces = state.pieces + 1
+  let challenge = state.challenge && {
+    ...state.challenge,
+    garbageCleared: state.challenge.garbageCleared + cleared.garbage,
+  }
+  // A race ends with the clear that reaches its goal, at that game time, however the board looks; a
+  // dig stage with the clear that takes away its last garbage.
+  const goalReached =
+    (state.clock?.lineGoal != null && lines >= state.clock.lineGoal) ||
+    (challenge !== undefined && challenge.dig && challenge.garbageCleared === challenge.garbageAdded)
+
+  // A stage's garbage rises once the piece has locked and its lines are gone, unless that piece met
+  // the objective. The falling piece is the next one, spawned onto the risen board.
+  let nextBoard = cleared.board
+  let toppedOut = false
+  if (challenge && !goalReached && challenge.riseEvery !== null && pieces % challenge.riseEvery === 0) {
+    const risen = riseGarbage(nextBoard, challenge)
+    if (risen) ({ board: nextBoard, challenge } = risen)
+    else toppedOut = true
+  }
+
   const refilled = refillQueue(state.queue, state.seed)
   const [next, ...queue] = refilled.queue
   const piece = spawnPiece(next)
 
   return {
-    board: cleared.board,
+    board: nextBoard,
     piece,
     queue,
     score: state.score + LINE_SCORES[cleared.count] * state.level,
     lines,
-    level: Math.floor(lines / LINES_PER_LEVEL) + 1,
-    pieces: state.pieces + 1,
-    status: collides(cleared.board, piece) ? 'over' : 'playing',
+    // A stage keeps its fixed level; every other game goes up a level every ten lines.
+    level: challenge ? challenge.level : Math.floor(lines / LINES_PER_LEVEL) + 1,
+    pieces,
+    status: goalReached || toppedOut || collides(nextBoard, piece) ? 'over' : 'playing',
     seed: refilled.seed,
+    // A timed game's clock goes on with the next piece; a Classic game still has none.
+    ...(state.clock && { clock: goalReached ? { ...state.clock, goalReached } : state.clock }),
+    ...(challenge && { challenge }),
   }
 }
 
-function clearLines(board: Cell[]): { board: Cell[]; count: number } {
+/** Clears the full rows. `garbage` counts those that were rows of garbage (completed by a piece). */
+function clearLines(board: Cell[]): { board: Cell[]; count: number; garbage: number } {
   const fullRows: number[] = []
+  let garbage = 0
   for (let y = 0; y < HEIGHT; y++) {
     let full = true
-    for (let x = 0; x < WIDTH && full; x++) full = board[y * WIDTH + x] !== null
-    if (full) fullRows.push(y)
+    let hasGarbage = false
+    for (let x = 0; x < WIDTH && full; x++) {
+      const cell = board[y * WIDTH + x]
+      full = cell !== null
+      if (cell === GARBAGE) hasGarbage = true
+    }
+    if (full) {
+      fullRows.push(y)
+      if (hasGarbage) garbage++
+    }
   }
-  if (fullRows.length === 0) return { board, count: 0 }
+  if (fullRows.length === 0) return { board, count: 0, garbage: 0 }
 
   const kept = board.filter((_, index) => !fullRows.includes(Math.floor(index / WIDTH)))
-  return { board: [...new Array<Cell>(fullRows.length * WIDTH).fill(null), ...kept], count: fullRows.length }
+  return { board: [...new Array<Cell>(fullRows.length * WIDTH).fill(null), ...kept], count: fullRows.length, garbage }
 }
 
 /**

@@ -7,6 +7,7 @@ export type KeyCommand =
   | { kind: 'erase' }
   | { kind: 'move'; direction: Direction }
   | { kind: 'notes' }
+  | { kind: 'candidates' }
   | { kind: 'hint' }
   | { kind: 'undo' }
   | { kind: 'redo' }
@@ -24,8 +25,9 @@ export interface KeyInput {
 const ARROWS: Record<string, Direction> = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' }
 
 /**
- * Digits, arrows and erasing always work. With `shortcuts` on, so do N (notes), H (hint), Escape
- * (pause), Ctrl+Z (undo) and Ctrl+Y or Ctrl+Shift+Z (redo). Shift with a digit toggles a pencil mark.
+ * Digits, arrows and erasing always work. With `shortcuts` on, so do N (notes), C (fill in every
+ * cell's candidates), H (hint), Escape (pause), Ctrl+Z (undo) and Ctrl+Y or Ctrl+Shift+Z (redo).
+ * Shift with a digit toggles a pencil mark. Ctrl+C stays the browser's copy.
  * @returns `null` for a key Sudoku does not use, which is then left to the browser
  */
 export function keyCommand(input: KeyInput, shortcuts: boolean): KeyCommand | null {
@@ -46,6 +48,8 @@ export function keyCommand(input: KeyInput, shortcuts: boolean): KeyCommand | nu
   switch (input.key.toLowerCase()) {
     case 'n':
       return { kind: 'notes' }
+    case 'c':
+      return { kind: 'candidates' }
     case 'h':
       return { kind: 'hint' }
     case 'escape':

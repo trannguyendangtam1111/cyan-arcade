@@ -42,6 +42,10 @@ class DailyChallengeBonuses implements BonusSource {
 
 	@Override
 	public List<Bonus> award(CompletedRun run) {
+		// A day's challenges are set for the Classic game; a run of another mode completes none.
+		if (!run.isClassic()) {
+			return List.of();
+		}
 		// The day that counts is the one on which the run ends, by the server's clock, in UTC.
 		Instant now = this.clock.instant();
 		List<DailyChallenge> challenges = this.store.findByDate(LocalDate.ofInstant(now, ZoneOffset.UTC))

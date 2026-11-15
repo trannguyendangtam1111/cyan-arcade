@@ -43,7 +43,7 @@ This portfolio project focuses on backend problems shared by business applicatio
 
 ## Status
 
-The implemented platform includes accounts and roles, scored game sessions, progression, daily challenges, purchases, card collections and opening history. Docker configuration and backend CI are included. Hosted HTTPS deployment, persistent login sessions, password reset and online Chess remain [planned work](#roadmap).
+The implemented platform includes accounts and roles, scored game sessions, progression, daily challenges, purchases, card collections and opening history. Docker configuration and backend CI are included. Login sessions are stored in PostgreSQL and survive a backend restart. Hosted HTTPS deployment, password reset and online Chess remain [planned work](#roadmap); [docs/deployment.md](docs/deployment.md) describes the deployment configuration.
 
 For verification results, inspect the [CI runs and report artifacts](https://github.com/trannguyendangtam1111/cyan-arcade/actions/workflows/backend-ci.yml). No fixed test count or coverage percentage is claimed here; results depend on the revision and checks actually run.
 
@@ -52,9 +52,11 @@ For verification results, inspect the [CI runs and report artifacts](https://git
 ### Games
 
 - **Arcade games:** Snake, 2048, Tetris, Minesweeper, Flappy Bird, Brick Breaker and Dino Run, with keyboard/touch controls and game-specific score checks. Selected games include admin-only algorithmic AI modes.
+- **Game modes:** besides Classic, Tetris has Ultra, Sprint and Challenge stages; Snake has three maps and Adventure stages; 2048 has Moves Limit, Time Attack and Puzzles; Minesweeper has Beginner, Intermediate and Expert timed boards. Ranked modes have leaderboards of their own; stages are unranked. See [Game modes](API.md#game-modes).
+- **Minesweeper Daily Board:** one shared 16 × 16 board per UTC day for signed-in players, played on the server, with its own fastest-time leaderboard.
 - **Word Guess:** daily and practice puzzles; the backend keeps the answer and judges guesses, hints and scoring.
-- **Sudoku:** daily and practice puzzles with unique solutions, difficulty grading, server-validated moves and server-timed ranked runs.
-- **Chess:** server-enforced rules for local two-player games, plus Stockfish hints and Coach Mode for signed-in players; engine games, analysis and reviews for admins. Chess is unscored and has no online multiplayer yet.
+- **Sudoku:** daily and practice puzzles with unique solutions, difficulty grading, server-validated moves and server-timed ranked runs; leaderboards for each Daily date and each difficulty, a 30-day Daily history, unranked replays of past Daily puzzles, and pencil marks that follow a signed-in player across devices.
+- **Chess:** server-enforced rules for local two-player games, plus Stockfish hints and Coach Mode for signed-in players; engine games, analysis and reviews for admins. Signed-in players can browse their recent matches and export them as PGN. Chess is unscored and has no online multiplayer yet.
 - **Shared client features:** responsive layouts, light/dark themes, game skins and accessible keyboard controls. Game design and extension details are in [ARCHITECTURE.md](ARCHITECTURE.md#how-to-add-a-new-game).
 
 ### Platform
@@ -209,7 +211,7 @@ Vite proxies `/api` and `/actuator` to the backend, so the browser talks to one 
 - An **admin account** is created only when explicitly enabled with credentials (see [Roles](#roles-players-and-admins)).
 - The game catalog comes from migrations; the card catalog comes from the card game import (see [Card games](#card-games)).
 - To start over with an empty database: `docker compose down -v`, then `docker compose up -d`.
-- Login sessions are kept in the backend's memory, so restarting the backend signs everyone out. Accounts, scores, balances, inventory and opening history are persisted in PostgreSQL.
+- Login sessions are stored in PostgreSQL (Spring Session JDBC, migration V37) and survive a backend restart; a session ends after 14 days without a visit or on logout. Accounts, scores, balances, inventory and opening history are persisted in PostgreSQL too.
 
 ### Configuration
 
@@ -231,7 +233,7 @@ Compose reads these from a `.env` file next to `docker-compose.yml`; [.env.examp
 | `ADMIN_USERNAME`, `ADMIN_PASSWORD` | unset | Both required when admin seeding is enabled; no default credentials |
 | `STOCKFISH_POOL_SIZE`, `STOCKFISH_THREADS`, `STOCKFISH_HASH_MB` | `2`, `1`, `32` | Stockfish processes at most, and search threads and hash memory (MB) each. See [Chess engine](#chess-engine-stockfish) |
 | `CHESS_HINTS_PER_GAME` | `3` | Move hints a player gets per chess game (admins: no limit; guests: none) |
-| `CHESS_ENGINE_REQUESTS_PER_MINUTE` | `30` | Engine requests (hints, engine moves, evaluations, reviews) one account may make per minute |
+| `CHESS_ENGINE_REQUESTS_PER_MINUTE` | `30` | Engine requests (hints, evaluations that need a search, reviews) one account may make per minute; Stockfish's own moves are not counted |
 
 The backend reads further settings from environment variables when run natively (or when added to the `backend` service in Compose):
 
@@ -241,6 +243,9 @@ The backend reads further settings from environment variables when run natively 
 | `SERVER_PORT` | `8080` | Port the API listens on |
 | `LOGIN_MAX_FAILURES`, `LOGIN_FAILURE_WINDOW` | `5`, `5m` | Failed logins allowed per username and address, and how long they are remembered |
 | `GAME_SESSIONS_ABANDONED_AFTER` | `24h` | How long a started game may stay unfinished before the hourly cleanup removes it |
+| `MINESWEEPER_DAILY_SECRET` | unset | Secret behind each day's Minesweeper Daily Board. Unset, a random one is used per process (with a warning), so boards of days not yet stored change after a restart. Set it in every deployment that offers the Daily Board, and keep it private |
+| `STOCKFISH_IDLE_TIMEOUT_SECONDS` | `60` in `prod` (otherwise engines stay up) | Stops a Stockfish process unused for this long; the next request starts it again |
+| `MEMORY_DIAGNOSTICS_ENABLED` | `false` | `prod` only: logs numeric memory figures (heap, non-heap, direct buffers, JVM and Stockfish RSS, threads, cgroup usage) every 15 s, for measuring a low-memory host |
 | `SCHEDULING_ENABLED` | `true` | Switches every scheduled job on or off |
 | `DAILY_CHALLENGES_GENERATION_ENABLED` | `true` | Creates each day's challenges at startup and at midnight UTC |
 | `REWARDS_GAME_COMPLETED_COINS`, `REWARDS_PERSONAL_BEST_COINS` | `5`, `15` | Coins for finishing a game, and extra for beating your own best |
@@ -250,8 +255,12 @@ The backend reads further settings from environment variables when run natively 
 | `DAILY_LOGIN_BONUS_ITEM` | `EXTRA_PACK` | The shop item given on top on the last day (empty for none) |
 | `TCG_IMPORT_SOURCES` | empty (`pokemon,one-piece` in the `import-tcg` profile) | Card game sources to import at startup. An ordinary start imports nothing |
 | `TCG_IMPORT_FILES` | empty | Comma-separated paths of card game datasets (the arcade's own JSON format) to import at startup |
+| `TCG_IMPORT_DRY_RUN` | `false` | Run the card game import and roll it back: the report says what would change, nothing is kept |
+| `TCG_IMPORT_REPORT_FILE` | empty | Also write the card game import report (JSON) to this path |
 | `TCG_POKEMON_URL`, `TCG_POKEMON_CONFIG` | TCGdex's GraphQL API, `classpath:tcg/sources/pokemon.json` | Where Pokémon data comes from, and which sets and pack layouts to use |
 | `TCG_ONE_PIECE_URL`, `TCG_ONE_PIECE_CONFIG` | `https://optcgapi.com/api`, `classpath:tcg/sources/one-piece.json` | The same for One Piece |
+| `APP_TCG_PILOTS_YUGIOH_ENABLED` | `false` | The Yu-Gi-Oh! pilot source (YGOPRODeck). On, `TCG_IMPORT_SOURCES=yugioh` imports Beyond the Brave's text cards and one disabled nine-card pack into a hidden game; disposable databases only. See [pilot pack rules and prerequisites](docs/tcg-008-pilot-pack.md) |
+| `APP_TCG_PILOTS_YUGIOH_ACTIVATION_ALLOWED` | `false` | Separate environment gate for the ADMIN/CSRF-protected pilot visibility API. Import never grants activation permission. See [TCG-010 readiness and blockers](docs/tcg-010-release-preparation.md) and the [operations runbook](docs/tcg-010-operations.md). Keep off outside explicitly approved disposable tests |
 
 **Request limits and reverse proxies.** The three POST limits above use separate, atomic fixed
 windows starting at the first request. They return `429` problem details with code
@@ -361,8 +370,9 @@ External source ──(import job, on demand)──▶ PostgreSQL ──▶ Cyan
 | One Piece Card Game | [OPTCG API](https://optcgapi.com): a free, fan-run public API for the English game | Configured sets and cards, including alternate-art printings and game-specific rarity data | `optcgapi.com`, one size |
 
 - **Run it** with the `import-tcg` profile (commands above); `TCG_IMPORT_SOURCES=pokemon` imports one game. Import duration depends on the configured catalog and source availability.
-- **Repeatable and idempotent**: every card is keyed by its source's id (`sv01-001`, `OP01-120_p1`), so running it again adds what is new, updates what changed and duplicates nothing; the log says, per game, how many cards were new, updated and unchanged, and names any set or cards skipped (a card the source has no image for is never given one). Nothing is deleted, because collections and opening histories point at cards. The whole game is one transaction: a failed run writes nothing.
+- **Repeatable and idempotent**: every card is keyed by its source's id (`sv01-001`, `OP01-120_p1`), so running it again adds what is new, updates what changed and duplicates nothing; every run ends with a report per game (in the log, and as JSON with `TCG_IMPORT_REPORT_FILE`): sets, cards and packs new, updated and unchanged, and every configured set held back with the reason. A set the source does not list, or lists without an image for every card, is held back and left exactly as it was, pack included (a card is never given a picture its source does not have). Nothing is deleted, because collections and opening histories point at cards. Each game is one transaction: a game that fails writes nothing, and the other games are still imported. `TCG_IMPORT_DRY_RUN=true` shows what an import would do without keeping it. Adding a new set is a line of configuration; see "A new set of an existing card game" in [ARCHITECTURE.md](ARCHITECTURE.md).
 - **Configurable**: which sets to take, what each source rarity is called and how rare it is, and how each kind of pack is made up live in `backend/src/main/resources/tcg/sources/*.json`, not in code.
+- **Yu-Gi-Oh! remains a hidden pilot.** Its YGOPRODeck source is off by default. Importing creates Beyond the Brave's 127 printings as text cards and one disabled nine-card pack, using explicitly labelled **Arcade Simulated Odds**. Both game and pack require explicit activation in a disposable environment. No artwork is imported or linked; cards show their name, type, attribute, level, ATK/DEF and effect. See [TCG-008](docs/tcg-008-pilot-pack.md) for exact odds, activation prerequisites and limitations.
 - **Pack odds are simulator probabilities.** Neither The Pokémon Company nor Bandai publishes official pull rates, so each pack layout is this arcade's approximation, and every pack says so on its page.
 - **Adding another card game** means one new source (a client and a mapper to the generic dataset format) and a configuration file; the tables, the API and the pages stay as they are. A game with no API can also be imported from a dataset file (`TCG_IMPORT_FILES`).
 
@@ -428,7 +438,8 @@ Useful backend entry points: [purchase concurrency tests](backend/src/test/java/
 │       │   └── tcg/          # the card game module: game, set, card, pack, opening, collection, dataimport
 │       └── resources/
 │           ├── db/migration/     # versioned Flyway migrations
-│           └── tcg/sources/      # which sets to import, rarities and pack layouts, per card game
+│           ├── tcg/sources/      # which sets to import, rarities and pack layouts, per card game
+│           └── tcg/pilots/       # card games being tried out, not part of the catalog (Yu-Gi-Oh!)
 ├── frontend/                 # React + Vite SPA, served by nginx in Docker
 │   ├── nginx/                # nginx configuration and security headers
 │   ├── public/               # favicon and game thumbnails
@@ -451,19 +462,20 @@ Useful backend entry points: [purchase concurrency tests](backend/src/test/java/
 - Transactional coins, progression, daily rewards/challenges, purchases, inventory and audited admin grants.
 - Imported card catalogs, server-side pack opening, idempotent request replay, collections and history.
 - Arcade games, server-played Word Guess/Sudoku, local Chess and Stockfish integration.
+- Game modes with their own leaderboards, Sudoku Daily leaderboards, history and archive, the Minesweeper Daily Board, and the Chess match archive with PGN export.
+- Login sessions stored in PostgreSQL with Spring Session JDBC, and recovery of a finished game's result.
 - Docker/nginx configuration, automated tests and a backend GitHub Actions workflow.
 
 ### Planned
 
 - Hosted deployment with HTTPS.
-- Login sessions that survive a backend restart, using Spring Session.
 - Email/password recovery.
 - Online Chess between accounts, with ownership, matchmaking/invitations and real-time updates; see [design notes](ARCHITECTURE.md#online-chess-later).
 - Additional games such as Memory and Connect Four, after backend reliability work.
 
 ### Current limitations
 
-- **Single-instance state:** login sessions and rate-limit counters are in memory and reset on restart. Users sharing an IP share request budgets; proxy trust must be configured for the actual deployment.
+- **Single-instance state:** rate-limit counters, the chess engine limiter and the analysis cache are in memory and reset on restart (login sessions are in PostgreSQL). Users sharing an IP share request budgets; proxy trust must be configured for the actual deployment.
 - **Client trust:** browser-game scores are checked for consistency and plausible timing, not replayed from every input. Word Guess and Sudoku keep their answers on the server, but automation is still possible; Sudoku also trusts the browser to hide the board while paused. Coins from scored browser games inherit these limits.
 - **Retry compatibility:** legacy pack-opening calls without an `Idempotency-Key` remain supported and open a new pack on each call. The frontend sends stable keys; successful replay snapshots are retained without automatic expiry.
 - **Account management:** no password reset or role-management page yet. Guest scores are not reassigned after registration; admin credentials are used only for optional creation and do not reset existing accounts.

@@ -67,6 +67,40 @@ class SourceConfigTests {
 			.withMessageContaining("set 'one' uses the unknown pack profile 'jumbo'");
 	}
 
+	@Test
+	void anExcludedRarityMustSayWhyAndCannotAlsoBeMapped() {
+		String contradictory = """
+				{
+				  "game": { "slug": "broken", "name": "Broken" },
+				  "rarities": [ { "code": "common", "name": "Common", "tier": 1, "source": ["Common"] } ],
+				  "excludedRarities": { "common": "Mapped above as well.", "Shiny": " " },
+				  "packProfiles": { "booster": { "code": "booster", "name": "{set}", "description": "", "oddsNote": "",
+				    "slots": [ { "count": 1, "odds": { "common": 1 } } ] } },
+				  "sets": [ { "id": "one", "profile": "booster" } ]
+				}
+				""";
+
+		assertThatExceptionOfType(TcgSourceException.class)
+			.isThrownBy(() -> SourceConfig.load(new ByteArrayResource(contradictory.getBytes(), "excluded.json"), JSON))
+			.withMessageContaining("the rarity 'common' is both mapped and excluded")
+			.withMessageContaining("the excluded rarity 'Shiny' does not say why it is excluded");
+	}
+
+	@Test
+	void excludedRaritiesAreMatchedRegardlessOfCaseAndOptional() {
+		SourceConfig pokemon = SourceConfig.load(new ClassPathResource("tcg/sources/pokemon.json"), JSON);
+
+		assertThat(pokemon.isExcludedRarity("RGB Rare")).isTrue();
+		assertThat(pokemon.isExcludedRarity(" rgb rare ")).isTrue();
+		assertThat(pokemon.isExcludedRarity("Common")).isFalse();
+		assertThat(pokemon.isExcludedRarity(null)).isFalse();
+		assertThat(pokemon.excludedRarities().get("RGB Rare")).contains("no pull rate is known");
+		// A configuration without the field excludes nothing.
+		assertThat(config().excludedRarities()).isEmpty();
+		assertThat(SourceConfig.load(new ClassPathResource("tcg/sources/one-piece.json"), JSON).excludedRarities())
+			.isEmpty();
+	}
+
 	@ParameterizedTest
 	@CsvSource({ "sv03.5, sv03-5", "sv10.5w, sv10-5w", "base1, base1", "OP-01, op01", "EB-02, eb02",
 			"OP14-EB04, op14-eb04", "ST-10, st10" })

@@ -10,13 +10,14 @@ import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Both endpoints are open to guests; a signed-in caller is recognised from their session. */
+/** Starting and finishing allow guests; result retrieval requires the authenticated account owner. */
 @RestController
 @RequestMapping("/api/game-sessions")
 class GameSessionController {
@@ -31,7 +32,8 @@ class GameSessionController {
 	ResponseEntity<GameSessionResponse> start(@Valid @RequestBody StartGameSessionRequest request,
 			@AuthenticationPrincipal AuthenticatedUser user,
 			@RequestHeader(name = GuestPlayer.HEADER, required = false) UUID playerId) {
-		GameSessionResponse session = this.gameSessionService.start(request.gameSlug(), idOf(user), playerId);
+		GameSessionResponse session = this.gameSessionService.start(request.gameSlug(), request.mode(), idOf(user),
+				playerId);
 		return ResponseEntity.created(URI.create("/api/game-sessions/" + session.id())).body(session);
 	}
 
@@ -44,6 +46,11 @@ class GameSessionController {
 
 	private static Long idOf(AuthenticatedUser user) {
 		return (user != null) ? user.id() : null;
+	}
+
+	@GetMapping("/{id}/result")
+	ScoreResponse result(@PathVariable UUID id, @AuthenticationPrincipal AuthenticatedUser user) {
+		return this.gameSessionService.resultOf(id, user.id());
 	}
 
 }

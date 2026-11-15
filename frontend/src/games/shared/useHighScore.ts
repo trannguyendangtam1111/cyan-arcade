@@ -17,14 +17,19 @@ function read(gameSlug: string): number {
  *
  * This is a convenience for guests. Once accounts exist, the best score can come from the server
  * instead without any game having to change.
+ *
+ * @param lowerIsBetter for a score that is a time to finish (Tetris Sprint): the lowest is the best,
+ * and 0 still means there is none yet
  */
-export function useHighScore(gameSlug: string) {
+export function useHighScore(gameSlug: string, lowerIsBetter = false) {
   const [best, setBest] = useState(() => read(gameSlug))
 
   /** Reports a finished run. Returns `true` when it beat the previous best. */
   const record = useCallback(
     (score: number): boolean => {
-      if (score <= read(gameSlug)) return false
+      const previous = read(gameSlug)
+      const beaten = lowerIsBetter ? score > 0 && (previous === 0 || score < previous) : score > previous
+      if (!beaten) return false
       try {
         window.localStorage.setItem(storageKey(gameSlug), String(score))
       } catch {
@@ -33,7 +38,7 @@ export function useHighScore(gameSlug: string) {
       setBest(score)
       return true
     },
-    [gameSlug],
+    [gameSlug, lowerIsBetter],
   )
 
   return { best, record }

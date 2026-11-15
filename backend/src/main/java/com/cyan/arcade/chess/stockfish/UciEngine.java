@@ -142,8 +142,19 @@ public final class UciEngine {
 		boolean stopped = false;
 		boolean callerGaveUp = false;
 		while (true) {
-			String line = this.process.readLine(POLL);
 			long now = System.nanoTime();
+			// Check budgets even when the engine continuously emits info lines.
+			if (!stopped && (now > deadline || cancelled.getAsBoolean())) {
+				callerGaveUp = now <= deadline;
+				this.process.send("stop");
+				stopped = true;
+				stopDeadline = now + this.stopGrace.toNanos();
+			}
+			else if (stopped && now > stopDeadline) {
+				throw new EngineException(EngineException.Kind.TIMEOUT, "The engine did not stop when told to");
+			}
+			String line = this.process.readLine(POLL);
+			now = System.nanoTime();
 			if (line != null) {
 				UciParser.Info info = UciParser.parseInfo(line);
 				if (info != null && info.multipv() <= request.multiPv()) {
@@ -179,15 +190,7 @@ public final class UciEngine {
 				}
 				continue;
 			}
-			if (!stopped && (now > deadline || cancelled.getAsBoolean())) {
-				callerGaveUp = now <= deadline;
-				this.process.send("stop");
-				stopped = true;
-				stopDeadline = now + this.stopGrace.toNanos();
-			}
-			else if (stopped && now > stopDeadline) {
-				throw new EngineException(EngineException.Kind.TIMEOUT, "The engine did not stop when told to");
-			}
+
 		}
 	}
 

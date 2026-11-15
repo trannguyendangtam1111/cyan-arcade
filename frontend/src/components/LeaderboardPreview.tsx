@@ -1,5 +1,6 @@
 import { ArrowRight, RotateCcw } from 'lucide-react'
 import { Link } from 'react-router'
+import { CLASSIC, homeBoard } from '@/api/games'
 import { useLeaderboard } from '@/api/leaderboards'
 import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
@@ -26,8 +27,9 @@ export function LeaderboardPreview({ games }: { games: GameDefinition[] }) {
 }
 
 function TopScores({ game }: { game: GameDefinition }) {
-  // The first page of the real leaderboard, so this and the leaderboard page share one request.
-  const { data, isPending, isError, refetch } = useLeaderboard(game.slug, 'ALL_TIME', 0)
+  // The first page of the board the leaderboard page opens on (Classic, or Sudoku's Daily), so both share one request.
+  const board = homeBoard(game.slug)
+  const { data, isPending, isError, refetch } = useLeaderboard(game.slug, board.id, 'ALL_TIME', 0)
   const boardUrl = `/leaderboard?game=${encodeURIComponent(game.slug)}`
 
   return (
@@ -37,7 +39,10 @@ function TopScores({ game }: { game: GameDefinition }) {
       className="flex flex-col overflow-hidden border-t-8 border-(--accent)"
     >
       <div className="flex items-center justify-between gap-3 px-5 pt-4 pb-2">
-        <h3 className="text-lg font-semibold">{game.name}</h3>
+        <h3 className="text-lg font-semibold">
+          {game.name}
+          {board.id !== CLASSIC.id && <span className="font-normal text-ink-soft"> · {board.name}</span>}
+        </h3>
         <Link
           to={boardUrl}
           aria-label={`Full ${game.name} leaderboard`}

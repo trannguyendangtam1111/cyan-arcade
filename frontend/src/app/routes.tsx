@@ -1,19 +1,21 @@
 import type { RouteObject } from 'react-router'
 import { AppLayout } from '@/layouts/AppLayout'
-import { AdminPage } from '@/pages/AdminPage'
-import { LoginPage } from '@/pages/auth/LoginPage'
-import { ChallengesPage } from '@/pages/ChallengesPage'
-import { RegisterPage } from '@/pages/auth/RegisterPage'
 import { GameDetailPage } from '@/pages/GameDetailPage'
 import { GamesPage } from '@/pages/GamesPage'
 import { HomePage } from '@/pages/HomePage'
-import { LeaderboardPage } from '@/pages/LeaderboardPage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
-import { ProfilePage } from '@/pages/profile/ProfilePage'
-import { PublicProfilePage } from '@/pages/PublicProfilePage'
 import { RouteErrorPage } from '@/pages/RouteErrorPage'
-import { ShopPage } from '@/pages/ShopPage'
 import { tcgRoutes } from '@/tcg/routes'
+import {
+  AdminPage,
+  ChallengesPage,
+  LeaderboardPage,
+  LoginPage,
+  ProfilePage,
+  PublicProfilePage,
+  RegisterPage,
+  ShopPage,
+} from './lazyPages'
 
 export const routes: RouteObject[] = [
   {

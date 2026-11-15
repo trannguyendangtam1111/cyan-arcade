@@ -193,6 +193,31 @@ class UciEngineTests {
 	}
 
 	@Test
+	@org.junit.jupiter.api.Timeout(3)
+	void continuousInfoCannotPreventTheSearchDeadlineFromSendingStop() {
+		FakeUciProcess process = new FakeUciProcess() {
+			@Override
+			public String readLine(Duration timeout) throws InterruptedException {
+				if (Thread.interrupted()) throw new InterruptedException();
+				if (!sent("go").isEmpty() && sent("stop").isEmpty()) {
+					return "info depth 1 score cp 0 pv e2e4";
+				}
+				return super.readLine(timeout);
+			}
+		};
+		UciEngine engine = UciEngine.start(process, 1, 8, Duration.ofSeconds(1), Duration.ofMillis(200));
+		try {
+			SearchRequest request = new SearchRequest(null, List.of(), new SearchRequest.Limits(20, null, null),
+					1, SearchRequest.Strength.FULL);
+			SearchResult result = engine.search(request, Duration.ofMillis(20), () -> false);
+			assertThat(result.interrupted()).isTrue();
+			assertThat(process.sent("stop")).hasSize(1);
+		}
+		finally {
+			engine.close();
+		}
+	}
+	@Test
 	void closingEndsTheProcess() {
 		UciEngine engine = start();
 		engine.close();

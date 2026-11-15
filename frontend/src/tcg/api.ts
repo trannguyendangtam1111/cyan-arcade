@@ -65,9 +65,9 @@ export interface TcgCard {
   /** The number printed on the card. Alternate arts share the number of their card. */
   number: string
   name: string
-  /** The full-size image. */
-  imageUrl: string
-  /** A smaller image for grids, when the source has one. */
+  /** The full-size image, or `null` for a card shown as text (a game whose artwork may not be shown). */
+  imageUrl: string | null
+  /** A smaller image for grids, when the source has one; never without `imageUrl`. */
   thumbnailUrl: string | null
   rarity: Rarity
   set: SetRef

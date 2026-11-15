@@ -38,14 +38,38 @@ public record TcgDataset(@NotNull @Valid Game game, @NotEmpty List<@Valid @NotNu
 	 * @param cardBackUrl the back of the game's cards; optional
 	 * @param accentColor the game's own color, {@code #rrggbb}; optional
 	 * @param attribution where the data and images come from and whose they are, shown with the game
+	 * @param cardImagesOptional whether the game's cards may come without an image, to be shown as
+	 * text (a game whose artwork the arcade may not show). Off unless set: every other game's cards
+	 * must each have one, and a dataset with a card without one is refused.
+	 * @param hidden whether a game this dataset creates starts hidden ({@code tcg_games.active} off): its
+	 * cards are stored, but no page or API lists the game, its sets or its cards until it is activated
+	 * in the database on purpose. Off unless set. Only a new game is affected: an import never changes
+	 * whether an existing game is shown.
 	 */
 	public record Game(@NotNull @Pattern(regexp = CODE) @Size(max = 50) String slug,
 			@NotBlank @Size(max = 100) String name, @Size(max = 500) String description,
 			@Size(max = 500) String imageUrl, @Size(max = 500) String cardBackUrl,
-			@Pattern(regexp = COLOR) String accentColor, @Size(max = 500) String attribution) {
+			@Pattern(regexp = COLOR) String accentColor, @Size(max = 500) String attribution,
+			Boolean cardImagesOptional, Boolean hidden) {
+
+		public Game {
+			// Left out of a dataset file, both are off.
+			cardImagesOptional = Boolean.TRUE.equals(cardImagesOptional);
+			hidden = Boolean.TRUE.equals(hidden);
+		}
+
+		public Game(String slug, String name, String description, String imageUrl, String cardBackUrl,
+				String accentColor, String attribution, Boolean cardImagesOptional) {
+			this(slug, name, description, imageUrl, cardBackUrl, accentColor, attribution, cardImagesOptional, false);
+		}
 
 		public Game(String slug, String name, String description, String imageUrl, String cardBackUrl) {
 			this(slug, name, description, imageUrl, cardBackUrl, null, null);
+		}
+
+		public Game(String slug, String name, String description, String imageUrl, String cardBackUrl,
+				String accentColor, String attribution) {
+			this(slug, name, description, imageUrl, cardBackUrl, accentColor, attribution, false);
 		}
 
 	}
@@ -94,15 +118,19 @@ public record TcgDataset(@NotNull @Valid Game game, @NotEmpty List<@Valid @NotNu
 	 * number. Real sets print variants (alternate arts) under the same number, and need it.
 	 * @param number the number printed on the card
 	 * @param rarity the code of one of the game's rarities
-	 * @param imageUrl the full-size image
-	 * @param thumbnailUrl a smaller image for grids; optional
+	 * @param imageUrl the full-size image. Required, unless the game's cards may come without one
+	 * ({@link Game#cardImagesOptional()}); blank counts as none.
+	 * @param thumbnailUrl a smaller image for grids; optional, and only with an image. Blank counts as
+	 * none.
 	 * @param metadata anything else worth keeping about the card; stored and returned as it is
 	 */
 	public record Card(@Size(max = 100) String externalId, @NotBlank @Size(max = 20) String number,
-			@NotBlank @Size(max = 120) String name, @NotBlank String rarity, @NotBlank @Size(max = 500) String imageUrl,
+			@NotBlank @Size(max = 120) String name, @NotBlank String rarity, @Size(max = 500) String imageUrl,
 			@Size(max = 500) String thumbnailUrl, Map<String, Object> metadata) {
 
 		public Card {
+			imageUrl = noneIfBlank(imageUrl);
+			thumbnailUrl = noneIfBlank(thumbnailUrl);
 			metadata = (metadata != null) ? metadata : Map.of();
 		}
 
@@ -115,6 +143,10 @@ public record TcgDataset(@NotNull @Valid Game game, @NotEmpty List<@Valid @NotNu
 			return (this.externalId != null) ? this.externalId : this.number;
 		}
 
+		private static String noneIfBlank(String url) {
+			return (url == null || url.isBlank()) ? null : url;
+		}
+
 	}
 
 	/**
@@ -124,11 +156,22 @@ public record TcgDataset(@NotNull @Valid Game game, @NotEmpty List<@Valid @NotNu
 	 * @param slots the pack's rarity rules, in the order the cards come out
 	 * @param cards the {@link Card#key() keys} of the cards that can come out of the pack; leave it
 	 * out for "every card of the set"
+	 * @param initiallyActive whether a newly created pack can be opened; defaults to true for existing
+	 * datasets. Re-importing never changes a pack's activation state.
 	 */
 	public record Pack(@NotNull @Pattern(regexp = CODE) @Size(max = 50) String code,
 			@NotBlank @Size(max = 100) String name, @Size(max = 500) String description,
 			@Size(max = 500) String imageUrl, @Size(max = 300) String oddsNote,
-			@NotEmpty List<@Valid @NotNull Slot> slots, List<@NotBlank String> cards) {
+			@NotEmpty List<@Valid @NotNull Slot> slots, List<@NotBlank String> cards, Boolean initiallyActive) {
+
+		public Pack {
+			initiallyActive = !Boolean.FALSE.equals(initiallyActive);
+		}
+
+		public Pack(String code, String name, String description, String imageUrl, String oddsNote, List<Slot> slots,
+				List<String> cards) {
+			this(code, name, description, imageUrl, oddsNote, slots, cards, true);
+		}
 
 		public Pack(String code, String name, String description, String imageUrl, List<Slot> slots,
 				List<String> cards) {

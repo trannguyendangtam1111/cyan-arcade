@@ -1,0 +1,19 @@
+<!doctype html>
+<!--
+  Development only: the Minesweeper board at every standard size, without a game mode, a session or
+  a score. The dev server serves it at /dev/minesweeper-board.html; the production build has one
+  entry (index.html) and never includes it.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
+    <title>Minesweeper board preview</title>
+    <script src="/theme-init.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/games/minesweeper/preview/main.tsx"></script>
+  </body>
+</html>

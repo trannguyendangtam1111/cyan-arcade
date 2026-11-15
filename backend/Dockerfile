@@ -36,7 +36,9 @@ COPY --from=stockfish /opt/stockfish /opt/stockfish
 COPY --from=build /workspace/target/app.jar app.jar
 ENV STOCKFISH_PATH=/opt/stockfish/stockfish
 # Leave room for native JVM memory and a separate Stockfish process; validate RSS on Render.
-ENV JAVA_TOOL_OPTIONS="-Xms64m -Xmx160m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=32m -XX:MaxDirectMemorySize=16m -Xss512k -XX:+ExitOnOutOfMemoryError"
+ENV JAVA_TOOL_OPTIONS="-Xms64m -Xmx160m -XX:+UseSerialGC -XX:ActiveProcessorCount=1 -XX:ReservedCodeCacheSize=32m -XX:MaxDirectMemorySize=16m -Xss512k -XX:+ExitOnOutOfMemoryError"
+# Bound glibc arena proliferation in both Java and its native engine child.
+ENV MALLOC_ARENA_MAX=2
 USER arcade
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=5 \

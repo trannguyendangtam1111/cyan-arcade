@@ -181,6 +181,44 @@ class ProfileApiTests {
 		me(session).andExpect(jsonPath("$.achievementsUnlocked").value(1));
 	}
 
+	@Test
+	void lockedAchievementsShowProgressTowardsGoalsTheScoresCanMeasure() throws Exception {
+		MockHttpSession session = Players.register(this.mockMvc);
+
+		// Catalog order: 0 First Coin, 1 Regular (10 games), 2 Arcade Rat (50), 3 Snake 25, 4 Snake 100,
+		// 5 a 512 tile in 2048 (a reported detail: not kept, so no progress).
+		achievements(session).andExpect(jsonPath("$[0].progress").value(0))
+			.andExpect(jsonPath("$[0].target").value(1))
+			.andExpect(jsonPath("$[1].progress").value(0))
+			.andExpect(jsonPath("$[1].target").value(10))
+			// What each bar counts, so it can be explained: games under Classic rules, or a Classic best.
+			.andExpect(jsonPath("$[1].goal").value("GAMES_PLAYED"))
+			.andExpect(jsonPath("$[3].goal").value("BEST_SCORE"))
+			.andExpect(jsonPath("$[3].progress").value(0))
+			.andExpect(jsonPath("$[3].target").value(25))
+			.andExpect(jsonPath("$[5].progress").doesNotExist())
+			.andExpect(jsonPath("$[5].target").doesNotExist())
+			.andExpect(jsonPath("$[5].goal").doesNotExist());
+
+		Players.play(this.mockMvc, session, "snake", 12);
+		Players.play(this.mockMvc, session, "snake", 20);
+		Players.play(this.mockMvc, session, "tetris", 3000);
+
+		achievements(session)
+			// Unlocked: nothing left to show.
+			.andExpect(jsonPath("$[0].unlocked").value(true))
+			.andExpect(jsonPath("$[0].progress").doesNotExist())
+			.andExpect(jsonPath("$[0].target").doesNotExist())
+			.andExpect(jsonPath("$[0].goal").doesNotExist())
+			// Classic games of any game, and the best Classic score of the achievement's own game.
+			.andExpect(jsonPath("$[1].progress").value(3))
+			.andExpect(jsonPath("$[2].progress").value(3))
+			.andExpect(jsonPath("$[3].unlocked").value(false))
+			.andExpect(jsonPath("$[3].progress").value(20))
+			.andExpect(jsonPath("$[4].progress").value(20))
+			.andExpect(jsonPath("$[4].target").value(100));
+	}
+
 	private ResultActions me(MockHttpSession session) throws Exception {
 		return this.mockMvc.perform(get("/api/users/me").session(session));
 	}

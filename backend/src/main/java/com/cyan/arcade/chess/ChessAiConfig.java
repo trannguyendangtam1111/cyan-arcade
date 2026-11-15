@@ -2,12 +2,15 @@ package com.cyan.arcade.chess;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.List;
 
 import com.cyan.arcade.chess.stockfish.StockfishEngineAdapter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -46,7 +49,9 @@ class ChessAiConfig {
 	 * meant from {@code backend/}, where {@code ./mvnw spring-boot:run} starts the application, but an
 	 * IDE often starts it from the repository root: so a relative path that names no binary from the
 	 * working directory is also looked for from its {@code backend/} directory. When neither has it,
-	 * the path from the working directory, for the startup warning to name.
+	 * the path for the startup warning to name: from {@code backend/} when the working directory is the
+	 * repository root (it has one), so the warning names the place the install script fills, not one
+	 * beside the repository; else from the working directory.
 	 */
 	static Path enginePath(Path workingDirectory, String configured) {
 		Path path = Path.of(configured);
@@ -60,7 +65,7 @@ class ChessAiConfig {
 				return candidate;
 			}
 		}
-		return direct;
+		return Files.isDirectory(workingDirectory.resolve("backend")) ? fromBackend : direct;
 	}
 
 	@Bean(destroyMethod = "close")
@@ -68,6 +73,33 @@ class ChessAiConfig {
 		ChessAiProperties.Engine engine = this.properties.engine();
 		return new StockfishEngineAdapter(launcher, engine.poolSize(), engine.maxWaiting(), engine.threads(),
 				engine.hashMb(), engine.acquireTimeout(), engine.readyTimeout(), engine.stopGrace());
+	}
+
+	@Bean
+	IdleEngineCleanup idleEngineCleanup(StockfishEngineAdapter engine,
+			@Value("${app.chess.engine.idle-timeout-seconds:0}") long seconds) {
+		return new IdleEngineCleanup(engine, seconds);
+	}
+
+	static class IdleEngineCleanup {
+		private final StockfishEngineAdapter engine;
+		private final Duration timeout;
+
+		IdleEngineCleanup(StockfishEngineAdapter engine, long seconds) {
+			if (seconds < 0) {
+				throw new IllegalArgumentException("Stockfish idle timeout must not be negative");
+			}
+			this.engine = engine;
+			this.timeout = Duration.ofSeconds(seconds);
+		}
+
+		@Scheduled(fixedDelay = 30000)
+		void retireIdleEngines() {
+			int retired = this.engine.evictIdle(this.timeout);
+			if (retired > 0) {
+				log.info("Released {} idle Stockfish process(es)", retired);
+			}
+		}
 	}
 
 	@EventListener(ApplicationReadyEvent.class)

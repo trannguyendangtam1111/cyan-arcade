@@ -29,6 +29,15 @@ final class ChessViews {
 	record StartRequest(@NotNull Mode mode) {
 	}
 
+	/** A lightweight archive row. Counts are plies (individual half-moves), not full move pairs. */
+	record ArchivedMatch(UUID id, Mode mode, Status status, Color playerColor, Difficulty difficulty,
+			String result, int plyCount, Instant createdAt, Instant updatedAt, Instant finishedAt) {
+	}
+
+	/** A bounded slice; no full history replay or count query is needed to list matches. */
+	record ArchivePage(List<ArchivedMatch> content, int page, int size, boolean hasNext) {
+	}
+
 	/**
 	 * @param revision the match's revision the move was chosen in; an older one is refused
 	 * @param move in UCI: {@code e2e4}, {@code e7e8q}

@@ -8,6 +8,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -46,6 +47,37 @@ class SudokuRunStore {
 			LocalDate puzzleDate) {
 	}
 
+	/**
+	 * An account's daily run of one puzzle date, for its history.
+	 * @param activeMs playing time, for a run that is over; {@code null} while it is still being played
+	 */
+	record DailyRun(LocalDate puzzleDate, Difficulty difficulty, Status status, int mistakes, int hints, int streak,
+			Long activeMs) {
+	}
+
+	/**
+	 * An account's daily runs of the puzzle dates from {@code from} to {@code to}, both included: at
+	 * most one a date (a unique index says so). One query, on that index, whatever the number of days.
+	 */
+	List<DailyRun> dailyRuns(long userId, LocalDate from, LocalDate to) {
+		return this.jdbc.sql("""
+				SELECT puzzle_date, difficulty, status, mistakes, hints, streak,
+				       CASE WHEN finished_at IS NULL THEN NULL
+				            ELSE GREATEST(0, (EXTRACT(EPOCH FROM (finished_at - started_at)) * 1000)::BIGINT - paused_ms)
+				       END AS active_ms
+				FROM sudoku_runs
+				WHERE mode = 'DAILY' AND user_id = :userId AND puzzle_date BETWEEN :from AND :to
+				ORDER BY puzzle_date""")
+			.param("userId", userId)
+			.param("from", from)
+			.param("to", to)
+			.query((row, index) -> new DailyRun(row.getObject("puzzle_date", LocalDate.class),
+					Difficulty.valueOf(row.getString("difficulty")), Status.valueOf(row.getString("status")),
+					row.getInt("mistakes"), row.getInt("hints"), row.getInt("streak"),
+					row.getObject("active_ms", Long.class)))
+			.list();
+	}
+
 	// --- Daily puzzles -------------------------------------------------------------------------------
 
 	Optional<Puzzle> findDailyPuzzle(LocalDate date) {
@@ -56,13 +88,17 @@ class SudokuRunStore {
 			.optional();
 	}
 
-	/** Stores a day's puzzle unless one is stored already: the first one stored stays. */
+	/**
+	 * Stores a day's puzzle unless one is stored already: the first one stored stays. The conflict
+	 * has no target because the number is unique too: two requests storing the same day at once
+	 * can meet on either key, and an arbiter on the date alone lets the number's clash through.
+	 */
 	void insertDailyPuzzle(LocalDate date, int puzzleNumber, Puzzle puzzle, int generatorVersion, Instant now) {
 		this.jdbc.sql("""
 				INSERT INTO sudoku_daily_puzzles (puzzle_date, puzzle_number, difficulty, seed, givens, solution,
 				                                  generator_version, created_at)
 				VALUES (:date, :number, :difficulty, :seed, :givens, :solution, :version, :now)
-				ON CONFLICT (puzzle_date) DO NOTHING
+				ON CONFLICT DO NOTHING
 				""")
 			.param("date", date)
 			.param("number", puzzleNumber)
@@ -121,6 +157,40 @@ class SudokuRunStore {
 			.optional();
 	}
 
+	/**
+	 * A run's owner and its saved pencil marks, if the run exists.
+	 * @return {@code notes} and {@code revision} are {@code null} while nothing is saved
+	 */
+	Optional<RunNotesRow> findNotes(UUID runId) {
+		return this.jdbc.sql("""
+				SELECT r.user_id, n.notes, n.revision
+				FROM sudoku_runs r LEFT JOIN sudoku_run_notes n ON n.run_id = r.id
+				WHERE r.id = :id
+				""")
+			.param("id", runId)
+			.query((row, number) -> new RunNotesRow(row.getObject("user_id", Long.class), row.getString("notes"),
+					row.getObject("revision", Integer.class)))
+			.optional();
+	}
+
+	/** Saves a run's pencil marks at a revision (the caller holds the run's lock and checked the last one). */
+	void saveNotes(UUID runId, String notes, int revision, Instant now) {
+		this.jdbc.sql("""
+				INSERT INTO sudoku_run_notes (run_id, notes, revision, updated_at)
+				VALUES (:id, :notes, :revision, :now)
+				ON CONFLICT (run_id) DO UPDATE SET notes = EXCLUDED.notes, revision = EXCLUDED.revision,
+				                                   updated_at = EXCLUDED.updated_at
+				""")
+			.param("id", runId)
+			.param("notes", notes)
+			.param("revision", revision)
+			.param("now", timestamp(now))
+			.update();
+	}
+
+	record RunNotesRow(Long userId, String notes, Integer revision) {
+	}
+
 	Optional<SudokuRun> findBySession(UUID sessionId) {
 		return this.jdbc.sql("SELECT " + COLUMNS + " FROM sudoku_runs WHERE session_id = :sessionId")
 			.param("sessionId", sessionId)
@@ -137,24 +207,32 @@ class SudokuRunStore {
 			.optional();
 	}
 
-	/** The player's practice game in progress, if any: the latest one. */
-	Optional<SudokuRun> findPracticeInProgress(Owner owner) {
-		return this.jdbc.sql("SELECT " + COLUMNS + " FROM sudoku_runs WHERE mode = 'PRACTICE' AND status = 'PLAYING' AND "
+	/** The player's practice (or archive) game in progress, if any: the latest one. */
+	Optional<SudokuRun> findInProgress(Owner owner, Mode mode) {
+		return this.jdbc.sql("SELECT " + COLUMNS + " FROM sudoku_runs WHERE mode = :mode AND status = 'PLAYING' AND "
 				+ ownerCondition(owner) + " ORDER BY started_at DESC LIMIT 1")
+			.param("mode", mode.name())
 			.params(ownerParams(owner))
 			.query(SudokuRunStore::map)
 			.optional();
 	}
 
-	/** Leaves the player's practice games in progress: they count as played, never as completed. */
-	int abandonPractice(Owner owner, Instant now) {
+	/**
+	 * Leaves the player's practice (or archive) games in progress: a ranked practice game counts as
+	 * played, never as completed. Daily runs are never left this way.
+	 */
+	int abandon(Owner owner, Mode mode, Instant now) {
+		if (mode == Mode.DAILY) {
+			throw new IllegalArgumentException("A daily run is never abandoned");
+		}
 		return this.jdbc.sql("""
 				UPDATE sudoku_runs
 				SET status = 'ABANDONED', finished_at = :now,
 				    paused_ms = paused_ms + CASE WHEN paused_at IS NULL THEN 0
 				                                 ELSE (EXTRACT(EPOCH FROM (:now - paused_at)) * 1000)::BIGINT END,
 				    paused_at = NULL
-				WHERE mode = 'PRACTICE' AND status = 'PLAYING' AND""" + " " + ownerCondition(owner))
+				WHERE mode = :mode AND status = 'PLAYING' AND""" + " " + ownerCondition(owner))
+			.param("mode", mode.name())
 			.param("now", timestamp(now))
 			.params(ownerParams(owner))
 			.update();
@@ -201,6 +279,34 @@ class SudokuRunStore {
 					row.getInt("mistakes"), row.getInt("hints"), row.getLong("active_ms"),
 					row.getObject("puzzle_date", LocalDate.class)))
 			.list();
+	}
+
+	/**
+	 * Makes one player's Practice (or Archive) starts wait for each other until the current transaction
+	 * ends, so two starts at once cannot both find no game in play and both leave one in play. A
+	 * transaction-scoped advisory lock on the player and the mode alone (account or guest): other
+	 * players, and the player's starts of the other mode, are never held up, and there is no row to lock
+	 * before the player's first game.
+	 */
+	void lockStarts(Owner owner, Mode mode) {
+		if (mode == Mode.DAILY) {
+			throw new IllegalArgumentException("A daily run is kept one per day by its unique index");
+		}
+		String player = (owner.userId() != null) ? "account:" + owner.userId() : "guest:" + owner.playerId();
+		this.jdbc.sql("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))")
+			.param("key", "sudoku-" + mode.name().toLowerCase(Locale.ROOT) + "-start:" + player)
+			.query((row, index) -> 0)
+			.list();
+	}
+
+	/** Whether the player has a run of the puzzle with these clues, in any mode. */
+	boolean hasPlayed(Owner owner, String givens) {
+		return this.jdbc.sql("SELECT EXISTS (SELECT 1 FROM sudoku_runs WHERE givens = :givens AND " + ownerCondition(owner)
+				+ ")")
+			.param("givens", givens)
+			.params(ownerParams(owner))
+			.query(Boolean.class)
+			.single();
 	}
 
 	/** Forgets relaxed games started before then: they count for nothing once left. */

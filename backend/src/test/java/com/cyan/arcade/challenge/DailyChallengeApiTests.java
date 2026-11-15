@@ -97,6 +97,22 @@ class DailyChallengeApiTests {
 	}
 
 	@Test
+	void eachGamesChallengeSaysWhetherOnlyItsClassicRunsCount() throws Exception {
+		// Tetris has Sprint, Ultra and Challenge stages, which count for nothing here; every Sudoku
+		// board shares Classic progression; Flappy Bird has Classic alone.
+		given(this.today, "tetris", "Tetris one", ChallengeGoal.PLAY, null, 1, 20);
+		given(this.today, "sudoku", "Sudoku one", ChallengeGoal.PLAY, null, 1, 20);
+		given(this.today, "flappy-bird", "Flappy one", ChallengeGoal.PLAY, null, 1, 20);
+		MockHttpSession session = Players.register(this.mockMvc);
+
+		for (ResultActions list : List.of(this.mockMvc.perform(get("/api/daily-challenges")), mine(session))) {
+			list.andExpect(jsonPath("$.challenges[?(@.game.slug == 'tetris')].game.classicRunsOnly", contains(true)))
+				.andExpect(jsonPath("$.challenges[?(@.game.slug == 'sudoku')].game.classicRunsOnly", contains(false)))
+				.andExpect(jsonPath("$.challenges[?(@.game.slug == 'flappy-bird')].game.classicRunsOnly", contains(false)));
+		}
+	}
+
+	@Test
 	void onlyTodaysChallengesAreListed() throws Exception {
 		given(this.today.minusDays(1), "snake", "Yesterday", ChallengeGoal.PLAY, null, 1, 20);
 		given(this.today, "snake", "Today", ChallengeGoal.PLAY, null, 1, 20);

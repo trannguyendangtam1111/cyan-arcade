@@ -1,5 +1,14 @@
 import type { GameAI } from '@/games/shared/ai'
-import { advance, legalMoves, samePoint, step, type Direction, type Point, type SnakeState } from '../engine/snakeEngine'
+import {
+  advance,
+  hasWalls,
+  legalMoves,
+  samePoint,
+  step,
+  type Direction,
+  type Point,
+  type SnakeState,
+} from '../engine/snakeEngine'
 import { buildHamiltonianCycle, cycleDistance, cycleIndex, type HamiltonianCycle } from './hamiltonian'
 import { createGrid, reachableArea, shortestPath } from './pathfinding'
 
@@ -15,6 +24,11 @@ import { createGrid, reachableArea, shortestPath } from './pathfinding'
  * 2. Search (fallback). For positions where the body is not lined up along the loop, or boards with
  *    no loop (both sides odd): take the shortest path to the food only if, after eating, the head
  *    could still reach the tail; otherwise pick the move that keeps the most space open.
+ *
+ * Maps with walls always use search: the loop is built for an open board and would run through
+ * walls. Walls are obstacles to every search, so the AI never plans a route through one. When the
+ * food is out of safe reach on a map, the AI varies between equally safe moves so that it cannot
+ * circle the same loop forever. On a map it plays well but is not guaranteed to fill the board.
  *
  * Decisions depend only on the state passed in. Nothing is scripted or remembered between calls.
  */
@@ -44,7 +58,7 @@ export function createSnakeAi(): SnakeAI {
     const legal = legalMoves(state)
     if (legal.length === 0) return { action: state.direction, strategy: 'trapped' }
 
-    const cycle = cycleFor(state.width, state.height)
+    const cycle = hasWalls(state) ? null : cycleFor(state.width, state.height)
     return (cycle && decideOnLoop(state, cycle, legal)) ?? decideBySearch(state, legal)
   }
 
@@ -90,39 +104,58 @@ function decideOnLoop(state: SnakeState, cycle: HamiltonianCycle, legal: Directi
 
 function decideBySearch(state: SnakeState, legal: Direction[]): SnakeDecision {
   const { snake, food, width, height } = state
+  const walls = state.walls ?? []
 
   if (food) {
     // The tail cell is free to enter: it will have moved by the time the head gets there.
-    const path = shortestPath(createGrid(width, height, snake.slice(0, -1)), snake[0], food)
+    const path = shortestPath(createGrid(width, height, walls.concat(snake.slice(0, -1))), snake[0], food)
     if (path && path.length > 0 && legal.includes(path[0])) {
       let future = snake as readonly Point[]
       path.forEach((direction, index) => {
         future = advance(future, direction, index === path.length - 1)
       })
-      if (canReachTail(future, width, height)) return { action: path[0], strategy: 'path' }
+      if (canReachTail(future, width, height, walls)) return { action: path[0], strategy: 'path' }
     }
   }
 
   // No safe route to the food: keep as much room as possible and stay connected to the tail.
-  let best: { direction: Direction; reachesTail: boolean; area: number } | null = null
+  const options: { direction: Direction; reachesTail: boolean; area: number }[] = []
+  let best: (typeof options)[number] | null = null
   for (const direction of legal) {
     const grow = food !== null && samePoint(step(snake[0], direction), food)
     const future = advance(snake, direction, grow)
-    const reachesTail = canReachTail(future, width, height)
-    const area = reachableArea(createGrid(width, height, future.slice(0, -1)), future[0])
+    const reachesTail = canReachTail(future, width, height, walls)
+    const area = reachableArea(createGrid(width, height, walls.concat(future.slice(0, -1))), future[0])
+    const option = { direction, reachesTail, area }
+    options.push(option)
 
     const better =
       best === null ||
       (reachesTail && !best.reachesTail) ||
       (reachesTail === best.reachesTail && area > best.area)
-    if (better) best = { direction, reachesTail, area }
+    if (better) best = option
+  }
+
+  // Maps only: with the food out of reach, always taking the first equally good move makes the whole
+  // position repeat (the snake circles a loop its own body walls off, and never eats again). Varying
+  // the choice among the equally safe moves with the step count breaks that loop. Only moves that keep
+  // the tail reachable and the most room are candidates, so this is exactly as safe as before.
+  if (walls.length > 0 && best!.reachesTail) {
+    const equals = options.filter((option) => option.reachesTail && option.area === best!.area)
+    if (equals.length > 1) return { action: equals[varietyIndex(state, equals.length)].direction, strategy: 'survive' }
   }
   return { action: best!.direction, strategy: 'survive' }
 }
 
+/** A choice in [0, count) that changes from step to step but depends only on the state. */
+function varietyIndex(state: SnakeState, count: number): number {
+  const hash = Math.imul((state.steps ^ state.seed) >>> 0, 0x9e3779b1) >>> 0
+  return (hash >>> 16) % count
+}
+
 /** A snake whose head can reach its tail always has an escape route: it can follow the tail. */
-function canReachTail(snake: readonly Point[], width: number, height: number): boolean {
+function canReachTail(snake: readonly Point[], width: number, height: number, walls: readonly Point[]): boolean {
   if (snake.length < 3) return true
-  const grid = createGrid(width, height, snake.slice(0, -1))
+  const grid = createGrid(width, height, walls.concat(snake.slice(0, -1)))
   return shortestPath(grid, snake[0], snake[snake.length - 1]) !== null
 }

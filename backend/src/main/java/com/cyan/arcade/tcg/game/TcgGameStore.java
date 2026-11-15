@@ -8,7 +8,7 @@ import java.util.stream.Collectors;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
-/** Reads trading card games and their rarities. Rows are written by dataset imports only. */
+/** Reads trading card games and their rarities. Imports own content; pilot administration controls visibility. */
 @Repository
 class TcgGameStore {
 

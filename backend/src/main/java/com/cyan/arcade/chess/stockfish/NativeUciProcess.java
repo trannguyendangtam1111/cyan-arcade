@@ -11,7 +11,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ArrayBlockingQueue;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -20,6 +23,11 @@ import java.util.concurrent.TimeUnit;
  * the protocol is on standard output only.
  */
 public final class NativeUciProcess implements UciProcess {
+
+	private static final Logger log = LoggerFactory.getLogger(NativeUciProcess.class);
+
+	/** Bound retained protocol lines as well as the length of each line. */
+	static final int MAX_PENDING_LINES = 128;
 
 	/** Put in the queue when the output ends: nothing more will come. */
 	private static final String END = new String("<end of output>");
@@ -31,16 +39,20 @@ public final class NativeUciProcess implements UciProcess {
 
 	private final BufferedWriter input;
 
-	private final BlockingQueue<String> output = new LinkedBlockingQueue<>();
+	private final BlockingQueue<String> output = new ArrayBlockingQueue<>(MAX_PENDING_LINES);
+
+	private final Thread reader;
 
 	private volatile boolean ended;
 
-	private NativeUciProcess(Process process) {
+	private volatile boolean closing;
+
+	NativeUciProcess(Process process) {
 		this.process = process;
 		this.input = new BufferedWriter(new OutputStreamWriter(process.getOutputStream(), StandardCharsets.US_ASCII));
-		Thread reader = new Thread(this::pump, "stockfish-output-" + process.pid());
-		reader.setDaemon(true);
-		reader.start();
+		this.reader = new Thread(this::pump, "stockfish-output");
+		this.reader.setDaemon(true);
+		this.reader.start();
 	}
 
 	/**
@@ -67,14 +79,19 @@ public final class NativeUciProcess implements UciProcess {
 				new InputStreamReader(this.process.getInputStream(), StandardCharsets.US_ASCII))) {
 			String line;
 			while ((line = reader.readLine()) != null) {
-				this.output.add((line.length() > MAX_LINE) ? line.substring(0, MAX_LINE) : line);
+				if (!this.closing) {
+					this.output.put((line.length() > MAX_LINE) ? line.substring(0, MAX_LINE) : line);
+				}
 			}
+		}
+		catch (InterruptedException ex) {
+			Thread.currentThread().interrupt();
 		}
 		catch (IOException ex) {
 			// The process went away; END below says so.
 		}
 		finally {
-			this.output.add(END);
+			this.output.offer(END);
 		}
 	}
 
@@ -96,7 +113,7 @@ public final class NativeUciProcess implements UciProcess {
 			throw new EngineException(EngineException.Kind.CRASHED, "The engine has exited");
 		}
 		String line = this.output.poll(timeout.toNanos(), TimeUnit.NANOSECONDS);
-		if (line == END) {
+		if (line == END || (line == null && !this.process.isAlive())) {
 			this.ended = true;
 			throw new EngineException(EngineException.Kind.CRASHED, "The engine has exited");
 		}
@@ -120,25 +137,70 @@ public final class NativeUciProcess implements UciProcess {
 	}
 
 	@Override
-	public void destroy() {
-		if (!this.process.isAlive()) {
-			return;
-		}
+	public synchronized void destroy() {
+		// Clear temporarily so even an interrupted search can reap its child, then restore it.
+		boolean interrupted = Thread.interrupted();
+		this.closing = true;
+		this.ended = true;
+		// Drain output during graceful quit instead of leaving the engine blocked on stdout.
+		this.output.clear();
 		try {
-			send("quit");
-		}
-		catch (EngineException | UncheckedIOException ex) {
-			// Already gone.
-		}
-		try {
-			if (!this.process.waitFor(500, TimeUnit.MILLISECONDS)) {
-				this.process.destroyForcibly();
+			if (this.process.isAlive()) {
+				try {
+					send("quit");
+				}
+				catch (EngineException | UncheckedIOException ex) {
+					// Already gone.
+				}
+				if (!this.process.waitFor(500, TimeUnit.MILLISECONDS)) {
+					this.process.destroyForcibly();
+					if (!this.process.waitFor(1000, TimeUnit.MILLISECONDS)) {
+						log.warn("Stockfish did not exit within the forced-termination deadline");
+					}
+				}
 			}
 		}
 		catch (InterruptedException ex) {
+			interrupted = true;
 			this.process.destroyForcibly();
-			Thread.currentThread().interrupt();
+			try {
+				this.process.waitFor(1000, TimeUnit.MILLISECONDS);
+			}
+			catch (InterruptedException again) {
+				interrupted = true;
+			}
 		}
+		finally {
+			this.reader.interrupt();
+			for (java.io.Closeable stream : new java.io.Closeable[] {
+					this.input, this.process.getInputStream(), this.process.getErrorStream() }) {
+				try {
+					stream.close();
+				}
+				catch (IOException ex) {
+					// A closed pipe must not prevent closing the remaining streams.
+				}
+			}
+			try {
+				this.reader.join(1000);
+			}
+			catch (InterruptedException ex) {
+				interrupted = true;
+			}
+			this.output.clear();
+			this.output.offer(END);
+			if (interrupted) {
+				Thread.currentThread().interrupt();
+			}
+		}
+	}
+
+	int pendingLines() {
+		return this.output.size();
+	}
+
+	boolean readerAlive() {
+		return this.reader.isAlive();
 	}
 
 }

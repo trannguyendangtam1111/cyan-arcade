@@ -72,6 +72,13 @@ class TcgDatasetValidator {
 					problems.add("%s card '%s' has the unknown rarity '%s'".formatted(where, card.key(),
 							card.rarity()));
 				}
+				// Only a game that says so may have cards shown as text; any other card needs its picture.
+				if (card.imageUrl() == null && !dataset.game().cardImagesOptional()) {
+					problems.add("%s card '%s' has no image".formatted(where, card.key()));
+				}
+				if (card.imageUrl() == null && card.thumbnailUrl() != null) {
+					problems.add("%s card '%s' has a thumbnail but no image".formatted(where, card.key()));
+				}
 			}
 			for (Pack pack : set.packs()) {
 				problems.addAll(packProblems(set, pack, rarities));

@@ -2,7 +2,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { GameModule, GameProps } from '@/games/types'
 import { getRecentGameSlugs } from '@/lib/recentGames'
-import { CSRF_TOKEN, SESSION_ID, challengesFixture, mockApi, mockProblem, pixel } from '@/test/mockApi'
+import { CSRF_TOKEN, SESSION_ID, challengesFixture, mockApi, mockJson, mockProblem, pixel } from '@/test/mockApi'
 import { renderRoute } from '@/test/renderWithProviders'
 
 // Registers a fake implementation for "snake" only. This proves the platform can host any game
@@ -114,7 +114,7 @@ describe('score keeping on the game page', () => {
     renderRoute('/games/snake')
 
     fireEvent.click(await screen.findByRole('button', { name: 'Start run' }))
-    await waitFor(() => expect(postsTo(fetchSpy)).toEqual([['/api/game-sessions', { gameSlug: 'snake' }]]))
+    await waitFor(() => expect(postsTo(fetchSpy)).toEqual([['/api/game-sessions', { gameSlug: 'snake', mode: 'classic' }]]))
     expect(screen.queryByText(/saved/i)).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Finish run' }))
@@ -122,7 +122,7 @@ describe('score keeping on the game page', () => {
     expect(await screen.findByText(/saved\./)).toHaveTextContent('Score 42 saved.')
     expect(screen.getByRole('link', { name: /view leaderboard/i })).toHaveAttribute('href', '/leaderboard?game=snake')
     expect(postsTo(fetchSpy)).toEqual([
-      ['/api/game-sessions', { gameSlug: 'snake' }],
+      ['/api/game-sessions', { gameSlug: 'snake', mode: 'classic' }],
       [`/api/game-sessions/${SESSION_ID}/finish`, { score: 42, details: {} }],
     ])
     // Both requests carry the CSRF token the server handed out, and the guest id: a guest's run can
@@ -262,12 +262,22 @@ describe('score keeping on the game page', () => {
     expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
   })
 
-  it('shows no second reward when a retry finds the score already saved', async () => {
+  it('recovers and displays the original rewards when a retry finds the score already saved', async () => {
     let attempts = 0
     mockApi({
       user: pixel,
       handlers: [
         ({ path }) => {
+          if (path.endsWith('/result')) return mockJson({
+            sessionId: SESSION_ID, gameSlug: 'snake', mode: 'classic', score: 42,
+            durationMs: 1000, recordedAt: '2026-09-30T10:00:01Z',
+            rewards: {
+              xpEarned: 185, coinsEarned: 240, personalBest: true,
+              achievements: [{ code: 'FIRST_GAME', name: 'First Coin', description: 'Finish a game.', xp: 50, coins: 100 }],
+              bonuses: [{ type: 'DAILY_CHALLENGE', title: 'Snack Time', xp: 35, coins: 70 }],
+              totalXp: 185, level: 2, leveledUp: true, coinBalance: 240,
+            },
+          })
           if (!path.endsWith('/finish')) return undefined
           attempts++
           // The first answer is lost; by the retry, the server already has the score.
@@ -283,8 +293,41 @@ describe('score keeping on the game page', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Try again' }))
 
     expect(await screen.findByText(/already saved/)).toHaveTextContent('Score 42 was already saved.')
-    expect(screen.queryByText(/XP/)).not.toBeInTheDocument()
+    expect(await screen.findByText('+185 XP')).toBeInTheDocument()
+    expect(screen.getByText('+240 coins')).toBeInTheDocument()
+    expect(screen.getByText('Achievement: First Coin')).toBeInTheDocument()
+    expect(screen.getByText('Daily challenge: Snack Time')).toBeInTheDocument()
+    expect(screen.getByText('Level 2!')).toBeInTheDocument()
+    expect(attempts).toBe(2)
     expect(screen.queryByRole('link', { name: /log in to earn/i })).not.toBeInTheDocument()
+  })
+
+  it('keeps the score saved when recovery fails and offers a result-only retry', async () => {
+    let reads = 0
+    const fetchSpy = mockApi({
+      user: pixel,
+      handlers: [({ path }) => {
+        if (path.endsWith('/finish')) return mockProblem(409, 'SESSION_ALREADY_FINISHED', 'done')
+        if (!path.endsWith('/result')) return undefined
+        reads++
+        return reads === 1 ? mockProblem(503, 'INTERNAL_ERROR', 'unavailable') : mockJson({
+          sessionId: SESSION_ID, gameSlug: 'snake', mode: 'classic', score: 42,
+          durationMs: 1000, recordedAt: '2026-09-30T10:00:01Z', rewards: null,
+        })
+      }],
+    })
+    renderRoute('/games/snake')
+    fireEvent.click(await screen.findByRole('button', { name: 'Start run' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Finish run' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Retry result details' }))
+    await waitFor(() => expect(reads).toBe(2))
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Retry result details' })).not.toBeInTheDocument())
+    expect(screen.getByText(/already saved/)).toHaveTextContent('Score 42 was already saved.')
+    expect(screen.queryByText(/couldn't be saved/)).not.toBeInTheDocument()
+    expect(postsTo(fetchSpy).filter(([path]) => path.endsWith('/finish'))).toHaveLength(1)
+    const gets = fetchSpy.mock.calls.filter(([path]) => String(path).endsWith('/result'))
+    expect(gets).toHaveLength(2)
+    expect(gets.every(([, init]) => !init?.method || init.method === 'GET')).toBe(true)
   })
 
   it('sends nothing for a result that has no started run', async () => {
@@ -307,5 +350,29 @@ describe('score keeping on the game page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Start run' }))
 
     expect(screen.queryByText(/saved\./)).not.toBeInTheDocument()
+  })
+})
+
+describe('score keeping and game modes', () => {
+  it('saves nothing when the server opens the run in another mode than the one chosen', async () => {
+    const fetchSpy = mockApi({
+      handlers: [
+        // A server that answers with a mode the game did not ask for (the game asks for Classic).
+        ({ path, method }) =>
+          method === 'POST' && path === '/api/game-sessions'
+            ? mockJson({ id: SESSION_ID, gameSlug: 'snake', mode: 'sprint', startedAt: '2026-09-30T10:00:00Z' }, 201)
+            : undefined,
+      ],
+    })
+    renderRoute('/games/snake')
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Start run' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Finish run' }))
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      "This game was started in a different mode than the one chosen, so your score of 42 wasn't saved.",
+    )
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
+    expect(postsTo(fetchSpy)).toEqual([['/api/game-sessions', { gameSlug: 'snake', mode: 'classic' }]])
   })
 })

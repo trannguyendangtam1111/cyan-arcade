@@ -15,8 +15,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 
 /**
- * How often one account may ask the engine for something (a hint, an engine move, an evaluation, a
- * review): at most {@code app.chess.requests-per-minute} in any minute. Counts are in memory and per
+ * How often one account may ask the engine for something (a hint, an evaluation that needs a search, a
+ * review; not Stockfish's own moves in a game): at most {@code app.chess.requests-per-minute} in any
+ * minute. Counts are in memory and per
  * instance, like the login limiter: a brake on one account hogging the engines, not a quota system.
  */
 @Component

@@ -24,14 +24,55 @@ final class SudokuViews {
 	}
 
 	/**
+	 * One page of the Daily leaderboard of one puzzle, ranked as every board: each player once with
+	 * their best score, highest first.
+	 * @param date the puzzle's UTC date, whose board this is
+	 * @param today today's UTC puzzle date, the latest board there is
+	 * @param nextPuzzleAt when today's puzzle gives way to the next one
+	 * @param myRank the caller's rank on this board, or {@code null} when they are not on it
+	 * @param myScore the caller's score on this board, or {@code null} likewise
+	 */
+	record DailyLeaderboardResponse(LocalDate date, int puzzleNumber, Difficulty difficulty, LocalDate today,
+			Instant nextPuzzleAt, List<BoardEntry> entries, int page,
+			int size, long totalEntries, int totalPages, Long myRank, Integer myScore) {
+	}
+
+	/**
+	 * One player on a Daily board, written as on every leaderboard.
+	 * @param rank 1 for the best; no two entries share one (equal scores: whoever set it first)
+	 * @param player who set the score, or {@code null} for a guest
+	 * @param you whether this entry is the caller's
+	 */
+	record BoardEntry(long rank, BoardPlayer player, int score, long durationMs, Instant achievedAt, boolean you) {
+	}
+
+	/** An account as a leaderboard shows it: its username, the name it shows and its avatar. */
+	record BoardPlayer(String username, String displayName, String avatar) {
+	}
+
+	/**
 	 * Today's puzzle (without its digits until a run starts), the rules, and the caller's runs.
 	 * @param daily the caller's run of today's puzzle, or {@code null}
 	 * @param practice the caller's practice game in progress, or {@code null}
+	 * @param archive the caller's replay of a past daily puzzle in progress, or {@code null}
 	 * @param hintPercents the score multiplier, in percent, by hints taken (0 to 3)
 	 */
 	record TodayResponse(int puzzleNumber, LocalDate date, Difficulty difficulty, Instant nextPuzzleAt, int maxHints,
 			int mistakeLimit, List<Integer> hintPercents, List<DifficultyView> difficulties, RunResponse daily,
-			RunResponse practice) {
+			RunResponse practice, RunResponse archive) {
+	}
+
+	/**
+	 * A past Daily puzzle as the archive shows it: the public part only. Its solution stays on the
+	 * server, as for every run, until a replay of it is over.
+	 * @param date its UTC date, before today
+	 * @param givens the clues, 81 characters, {@code 0} for an empty cell
+	 */
+	record ArchivePuzzleResponse(LocalDate date, int puzzleNumber, Difficulty difficulty, String givens) {
+	}
+
+	/** @param date the UTC date of the past Daily puzzle to replay, unranked */
+	record StartArchiveRequest(@NotNull LocalDate date) {
 	}
 
 	record DifficultyView(Difficulty id, String label, int level, int baseScore, int parSeconds) {
@@ -49,11 +90,13 @@ final class SudokuViews {
 	 * @param solution the solution, once the run is over; {@code null} before
 	 * @param result once solved or failed: the score and what the run reports with it
 	 * @param scored for a ranked run, whether its score has been submitted
+	 * @param notesSync whether the run's pencil marks are kept on the server ({@code /runs/{id}/notes}):
+	 * for a signed-in player's runs; a guest's stay in their browser
 	 */
 	record RunResponse(UUID id, String mode, boolean ranked, Difficulty difficulty, Integer puzzleNumber,
 			LocalDate date, String status, String givens, String values, List<Integer> revealed, List<Integer> wrong,
 			int mistakes, String mistakeRule, int mistakeLimit, int hintsUsed, int hintsLeft, List<HintTaken> hints,
-			long elapsedMs, boolean paused, String solution, ResultView result, boolean scored) {
+			long elapsedMs, boolean paused, String solution, ResultView result, boolean scored, boolean notesSync) {
 	}
 
 	record HintTaken(HintType type, int cell) {
@@ -80,6 +123,43 @@ final class SudokuViews {
 	 */
 	record HintView(HintType type, int cell, int digit, Technique technique, List<String> explanation,
 			List<Integer> highlight, List<String> eliminations) {
+	}
+
+	/**
+	 * A signed-in player's Daily Sudoku over the last {@value DailyHistory#DAYS} UTC dates, from the
+	 * server's own records of their runs.
+	 * @param from the first date shown
+	 * @param today today's UTC date, the last one shown
+	 * @param days one a date, oldest first, from {@code from} to {@code today}
+	 */
+	record DailyHistoryResponse(LocalDate from, LocalDate today, List<HistoryDay> days) {
+	}
+
+	/**
+	 * One UTC date of a player's Daily history.
+	 * @param puzzleNumber the Daily's number; {@code null} for a date before the first Daily
+	 * @param difficulty the day's puzzle's; {@code null} for a date with no Daily
+	 * @param seconds playing time of a completed or failed run; {@code null} otherwise
+	 * @param mistakes of the player's run, {@code null} without one (also {@code hints})
+	 * @param streak for a completed run, the Daily streak it made; {@code null} otherwise
+	 */
+	record HistoryDay(LocalDate date, Integer puzzleNumber, Difficulty difficulty, DayStatus status, Integer seconds,
+			Integer mistakes, Integer hints, Integer streak) {
+	}
+
+	/** What a player did with a date's Daily. */
+	enum DayStatus {
+
+		COMPLETED, FAILED,
+
+		/** Started and not over yet: it can still be finished. */
+		IN_PROGRESS,
+
+		NOT_ATTEMPTED,
+
+		/** A date before the first Daily Sudoku. */
+		NO_PUZZLE
+
 	}
 
 	/**
@@ -116,6 +196,29 @@ final class SudokuViews {
 	}
 
 	record MovesRequest(@NotEmpty @Size(max = 81) List<@Valid @NotNull MoveRequest> moves) {
+	}
+
+	/** One cell's pencil marks: its candidate digits, 1-9, each once. */
+	record NoteCell(@NotNull @Min(0) @Max(80) Integer cell,
+			@NotNull @Size(min = 1, max = 9) List<@NotNull @Min(1) @Max(9) Integer> digits) {
+	}
+
+	/**
+	 * A run's pencil marks as saved for its signed-in player: the cells that have any, in order.
+	 * @param revision 1 for the first save, one more for each after; 0 while nothing is saved
+	 */
+	record NotesResponse(int revision, List<NoteCell> cells) {
+	}
+
+	/**
+	 * Replaces a run's pencil marks with these, if they are still at {@code baseRevision} (the revision
+	 * the device last saw); otherwise 409 {@code NOTES_STALE} and nothing changes.
+	 * @param baseCells optional: the marks the device expects at {@code baseRevision}; when the server
+	 * holds others there, the save is stale too
+	 */
+	record SaveNotesRequest(@NotNull @Min(0) Integer baseRevision,
+			@NotNull @Size(max = 81) List<@Valid @NotNull NoteCell> cells,
+			@Size(max = 81) List<@Valid @NotNull NoteCell> baseCells) {
 	}
 
 	/** @param cell for a reveal, the chosen cell; leave out to let the hint choose */

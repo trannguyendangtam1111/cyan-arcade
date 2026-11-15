@@ -24,11 +24,21 @@ export interface Notice {
   id: number
   text: string
   tone: 'info' | 'error'
+  placement: 'board' | 'above-board'
 }
 
 const NO_TARGETS = new Map<string, Target>()
 
 const sideLabel = (side: Side) => (side === 'WHITE' ? 'White' : 'Black')
+
+interface SyncRequest {
+  /** null reads the current game, including a new game whose response was lost. */
+  matchId: string | null
+  message: string
+}
+
+const SYNCED = 'The latest game was loaded. No action was repeated. Check the board before trying again.'
+const uncertain = (error: unknown) => !(error instanceof ApiError) || error.code === NETWORK_ERROR || error.status >= 500
 
 /**
  * A two-player game of chess on this device, played on the server. The server answers every action
@@ -53,9 +63,13 @@ export function useChessGame(onFirstMove: () => void) {
   /** Stockfish's last move failed; it is asked again only when the player says so. */
   const [engineFailed, setEngineFailed] = useState(false)
   const [engineThinking, setEngineThinking] = useState(false)
+  const [recovery, setRecovery] = useState<'syncing' | 'failed' | null>(null)
 
   const matchRef = useRef<MatchView | null>(null)
   const busyRef = useRef(false)
+  const pendingSync = useRef<SyncRequest | null>(null)
+  const operation = useRef(0)
+  const mounted = useRef(true)
   const noticeId = useRef(0)
   const firstMoveCalled = useRef<string | null>(null)
   const onFirstMoveRef = useRef(onFirstMove)
@@ -64,6 +78,8 @@ export function useChessGame(onFirstMove: () => void) {
   }, [onFirstMove])
 
   const show = useCallback((next: MatchView) => {
+    // A delayed read must never roll a match back, including after undo (which raises revision).
+    if (matchRef.current?.id === next.id && matchRef.current.revision > next.revision) return false
     matchRef.current = next
     setMatch(next)
     if (next.history.length > 0 && firstMoveCalled.current !== next.id) {
@@ -71,12 +87,74 @@ export function useChessGame(onFirstMove: () => void) {
       // Only when this page played it: picking up a match after a reload is not a new game.
       if (next.history.length === 1) onFirstMoveRef.current()
     }
+    return true
   }, [])
 
-  const say = useCallback((text: string, tone: Notice['tone'] = 'error') => {
+  const say = useCallback((text: string, tone: Notice['tone'] = 'error', placement: Notice['placement'] = 'board') => {
     noticeId.current += 1
-    setNotice({ id: noticeId.current, text, tone })
+    setNotice({ id: noticeId.current, text, tone, placement })
   }, [])
+
+  const isCurrent = useCallback((token: number) => mounted.current && operation.current === token, [])
+  const invalidateRequests = useCallback(() => {
+    mounted.current = false
+    operation.current++
+    busyRef.current = false
+  }, [])
+
+  /** Read only. An uncertain request is never saved as a command to replay. */
+  const reconcile = useCallback(async (request: SyncRequest, token: number) => {
+    pendingSync.current = request
+    setRecovery('syncing')
+    setSelected(null)
+    setPromotion(null)
+    setHint(null)
+    setNotice(null)
+    try {
+      let fresh = request.matchId ? await fetchMatch(request.matchId) : await fetchCurrentMatch()
+      if (!isCurrent(token)) return false
+      // Another tab may have replaced this game with a new one.
+      if (fresh?.status === 'ABANDONED' && fresh.mode !== 'ANALYSIS') {
+        fresh = (await fetchCurrentMatch()) ?? fresh
+        if (!isCurrent(token)) return false
+      }
+      if (fresh) {
+        const changedGame = fresh.id !== matchRef.current?.id
+        if (!show(fresh)) throw new Error('The server returned an older revision')
+        if (changedGame) setEngineFailed(false)
+      } else {
+        matchRef.current = null
+        setMatch(null)
+      }
+      pendingSync.current = null
+      setRecovery(null)
+      setLoadError(false)
+      say(fresh ? request.message : 'No saved game was found. No action was repeated. You can start a new game.', 'info', 'above-board')
+      return true
+    } catch {
+      if (isCurrent(token)) setRecovery('failed')
+      return false
+    } finally {
+      if (isCurrent(token)) setLoading(false)
+    }
+  }, [isCurrent, say, show])
+
+  const sync = useCallback(async (request: SyncRequest) => {
+    if (busyRef.current || !mounted.current) return false
+    const token = ++operation.current
+    busyRef.current = true
+    setBusy(true)
+    try {
+      return await reconcile(request, token)
+    } finally {
+      if (isCurrent(token)) {
+        busyRef.current = false
+        setBusy(false)
+      }
+    }
+  }, [isCurrent, reconcile])
+
+  const retrySync = useCallback(() => pendingSync.current ? sync(pendingSync.current) : Promise.resolve(false), [sync])
 
   // --- Loading -------------------------------------------------------------------------------------
 
@@ -84,49 +162,74 @@ export function useChessGame(onFirstMove: () => void) {
    * The player's match to pick up, else a new one. State changes only once the server has answered,
    * and not at all once the page has gone (no match is started for a page that is no longer there).
    */
-  const fetchOrStart = useCallback(
-    (signal?: AbortSignal) =>
-      fetchCurrentMatch(signal)
-        .then((current) => {
-          if (current && current.status !== 'ABANDONED') return current
-          if (signal?.aborted) throw new DOMException('Left', 'AbortError')
-          return startMatch()
-        })
-        .then((usable) => {
-          firstMoveCalled.current = usable.history.length > 0 ? usable.id : null
-          show(usable)
-          setLoadError(false)
-          setLoading(false)
-        })
-        .catch((error: unknown) => {
-          if (error instanceof DOMException && error.name === 'AbortError') return
-          setLoadError(true)
-          setLoading(false)
-        }),
-    [show],
-  )
+  const fetchOrStart = useCallback(async (signal?: AbortSignal) => {
+    const token = ++operation.current
+    let creating = false
+    try {
+      let usable = await fetchCurrentMatch(signal)
+      if (!isCurrent(token) || signal?.aborted) return
+      if (!usable || usable.status === 'ABANDONED') {
+        creating = true
+        busyRef.current = true
+        setBusy(true)
+        usable = await startMatch()
+      }
+      if (!isCurrent(token) || signal?.aborted) return
+      firstMoveCalled.current = usable.history.length > 0 ? usable.id : null
+      show(usable)
+      setLoadError(false)
+    } catch (error) {
+      if (!isCurrent(token) || signal?.aborted) return
+      if (creating && uncertain(error)) await reconcile({ matchId: null, message: SYNCED }, token)
+      else setLoadError(true)
+    } finally {
+      if (isCurrent(token)) {
+        setLoading(false)
+        if (creating) {
+          busyRef.current = false
+          setBusy(false)
+        }
+      }
+    }
+  }, [isCurrent, reconcile, show])
 
   useEffect(() => {
+    mounted.current = true
     const controller = new AbortController()
-    void fetchOrStart(controller.signal)
-    return () => controller.abort()
-  }, [fetchOrStart])
+    // Defer the initial network work; a StrictMode cleanup can cancel it before it starts.
+    queueMicrotask(() => {
+      if (!controller.signal.aborted) void fetchOrStart(controller.signal)
+    })
+    return () => {
+      invalidateRequests()
+      controller.abort()
+    }
+  }, [fetchOrStart, invalidateRequests])
 
   const load = useCallback(() => {
+    if (pendingSync.current) return retrySync().then(() => undefined)
+    if (busyRef.current) return Promise.resolve()
     setLoading(true)
     setLoadError(false)
     // A variation is brought up to date as itself: it is never the player's current game.
     const shown = matchRef.current
     if (shown?.mode === 'ANALYSIS') {
+      const token = ++operation.current
       return fetchMatch(shown.id)
         .then((fresh) => {
+          if (!isCurrent(token)) return
           show(fresh)
           setLoading(false)
         })
-        .catch(() => setLoading(false))
+        .catch(() => {
+          if (isCurrent(token)) {
+            setLoading(false)
+            say("Couldn't refresh the variation. The board has not been updated.")
+          }
+        })
     }
     return fetchOrStart()
-  }, [fetchOrStart, show])
+  }, [fetchOrStart, isCurrent, retrySync, say, show])
 
   // --- Actions -------------------------------------------------------------------------------------
 
@@ -135,47 +238,50 @@ export function useChessGame(onFirstMove: () => void) {
    * @returns whether it succeeded; `'stale'` when the match had moved on and was loaded again
    */
   const perform = useCallback(
-    async <T,>(request: (current: MatchView) => Promise<T>, apply: (result: T, current: MatchView) => void): Promise<boolean | 'stale'> => {
+    async <T,>(request: (current: MatchView) => Promise<T>, apply: (result: T, current: MatchView) => void, changesBoard = true): Promise<boolean | 'stale'> => {
       const current = matchRef.current
-      if (!current || busyRef.current) return false
+      if (!current || busyRef.current || pendingSync.current) return false
+      const token = ++operation.current
       busyRef.current = true
       setBusy(true)
       setNotice(null)
       try {
-        apply(await request(current), current)
+        const result = await request(current)
+        if (!isCurrent(token)) return false
+        apply(result, current)
         return true
       } catch (error) {
+        if (!isCurrent(token)) return false
         if (error instanceof ApiError && (error.code === STALE_REVISION || error.code === MATCH_OVER)) {
-          // The match is not as this page showed it: show it as it is.
-          try {
-            show(await fetchMatch(current.id))
-          } catch {
-            // Keep what is shown; the notice below says what happened.
-          }
-          say(error.code === STALE_REVISION ? 'The game changed elsewhere, so the board was brought up to date.' : 'This game is already over.', 'info')
-          return 'stale'
+          const message = error.code === STALE_REVISION ? 'The game changed elsewhere, so the board was brought up to date.' : 'The latest game was loaded.'
+          return await reconcile({ matchId: current.id, message }, token) ? 'stale' : false
+        } else if (uncertain(error) && (changesBoard || !(error instanceof ApiError) || error.code === NETWORK_ERROR)) {
+          return await reconcile({ matchId: current.id, message: SYNCED }, token) ? 'stale' : false
         } else if (error instanceof ApiError && error.code === HINT_LIMIT_REACHED) {
           say(error.message, 'info')
         } else if (error instanceof ApiError && error.code !== NETWORK_ERROR) {
           say(error.message)
-        } else {
-          say("Couldn't reach the server. Check your connection and try again.")
         }
         return false
       } finally {
-        busyRef.current = false
-        setBusy(false)
-        setSelected(null)
-        setPromotion(null)
+        if (isCurrent(token)) {
+          busyRef.current = false
+          setBusy(false)
+          setLoading(false)
+          setSelected(null)
+          setPromotion(null)
+        }
       }
     },
-    [say, show],
+    [isCurrent, reconcile, say],
   )
 
   /** Sends one action for the match as shown, and shows the match the server answers with. */
-  const act = useCallback((request: (current: MatchView) => Promise<MatchView>) => perform(request, (next) => show(next)), [perform, show])
+  const act = useCallback((request: (current: MatchView) => Promise<MatchView>) => perform(request, (next) => {
+    if (!show(next)) throw new Error('The server returned an older revision')
+  }), [perform, show])
 
-  const playing = match !== null && match.status === 'ACTIVE' && match.result === null
+  const playing = recovery === null && match !== null && match.status === 'ACTIVE' && match.result === null
   // Against Stockfish the player moves only on their own turn; the engine's moves come from the server.
   const engineTurn = playing && match !== null && match.mode === 'AI' && match.engine !== null && match.turn === match.engine.side
   const playerTurn = playing && !engineTurn
@@ -187,7 +293,7 @@ export function useChessGame(onFirstMove: () => void) {
   const select = useCallback(
     (square: string) => {
       const current = matchRef.current
-      if (!current || !playerTurn || busyRef.current) return
+      if (!current || !playerTurn || busyRef.current || pendingSync.current) return
       if (selected && square !== selected) {
         const moves = movesBetween(current.legalMoves, selected, square)
         if (moves.length === 1) {
@@ -237,7 +343,7 @@ export function useChessGame(onFirstMove: () => void) {
   const pickUp = useCallback(
     (square: string) => {
       const current = matchRef.current
-      if (!current || !playerTurn || busyRef.current || !canMoveFrom(current.legalMoves, square)) return
+      if (!current || !playerTurn || busyRef.current || pendingSync.current || !canMoveFrom(current.legalMoves, square)) return
       // The notice stays: the board must not move under a piece being dragged.
       setSelected(square)
     },
@@ -251,7 +357,7 @@ export function useChessGame(onFirstMove: () => void) {
   const drop = useCallback(
     (from: string, to: string) => {
       const current = matchRef.current
-      if (!current || !playerTurn || busyRef.current) return
+      if (!current || !playerTurn || busyRef.current || pendingSync.current) return
       const moves = movesBetween(current.legalMoves, from, to)
       if (moves.length === 1) {
         void submit(moves[0].uci)
@@ -276,7 +382,7 @@ export function useChessGame(onFirstMove: () => void) {
   const playPlanned = useCallback(
     (from: string, to: string): 'played' | 'promotion' | 'illegal' | 'wait' => {
       const current = matchRef.current
-      if (!current || busyRef.current || !playerTurn) return 'wait'
+      if (!current || busyRef.current || pendingSync.current || !playerTurn) return 'wait'
       const moves = movesBetween(current.legalMoves, from, to)
       if (moves.length === 1) {
         void submit(moves[0].uci)
@@ -318,28 +424,36 @@ export function useChessGame(onFirstMove: () => void) {
    */
   const begin = useCallback(
     async (start: () => Promise<MatchView>, quiet = false): Promise<boolean> => {
-      if (busyRef.current) return false
+      if (busyRef.current || pendingSync.current) return false
+      const token = ++operation.current
+      const source = matchRef.current
       busyRef.current = true
       setBusy(true)
       setNotice(null)
       try {
         const fresh = await start()
+        if (!isCurrent(token)) return false
         firstMoveCalled.current = quiet ? fresh.id : null
         setEngineFailed(false)
         setHint(null)
-        show(fresh)
+        if (!show(fresh)) throw new Error('The server returned an older revision')
         return true
       } catch (error) {
-        say(error instanceof ApiError && error.code !== NETWORK_ERROR ? error.message : "Couldn't start a new game. Check your connection and try again.")
+        if (!isCurrent(token)) return false
+        if (uncertain(error)) await reconcile({ matchId: quiet ? source?.id ?? null : null, message: SYNCED }, token)
+        else say(error instanceof ApiError ? error.message : "Couldn't start a new game.")
         return false
       } finally {
-        busyRef.current = false
-        setBusy(false)
-        setSelected(null)
-        setPromotion(null)
+        if (isCurrent(token)) {
+          busyRef.current = false
+          setBusy(false)
+          setLoading(false)
+          setSelected(null)
+          setPromotion(null)
+        }
       }
     },
-    [say, show],
+    [isCurrent, reconcile, say, show],
   )
 
   const newGame = useCallback(() => begin(startMatch), [begin])
@@ -364,7 +478,8 @@ export function useChessGame(onFirstMove: () => void) {
       if (source?.matchId) {
         try {
           return await fetchMatch(source.matchId)
-        } catch {
+        } catch (error) {
+          if (!(error instanceof ApiError) || error.status !== 404) throw error
           // Forgotten since: the player's current game instead.
         }
       }
@@ -389,6 +504,7 @@ export function useChessGame(onFirstMove: () => void) {
           setHint(response)
           show({ ...now, hints: response.hints })
         },
+        false,
       ),
     [perform, show],
   )
@@ -398,12 +514,19 @@ export function useChessGame(onFirstMove: () => void) {
   // --- Stockfish's moves (admins' games against it) ---------------------------------------------------
 
   const engineMove = useCallback(async () => {
+    if (busyRef.current || pendingSync.current || !mounted.current) return
     setEngineThinking(true)
-    const outcome = await perform((current) => requestEngineMove(current.id, current.revision), (next) => show(next))
+    const request = perform((current) => requestEngineMove(current.id, current.revision), (next) => {
+      if (!show(next)) throw new Error('The server returned an older revision')
+    })
+    const token = operation.current
+    const outcome = await request
+    if (!isCurrent(token)) return
     setEngineThinking(false)
-    // A failure changes nothing on the server; the player retries when ready (no retry loop here).
-    setEngineFailed(outcome === false)
-  }, [perform, show])
+    // If a lost reply was recovered and it is now the player's turn, never ask Stockfish again.
+    const latest = matchRef.current
+    setEngineFailed(outcome !== true && latest?.engine != null && latest.turn === latest.engine.side)
+  }, [isCurrent, perform, show])
 
   const revision = match?.revision
   useEffect(() => {
@@ -413,7 +536,12 @@ export function useChessGame(onFirstMove: () => void) {
     return () => window.clearTimeout(timer)
   }, [engineTurn, engineFailed, engineMove, revision])
 
-  const retryEngine = useCallback(() => setEngineFailed(false), [])
+  const retryEngine = useCallback(async () => {
+    const current = matchRef.current
+    if (!current || pendingSync.current) return
+    // Read again before an explicit engine retry: its earlier response may have been lost.
+    if (await sync({ matchId: current.id, message: SYNCED })) setEngineFailed(false)
+  }, [sync])
 
   const targets = useMemo(
     () => (match && selected && playerTurn ? targetsFrom(match.legalMoves, selected) : NO_TARGETS),
@@ -426,7 +554,9 @@ export function useChessGame(onFirstMove: () => void) {
     loading,
     loadError,
     reload: load,
-    busy,
+    busy: busy || recovery !== null,
+    recovery,
+    retrySync,
     playing,
     playerTurn,
     engineTurn,

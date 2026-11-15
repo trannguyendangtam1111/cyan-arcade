@@ -32,9 +32,9 @@ export function CardDetail({ card, quantity, onClose }: CardDetailProps) {
   return (
     <Modal open={card !== null} onClose={onClose} title={card?.name ?? ''}>
       {card && (
-        <div className="flex flex-col gap-4 sm:flex-row">
+        <div className="flex min-w-0 flex-col gap-4 sm:flex-row">
           <CardFace card={card} className="mx-auto w-44 shrink-0 shadow-soft" />
-          <dl className="grid flex-1 grid-cols-[auto_1fr] content-start gap-x-4 gap-y-2 text-sm">
+          <dl className="grid min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)] content-start gap-x-4 gap-y-2 text-sm [overflow-wrap:anywhere]">
             <dt className="font-bold text-ink">Rarity</dt>
             <dd>
               <RarityBadge rarity={card.rarity} />
@@ -56,7 +56,7 @@ export function CardDetail({ card, quantity, onClose }: CardDetailProps) {
             {details.map(([key, value]) => (
               <div key={key} className="contents">
                 <dt className="font-bold text-ink">{label(key)}</dt>
-                <dd>{String(value)}</dd>
+                <dd className="whitespace-pre-line">{String(value)}</dd>
               </div>
             ))}
           </dl>

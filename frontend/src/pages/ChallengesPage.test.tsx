@@ -16,7 +16,7 @@ describe('the daily reward', () => {
     const fetchSpy = mockApi({ user: pixel, coins: 1240 })
     renderRoute('/challenges')
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Challenges' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Challenges' })).toBeInTheDocument()
     const reward = within(await screen.findByRole('region', { name: 'Daily reward' }))
     const days = within(await reward.findByRole('list', { name: 'Daily rewards' })).getAllByRole('listitem')
     expect(days).toHaveLength(7)

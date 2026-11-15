@@ -88,10 +88,10 @@ describe('game modules', () => {
 
   it('never call the API themselves: the platform submits scores', () => {
     for (const path of sourceFiles(join(SRC, 'games'))) {
-      // Word Guess, Sudoku and Chess are played on the server, which keeps the hidden word or the
-      // solution, or judges every move, so they may use the shared transport (and its error type) for
-      // their own endpoints. See the next rule.
-      const transport = (specifier: string) => /^games\/(wordle|sudoku|chess)\//.test(name(path)) && specifier === '@/api/client'
+      // Word Guess, Sudoku, Chess and Minesweeper's Daily Board are played on the server, which keeps the
+      // hidden word, the solution or the day's mines, or judges every move, so they may use the shared
+      // transport (and its error type) for their own endpoints. See the next rule.
+      const transport = (specifier: string) => /^games\/(wordle|sudoku|chess|minesweeper)\//.test(name(path)) && specifier === '@/api/client'
       expect(imports(path).filter((specifier) => specifier.startsWith('@/api/') && !transport(specifier) && !path.endsWith('registry.ts') && !path.endsWith('types.ts')), name(path)).toEqual([])
       expect(code(path), name(path)).not.toMatch(/\bfetch\s*\(/)
     }
@@ -101,6 +101,7 @@ describe('game modules', () => {
     ['Word Guess', 'wordle'],
     ['Sudoku', 'sudoku'],
     ['Chess', 'chess'],
+    ['Minesweeper', 'minesweeper'],
   ])('%s calls its own endpoints from one file, and none of the platform\'s', (_, game) => {
     const callers = sourceFiles(join(SRC, 'games', game)).filter((path) => /\bapiFetch\b/.test(code(path)))
     expect(callers.map(name)).toEqual([`games/${game}/api/${game}Api.ts`])
@@ -111,7 +112,7 @@ describe('game modules', () => {
 
   it('no other game calls the API', () => {
     const callers = sourceFiles(join(SRC, 'games')).filter((path) => /\bapiFetch\b/.test(code(path)))
-    expect(callers.map(name).sort()).toEqual(['games/chess/api/chessApi.ts', 'games/sudoku/api/sudokuApi.ts', 'games/wordle/api/wordleApi.ts'])
+    expect(callers.map(name).sort()).toEqual(['games/chess/api/chessApi.ts', 'games/minesweeper/api/minesweeperApi.ts', 'games/sudoku/api/sudokuApi.ts', 'games/wordle/api/wordleApi.ts'])
   })
 })
 

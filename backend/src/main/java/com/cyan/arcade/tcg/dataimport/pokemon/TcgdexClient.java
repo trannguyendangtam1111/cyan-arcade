@@ -66,9 +66,18 @@ class TcgdexClient {
 	}
 
 	TcgdexSet set(String id) {
+		TcgdexSet set = findSet(id);
+		if (set == null) {
+			throw new TcgSourceException("TCGdex has no set '%s'".formatted(id));
+		}
+		return set;
+	}
+
+	/** @return {@code null} when TCGdex does not know the set */
+	TcgdexSet findSet(String id) {
 		JsonNode set = query(SET_QUERY, Map.of("id", id)).path("set");
 		if (set.isMissingNode() || set.isNull()) {
-			throw new TcgSourceException("TCGdex has no set '%s'".formatted(id));
+			return null;
 		}
 		return this.json.treeToValue(set, TcgdexSet.class);
 	}

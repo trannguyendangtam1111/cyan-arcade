@@ -1,6 +1,5 @@
 package com.cyan.arcade.sudoku;
 
-import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -13,7 +12,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.random.RandomGenerator;
 import java.util.stream.Collectors;
 
 import com.cyan.arcade.common.error.ApiException;
@@ -26,19 +24,22 @@ import com.cyan.arcade.sudoku.SudokuRun.Mode;
 import com.cyan.arcade.sudoku.SudokuRun.Owner;
 import com.cyan.arcade.sudoku.SudokuRun.Status;
 import com.cyan.arcade.sudoku.SudokuRunStore.Result;
+import com.cyan.arcade.sudoku.SudokuRunStore.RunNotesRow;
+import com.cyan.arcade.sudoku.SudokuViews.ArchivePuzzleResponse;
 import com.cyan.arcade.sudoku.SudokuViews.DifficultyView;
 import com.cyan.arcade.sudoku.SudokuViews.HintResponse;
 import com.cyan.arcade.sudoku.SudokuViews.HintTaken;
 import com.cyan.arcade.sudoku.SudokuViews.HintView;
 import com.cyan.arcade.sudoku.SudokuViews.ModeStats;
 import com.cyan.arcade.sudoku.SudokuViews.MoveRequest;
+import com.cyan.arcade.sudoku.SudokuViews.NoteCell;
+import com.cyan.arcade.sudoku.SudokuViews.NotesResponse;
 import com.cyan.arcade.sudoku.SudokuViews.ResultView;
 import com.cyan.arcade.sudoku.SudokuViews.RunResponse;
 import com.cyan.arcade.sudoku.SudokuViews.StatsResponse;
 import com.cyan.arcade.sudoku.SudokuViews.TodayResponse;
 import com.cyan.arcade.sudoku.daily.DailySchedule;
 import com.cyan.arcade.sudoku.engine.Difficulty;
-import com.cyan.arcade.sudoku.engine.Generator;
 import com.cyan.arcade.sudoku.engine.Grid;
 import com.cyan.arcade.sudoku.engine.Generator.GenerationException;
 import com.cyan.arcade.sudoku.engine.Hints;
@@ -78,6 +79,8 @@ class SudokuService {
 
 	static final String WRONG_SESSION = "WRONG_SESSION";
 
+	static final String WRONG_MODE = "WRONG_MODE";
+
 	static final String DAILY_ALREADY_PLAYED = "DAILY_ALREADY_PLAYED";
 
 	static final String RUN_OVER = "RUN_OVER";
@@ -92,6 +95,13 @@ class SudokuService {
 
 	static final String RUN_TOO_LONG = "RUN_TOO_LONG";
 
+	static final String NOT_IN_ARCHIVE = "NOT_IN_ARCHIVE";
+
+	static final String DAILY_IN_PROGRESS = "DAILY_IN_PROGRESS";
+
+	/** Another device saved the run's notes since the revision a save was based on. */
+	static final String NOTES_STALE = "NOTES_STALE";
+
 	/** Relaxed games left alone this long are forgotten. */
 	static final Duration RELAXED_KEPT_FOR = Duration.ofDays(2);
 
@@ -103,13 +113,15 @@ class SudokuService {
 
 	private final Clock clock;
 
-	private final RandomGenerator random = new SecureRandom();
+	private final PracticePuzzles practicePuzzles;
 
-	SudokuService(SudokuRunStore store, DailyPuzzles dailyPuzzles, GameSessionService sessions, Clock clock) {
+	SudokuService(SudokuRunStore store, DailyPuzzles dailyPuzzles, GameSessionService sessions, Clock clock,
+			PracticePuzzles practicePuzzles) {
 		this.store = store;
 		this.dailyPuzzles = dailyPuzzles;
 		this.sessions = sessions;
 		this.clock = clock;
+		this.practicePuzzles = practicePuzzles;
 	}
 
 	/** Today's puzzle and the rules, and the caller's runs ({@code owner} is {@code null} for an unknown guest). */
@@ -119,9 +131,11 @@ class SudokuService {
 		Puzzle puzzle = this.dailyPuzzles.forDay(today);
 		RunResponse daily = null;
 		RunResponse practice = null;
+		RunResponse archive = null;
 		if (owner != null) {
 			daily = this.store.findDaily(owner, today, false).map(this::view).orElse(null);
-			practice = this.store.findPracticeInProgress(owner).map(this::view).orElse(null);
+			practice = this.store.findInProgress(owner, Mode.PRACTICE).map(this::view).orElse(null);
+			archive = this.store.findInProgress(owner, Mode.ARCHIVE).map(this::view).orElse(null);
 		}
 		List<DifficultyView> difficulties = Arrays.stream(Difficulty.values())
 			.map((difficulty) -> new DifficultyView(difficulty, difficulty.label(), difficulty.level(),
@@ -129,7 +143,69 @@ class SudokuService {
 			.toList();
 		return new TodayResponse(DailySchedule.puzzleNumber(today), today, puzzle.difficulty(),
 				DailySchedule.nextPuzzleAt(this.clock), SudokuGame.MAX_HINTS, SudokuGame.RANKED_MISTAKE_LIMIT,
-				Scoring.HINT_PERCENTS, difficulties, daily, practice);
+				Scoring.HINT_PERCENTS, difficulties, daily, practice, archive);
+	}
+
+	/**
+	 * A past Daily puzzle's public part, for the archive: the stored puzzle of that date, made and
+	 * stored now (as {@link DailyPuzzles} always does) if nobody has asked for it before. Today's
+	 * puzzle is not in the archive: it is the Daily, played ranked.
+	 */
+	@Transactional
+	public ArchivePuzzleResponse archivePuzzle(LocalDate date) {
+		LocalDate day = archiveDay(date);
+		Puzzle puzzle = this.dailyPuzzles.forDay(day);
+		return new ArchivePuzzleResponse(day, DailySchedule.puzzleNumber(day), puzzle.difficulty(), puzzle.givens());
+	}
+
+	/**
+	 * Replays a past Daily puzzle for practice: a new unranked run of the archive, with no session, so
+	 * no score, leaderboard place, rewards or streak, and no use of that day's official attempt. Any
+	 * replay the player had going is left; a practice game or a daily run is not touched. A day's
+	 * puzzle can be replayed as often as the player likes, except while their official run of that day
+	 * is still being played (it would show them the puzzle they are being ranked on). A player's
+	 * replay starts run one after another (others' are not held up, nor the player's practice starts),
+	 * so however many arrive at once, one replay is left in play: the last to start.
+	 */
+	@Transactional
+	public RunResponse startArchive(Owner owner, LocalDate date) {
+		LocalDate day = archiveDay(date);
+		this.store.lockStarts(owner, Mode.ARCHIVE);
+		boolean officialInPlay = this.store.findDaily(owner, day, false)
+			.filter((official) -> official.status() == Status.PLAYING)
+			.isPresent();
+		if (officialInPlay) {
+			throw new ConflictException(DAILY_IN_PROGRESS,
+					"Your ranked Daily Sudoku of that day is still in play: finish it first.");
+		}
+		// Read once the lock is held: a start that waited begins after the replay it ends.
+		Instant now = this.clock.instant();
+		this.store.deleteRelaxedStartedBefore(now.minus(RELAXED_KEPT_FOR));
+		this.store.abandon(owner, Mode.ARCHIVE, now);
+		Puzzle puzzle = this.dailyPuzzles.forDay(day);
+		SudokuRun run = newRun(owner, Mode.ARCHIVE, false, puzzle, null, day, DailySchedule.puzzleNumber(day));
+		if (!this.store.insert(run)) {
+			// Never hand back a run that was not stored.
+			throw new IllegalStateException("The replay " + run.id() + " could not be stored");
+		}
+		return view(run);
+	}
+
+	/** The date, if the archive has its puzzle: from the first Daily up to yesterday (UTC). */
+	private LocalDate archiveDay(LocalDate date) {
+		LocalDate today = DailySchedule.today(this.clock);
+		if (!DailySchedule.hasPuzzle(date)) {
+			throw new ApiException(HttpStatus.NOT_FOUND, NOT_IN_ARCHIVE,
+					"The Daily Sudoku began on " + DailySchedule.FIRST_DAY + ": there is no puzzle before");
+		}
+		if (date.equals(today)) {
+			throw new ApiException(HttpStatus.NOT_FOUND, NOT_IN_ARCHIVE,
+					"Today's puzzle is not in the archive yet: play it as the Daily");
+		}
+		if (date.isAfter(today)) {
+			throw new ApiException(HttpStatus.NOT_FOUND, NOT_IN_ARCHIVE, "That Daily puzzle has not come out yet");
+		}
+		return date;
 	}
 
 	/**
@@ -138,7 +214,7 @@ class SudokuService {
 	 */
 	@Transactional
 	public RunResponse startDaily(Owner owner, UUID sessionId) {
-		RunSession session = ownSession(owner, sessionId);
+		RunSession session = ownSession(owner, sessionId, SudokuRunRules.DAILY);
 		Optional<SudokuRun> bound = this.store.findBySession(session.id());
 		if (bound.isPresent()) {
 			return view(bound.get());
@@ -161,12 +237,16 @@ class SudokuService {
 
 	/**
 	 * A new practice game of a difficulty: ranked with a session, relaxed without. Any practice game
-	 * the player had going is abandoned.
+	 * the player had going is abandoned. Generation avoids already played puzzles within a bounded
+	 * number of attempts. Starts by one player are serialized so only the latest remains in play.
 	 */
 	@Transactional
 	public RunResponse startPractice(Owner owner, Difficulty difficulty, UUID sessionId) {
+		this.store.lockStarts(owner, Mode.PRACTICE);
+		// A start that waited begins after the game it ends and sees a same-session run already stored.
 		Instant now = this.clock.instant();
-		RunSession session = (sessionId != null) ? ownSession(owner, sessionId) : null;
+		RunSession session = (sessionId != null)
+				? ownSession(owner, sessionId, SudokuRunRules.modeOf(Mode.PRACTICE, difficulty)) : null;
 		if (session != null) {
 			Optional<SudokuRun> bound = this.store.findBySession(session.id());
 			if (bound.isPresent()) {
@@ -174,10 +254,10 @@ class SudokuService {
 			}
 		}
 		this.store.deleteRelaxedStartedBefore(now.minus(RELAXED_KEPT_FOR));
-		this.store.abandonPractice(owner, now);
+		this.store.abandon(owner, Mode.PRACTICE, now);
 		Puzzle puzzle;
 		try {
-			puzzle = Generator.generate(difficulty, this.random.nextLong());
+			puzzle = this.practicePuzzles.next(owner, difficulty);
 		}
 		catch (GenerationException ex) {
 			throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, PUZZLE_UNAVAILABLE,
@@ -196,7 +276,7 @@ class SudokuService {
 		if (!run.ranked()) {
 			throw new ConflictException(RUN_NOT_RANKED, "A relaxed game is not scored");
 		}
-		RunSession session = ownSession(owner, sessionId);
+		RunSession session = ownSession(owner, sessionId, SudokuRunRules.modeOf(run));
 		Optional<SudokuRun> bound = this.store.findBySession(session.id());
 		if (bound.isPresent() && !bound.get().id().equals(run.id())) {
 			throw new ApiException(HttpStatus.BAD_REQUEST, WRONG_SESSION, "That session already has a game");
@@ -293,6 +373,46 @@ class SudokuService {
 		return view(resumed);
 	}
 
+	/**
+	 * A signed-in player's pencil marks for one of their runs, as last saved (revision 0 and none while
+	 * nothing is). Someone else's run is as good as missing. Notes never touch the game itself.
+	 */
+	@Transactional(readOnly = true)
+	public NotesResponse notes(long userId, UUID runId) {
+		RunNotesRow row = this.store.findNotes(runId)
+			.filter((found) -> Long.valueOf(userId).equals(found.userId()))
+			.orElseThrow(() -> new NotFoundException("Sudoku run", runId));
+		return (row.revision() == null) ? new NotesResponse(0, List.of())
+				: new NotesResponse(row.revision(), RunNotes.decode(row.notes()));
+	}
+
+	/**
+	 * Replaces the pencil marks of a signed-in player's run in play, if no other device has saved since
+	 * {@code baseRevision}: otherwise 409 {@code NOTES_STALE}, and the caller loads them first. The run
+	 * is locked meanwhile, so two saves cannot both pass the check. Digits, mistakes, hints, the clock
+	 * and the score are not touched.
+	 * @param baseCells when given, the marks the caller expects at {@code baseRevision}: anything else
+	 * there is stale too. A page being left sends its newest marks over the revision its earlier save,
+	 * still unanswered, would have made; this tells that save apart from another device's.
+	 */
+	@Transactional
+	public NotesResponse saveNotes(long userId, UUID runId, int baseRevision, List<NoteCell> cells,
+			List<NoteCell> baseCells) {
+		String stored = RunNotes.encode(cells);
+		String expected = (baseCells != null) ? RunNotes.encode(baseCells) : null;
+		SudokuRun run = ownedForUpdate(new Owner(userId, null), runId);
+		requirePlaying(run);
+		Optional<RunNotesRow> row = this.store.findNotes(runId);
+		Integer saved = row.map(RunNotesRow::revision).orElse(null);
+		int current = (saved != null) ? saved : 0;
+		String held = (saved != null) ? row.get().notes() : RunNotes.EMPTY;
+		if (baseRevision != current || (expected != null && !expected.equals(held))) {
+			throw new ConflictException(NOTES_STALE, "These notes were changed on another device: load them first");
+		}
+		this.store.saveNotes(run.id(), stored, current + 1, this.clock.instant());
+		return new NotesResponse(current + 1, RunNotes.decode(stored));
+	}
+
 	/** The caller's ranked games ({@code owner} is {@code null} for an unknown guest: nothing yet). */
 	@Transactional(readOnly = true)
 	public StatsResponse stats(Owner owner) {
@@ -385,12 +505,21 @@ class SudokuService {
 		return results;
 	}
 
-	private RunSession ownSession(Owner owner, UUID sessionId) {
-		return this.sessions.find(sessionId)
+	/**
+	 * The caller's unfinished Sudoku session, started in the mode of the run it is for: each kind of
+	 * ranked run has a leaderboard of its own, which its score must not leave.
+	 */
+	private RunSession ownSession(Owner owner, UUID sessionId, String mode) {
+		RunSession session = this.sessions.find(sessionId)
 			.filter((candidate) -> GAME_SLUG.equals(candidate.gameSlug()) && !candidate.finished()
 					&& candidate.belongsTo(owner.userId(), owner.playerId()))
 			.orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, WRONG_SESSION,
 					"Start an unfinished Sudoku game session of your own first"));
+		if (!mode.equals(session.mode())) {
+			throw new ApiException(HttpStatus.BAD_REQUEST, WRONG_MODE,
+					"That session is for another Sudoku leaderboard: start one in '" + mode + "'");
+		}
+		return session;
 	}
 
 	private SudokuRun ownedForUpdate(Owner owner, UUID runId) {
@@ -443,7 +572,8 @@ class SudokuService {
 				Grid.format(game.values()), new ArrayList<>(game.revealedCells()),
 				new ArrayList<>(game.wrongCells()), game.mistakes(), game.rule().name(), game.mistakeLimit(),
 				game.hints(), game.hintsLeft(), hints, run.played(now).toMillis(), run.isPaused(),
-				run.status().isOver() ? run.solution() : null, result, run.ranked() && isScored(run));
+				run.status().isOver() ? run.solution() : null, result, run.ranked() && isScored(run),
+				run.userId() != null);
 	}
 
 	private static HintView hintView(Advice advice) {

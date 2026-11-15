@@ -1,6 +1,26 @@
-import { apiFetch } from '@/api/client'
+import { ApiError, apiFetch, apiFetchText, NETWORK_ERROR } from '@/api/client'
 import { playerHeaders } from '@/lib/playerId'
-import type { CoachResponse, Difficulty, DrawAction, EngineStatus, EvaluationResponse, HintResponse, MatchView, ReviewResponse, Side } from '../types/chessTypes'
+import type { ArchivePage, CoachResponse, Difficulty, DrawAction, EngineStatus, EvaluationResponse, HintResponse, MatchView, ReviewResponse, Side } from '../types/chessTypes'
+
+export function fetchArchive(page: number, signal?: AbortSignal): Promise<ArchivePage> {
+  return apiFetch<ArchivePage>(`/api/chess/archive?page=${page}&size=10`, { signal })
+}
+
+export function fetchArchivedMatch(id: string, signal?: AbortSignal): Promise<MatchView> {
+  return apiFetch<MatchView>(`/api/chess/archive/${encodeURIComponent(id)}`, { signal })
+}
+
+/** PGN is a text attachment, so it uses the shared transport's text variant. */
+export async function fetchPgn(id: string, signal?: AbortSignal): Promise<string> {
+  try {
+    return await apiFetchText(`/api/chess/archive/${encodeURIComponent(id)}/pgn`, {
+      signal, headers: { Accept: 'application/x-chess-pgn, application/problem+json' },
+    })
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.code === NETWORK_ERROR) throw error
+    throw new ApiError(error.status, `HTTP_${error.status}`, error.status === 401 ? 'Sign in again to export this match.' : 'Could not export this match. Try again.')
+  }
+}
 
 /**
  * Chess's own endpoints. Chess is played on the server, which judges every move; a match is not

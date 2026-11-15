@@ -87,7 +87,7 @@ describe('Flappy Bird in the arcade', () => {
     // One flap and nothing more: the bird is on the ground within a second or so.
     expect(await screen.findByText(/saved\./, {}, { timeout: 8000 })).toBeInTheDocument()
     const sent = posts(fetchSpy)
-    expect(sent[0]).toEqual(['/api/game-sessions', { gameSlug: 'flappy-bird' }])
+    expect(sent[0]).toEqual(['/api/game-sessions', { gameSlug: 'flappy-bird', mode: 'classic' }])
     expect(sent[1][1]).toEqual({
       score: 0,
       details: { pipes: 0, flaps: 1, flightMs: expect.any(Number), seconds: 0, level: 1, seed: 97531 },

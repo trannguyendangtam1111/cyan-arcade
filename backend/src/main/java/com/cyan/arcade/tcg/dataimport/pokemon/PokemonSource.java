@@ -6,11 +6,13 @@ import java.util.List;
 
 import com.cyan.arcade.tcg.dataimport.SourceConfig;
 import com.cyan.arcade.tcg.dataimport.SourceConfig.SetChoice;
+import com.cyan.arcade.tcg.dataimport.SourceFetch;
 import com.cyan.arcade.tcg.dataimport.SourceHttp;
 import com.cyan.arcade.tcg.dataimport.TcgDataset;
 import com.cyan.arcade.tcg.dataimport.TcgSource;
 import com.cyan.arcade.tcg.dataimport.TcgSourceProperties;
 import com.cyan.arcade.tcg.dataimport.pokemon.PokemonDatasetMapper.FetchedSet;
+import com.cyan.arcade.tcg.dataimport.pokemon.TcgdexClient.TcgdexSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tools.jackson.databind.json.JsonMapper;
@@ -57,13 +59,23 @@ class PokemonSource implements TcgSource {
 
 	@Override
 	public TcgDataset fetch() {
+		return fetchChecked().dataset();
+	}
+
+	@Override
+	public SourceFetch fetchChecked() {
 		List<FetchedSet> fetched = new ArrayList<>();
 		for (SetChoice choice : this.config.sets()) {
-			FetchedSet set = new FetchedSet(choice, this.client.set(choice.id()), this.client.cardsOf(choice.id()));
+			TcgdexSet found = this.client.findSet(choice.id());
+			if (found == null) {
+				fetched.add(new FetchedSet(choice, null, List.of()));
+				continue;
+			}
+			FetchedSet set = new FetchedSet(choice, found, this.client.cardsOf(choice.id()));
 			log.info("Fetched Pokémon set {} ({}): {} cards", choice.id(), set.set().name(), set.cards().size());
 			fetched.add(set);
 		}
-		return PokemonDatasetMapper.map(this.config, fetched);
+		return PokemonDatasetMapper.mapChecked(this.config, fetched);
 	}
 
 }

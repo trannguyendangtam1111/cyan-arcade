@@ -19,6 +19,13 @@ spring:
           time_zone: UTC
   flyway:
     locations: classpath:db/migration
+  session:
+    # Uses the existing datasource and server.servlet.session.timeout (14 days idle).
+    jdbc:
+      # Flyway owns the schema, including in production.
+      initialize-schema: never
+      # Expiration is checked on every request; this only removes expired rows.
+      cleanup-cron: "0 */5 * * * *"
 
 server:
   port: ${SERVER_PORT:8080}
@@ -108,7 +115,8 @@ app:
     # Move hints a player (not an admin) gets per game, counted on the server; a new game brings new
     # ones. Guests get none: hints need an account.
     hints-per-game: ${CHESS_HINTS_PER_GAME:3}
-    # Engine requests (hints, engine moves, evaluations, review starts) one account may make a minute.
+    # Engine requests (hints, evaluations that need a search, review starts) one account may make a
+    # minute. Stockfish's own moves in a game are not counted, so a game never stalls on this limit.
     requests-per-minute: ${CHESS_ENGINE_REQUESTS_PER_MINUTE:30}
     engine:
       # The Stockfish binary (on Windows the .exe may be left off). The default is where
@@ -168,6 +176,11 @@ app:
       # Engine results kept in memory for reuse (keyed by engine version, settings and position).
       max-entries: ${CHESS_ANALYSIS_CACHE_ENTRIES:5000}
       ttl: ${CHESS_ANALYSIS_CACHE_TTL:6h}
+  minesweeper:
+    daily:
+      # The key each date's Daily Board seed is made with (HMAC-SHA256 of the date). Keep it secret
+      # and the same across restarts and instances: unset, the server makes a random one per run.
+      secret: ${MINESWEEPER_DAILY_SECRET:}
   tcg:
     # Packs one player may open per day (UTC). 0 means no limit.
     daily-pack-limit: ${TCG_DAILY_PACK_LIMIT:10}
@@ -179,6 +192,10 @@ app:
       # Comma-separated paths of dataset files (the arcade's own JSON format) to import at startup.
       files: ${TCG_IMPORT_FILES:}
       exit-when-done: false
+      # Run every import and roll it back: the report says what would change, nothing is kept.
+      dry-run: ${TCG_IMPORT_DRY_RUN:false}
+      # Where to write the run's report as JSON (sets held back, counts of what changed). Optional.
+      report-file: ${TCG_IMPORT_REPORT_FILE:}
     sources:
       pokemon:
         # TCGdex's GraphQL API, and which sets to take and how their packs are made up.
@@ -188,6 +205,16 @@ app:
         # OPTCG API, a free public API for the English One Piece Card Game.
         url: ${TCG_ONE_PIECE_URL:https://optcgapi.com/api}
         config: ${TCG_ONE_PIECE_CONFIG:classpath:tcg/sources/one-piece.json}
+    pilots:
+      yugioh:
+        # Yu-Gi-Oh! from YGOPRODeck: off. Importing creates text cards and a disabled simulated pack
+        # in a hidden game. Only ever against a disposable database: see
+        # "Yu-Gi-Oh! pilot" in ARCHITECTURE.md before changing this.
+        enabled: false
+        # Separate release gate. Admin activation is refused unless explicitly allowed in that environment.
+        activation-allowed: false
+        url: https://db.ygoprodeck.com/api/v7
+        config: classpath:tcg/pilots/yugioh.json
   cors:
     # Comma-separated origins allowed to call the API directly from a browser.
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}

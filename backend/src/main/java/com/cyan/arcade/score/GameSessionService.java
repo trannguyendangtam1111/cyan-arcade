@@ -18,6 +18,7 @@ import com.cyan.arcade.progression.ProgressionService;
 import com.cyan.arcade.progression.Rewards;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import tools.jackson.databind.json.JsonMapper;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -42,6 +43,8 @@ public class GameSessionService {
 
 	static final String SESSION_EXPIRED = "SESSION_EXPIRED";
 
+	static final String SESSION_NOT_FINISHED = "SESSION_NOT_FINISHED";
+
 	static final String GAME_NOT_SCORED = "GAME_NOT_SCORED";
 
 	private static final Logger log = LoggerFactory.getLogger(GameSessionService.class);
@@ -56,15 +59,21 @@ public class GameSessionService {
 
 	private final RunValidator validator;
 
+	private final GameModes modes;
+
 	private final Duration sessionLifetime;
 
 	private final Clock clock;
 
+	private final JsonMapper json;
+
 	GameSessionService(GameSessionRepository sessions, ScoreRepository scores, GameService games,
-			ProgressionService progression, RunValidator validator,
-			AbandonedSessionCleaner.SessionProperties sessionProperties, Clock clock) {
+			ProgressionService progression, RunValidator validator, GameModes modes,
+			AbandonedSessionCleaner.SessionProperties sessionProperties, Clock clock, JsonMapper json) {
+		this.json = json;
 		this.clock = clock;
 		this.validator = validator;
+		this.modes = modes;
 		this.sessionLifetime = sessionProperties.abandonedAfter();
 		this.sessions = sessions;
 		this.scores = scores;
@@ -75,18 +84,22 @@ public class GameSessionService {
 	/**
 	 * @param userId the signed-in player starting the run, or {@code null} for a guest
 	 * @param playerId the guest id the browser sent, or {@code null}
+	 * @param mode the ruleset the client asked for, or {@code null} for Classic
 	 */
 	@Transactional
-	public GameSessionResponse start(String gameSlug, Long userId, UUID playerId) {
+	public GameSessionResponse start(String gameSlug, String mode, Long userId, UUID playerId) {
 		GameInfo game = this.games.requireActiveGame(gameSlug);
 		// No session, no score: an unscored game's results never reach leaderboards or rewards.
 		if (!game.scored()) {
 			throw new ConflictException(GAME_NOT_SCORED, game.name() + " is not scored");
 		}
+		// One the game's rules declare, fixed here for the whole run: finishing it cannot change the mode.
+		String runMode = this.modes.resolve(game, mode).id();
 		// A run has one owner. With an account there is no reason to also keep which browser it came from.
 		UUID guestId = (userId == null) ? playerId : null;
-		GameSession session = this.sessions.save(GameSession.start(game.id(), userId, guestId, this.clock.instant()));
-		return new GameSessionResponse(session.getId(), game.slug(), session.getStartedAt());
+		GameSession session = this.sessions
+			.save(GameSession.start(game.id(), userId, guestId, runMode, this.clock.instant()));
+		return new GameSessionResponse(session.getId(), game.slug(), session.getMode(), session.getStartedAt());
 	}
 
 	/**
@@ -126,10 +139,35 @@ public class GameSessionService {
 		Rewards rewards = (session.getUserId() != null) ? reward(session, game, score, checked) : null;
 		int xpAwarded = (rewards != null) ? rewards.xpEarned() : 0;
 		boolean personalBest = rewards != null && rewards.personalBest();
-		Score recorded = this.scores.save(new Score(session, score, durationMs, xpAwarded, personalBest, now));
+		ScoreResponse result = new ScoreResponse(session.getId(), game.slug(), session.getMode(), score,
+				durationMs, now, rewards);
+		this.scores.save(new Score(session, score, durationMs, xpAwarded, personalBest, now,
+				this.json.writeValueAsString(result)));
+		return result;
+	}
 
-		return new ScoreResponse(session.getId(), game.slug(), recorded.getValue(), recorded.getDurationMs(),
-				recorded.getCreatedAt(), rewards);
+	/**
+	 * Reads an account's committed result without running validation or reward calculation again.
+	 * A normal read sees either the pre-finish state or the whole committed transaction, never a
+	 * partially paid result. Unknown sessions and other owners both return 404. Guest identifiers
+	 * are not authentication and never authorize this endpoint.
+	 */
+	@Transactional(readOnly = true)
+	public ScoreResponse resultOf(UUID sessionId, Long userId) {
+		GameSession session = this.sessions.findById(sessionId)
+			.filter((found) -> userId != null && userId.equals(found.getUserId()))
+			.orElseThrow(() -> new NotFoundException("Game session", sessionId));
+		if (!session.isFinished()) {
+			throw new ConflictException(SESSION_NOT_FINISHED, "This game session has not been finished");
+		}
+		Score score = this.scores.findByGameSessionId(sessionId)
+			.orElseThrow(() -> new NotFoundException("Score result", sessionId));
+		if (score.getResultSnapshot() != null) {
+			return this.json.readValue(score.getResultSnapshot(), ScoreResponse.class);
+		}
+		// Legacy rewards cannot be reconstructed from today's balance, level or achievement catalog.
+		return new ScoreResponse(sessionId, this.games.requireGame(session.getGameId()).slug(), score.getMode(),
+				score.getValue(), score.getDurationMs(), score.getCreatedAt(), null);
 	}
 
 	/**
@@ -141,7 +179,8 @@ public class GameSessionService {
 	public Optional<RunSession> find(UUID sessionId) {
 		return this.sessions.findById(sessionId)
 			.map((session) -> new RunSession(session.getId(), this.games.requireGame(session.getGameId()).slug(),
-					session.getUserId(), session.getPlayerId(), session.getStartedAt(), session.isFinished()));
+					session.getUserId(), session.getPlayerId(), session.getStartedAt(), session.isFinished(),
+					session.getMode()));
 	}
 
 	/**
@@ -159,12 +198,41 @@ public class GameSessionService {
 		Long userId = session.getUserId();
 		// The player's other runs wait until this one is decided, so what is read next is final.
 		this.progression.lockPlayer(userId);
-		// Both looked up before this run's score is saved: the best so far, and the games so far.
-		int previousBest = this.scores.findBestScoreOfUser(game.id(), userId).orElse(0);
-		long gamesPlayed = this.scores.countByUserId(userId) + 1;
-		return this.progression
-			.reward(new CompletedRun(session.getId(), userId, game.slug(), score, details, score > previousBest,
-					gamesPlayed));
+		// Both looked up before this run's score is saved: the best so far in this mode, and the Classic
+		// games so far (what games-played achievements count).
+		String mode = session.getMode();
+		boolean classic = this.modes.countsAsClassic(game.slug(), mode);
+		boolean personalBest = isNewBest(game, userId, mode, score);
+		long gamesPlayed = classicGamesOf(userId) + (classic ? 1 : 0);
+		// Whether the run reached its mode's own end, as the game's rules define it: only then does it
+		// earn what finishing a game earns. Every Classic run does.
+		boolean completed = this.modes.completes(game.slug(), mode, details);
+		return this.progression.reward(new CompletedRun(session.getId(), userId, game.slug(), mode, score, details,
+				personalBest, gamesPlayed, completed, classic));
+	}
+
+	/**
+	 * How many games the player has finished under Classic rules: in Classic, or in a mode that shares
+	 * Classic's progression (see {@link ModeSpec#classicProgression()}).
+	 */
+	private long classicGamesOf(Long userId) {
+		return ClassicGames.countFor(userId, this.scores, this.games, this.modes);
+	}
+
+	/**
+	 * Whether the score beats the player's best so far in this mode of the game, in the mode's order.
+	 * Highest first (Classic): above the best, a first run counting as above 0, as it always has.
+	 * Lowest first (a time): below the best, or the first run of the mode.
+	 */
+	private boolean isNewBest(GameInfo game, Long userId, String mode, int score) {
+		// Declared: the validator has just judged the run by this mode's rules.
+		ModeSpec spec = this.modes.declared(game.slug(), mode).orElseThrow();
+		return switch (spec.order()) {
+			case DESC -> score > this.scores.findHighestScoreOfUser(game.id(), userId, mode).orElse(0);
+			case ASC -> this.scores.findLowestScoreOfUser(game.id(), userId, mode)
+				.map((best) -> score < best)
+				.orElse(true);
+		};
 	}
 
 }

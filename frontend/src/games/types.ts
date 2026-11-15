@@ -77,10 +77,26 @@ export function defineGameModule<Ai>(module: TypedGameModule<Ai>): GameModule {
 
 /** Props the platform passes to a game's root component. */
 export interface GameProps<Ai = unknown> {
-  /** Call when a human run begins. The platform opens a score session. Never call it for AI runs. */
-  onGameStart: () => void
+  /**
+   * Call when a human run begins. The platform opens a score session, under `mode` if given (one of
+   * the modes the server declares for the game) or Classic. Anything but a mode ID (the event, when
+   * it is a click handler) means Classic. Never call it for AI runs.
+   */
+  onGameStart: (mode?: unknown) => void
+  /**
+   * The IDs of the modes the server declares for the game (Classic first), or `undefined` while they
+   * are unknown and for an unscored game. A game offers a mode of its own only while it is listed here,
+   * and passes its ID to `onGameStart` when a run of it begins; without the list, it plays Classic.
+   */
+  modes?: readonly string[]
   /** Call once when that run ends. The platform submits the score. */
   onGameOver: (result: GameResult) => void
+  /**
+   * Call when the server has just paid the player outside a score session (a won Minesweeper Daily
+   * Board), so the platform shows the player's new coins and XP. Optional: a game that only reports
+   * runs through `onGameOver` never needs it.
+   */
+  onRewarded?: () => void
   /**
    * The platform session of the human run started last, as the server opens it; `undefined` before
    * a run has started. For a game whose server keeps the run itself (Word Guess) and ties it to the
@@ -159,4 +175,17 @@ export interface GameResult {
   durationMs: number
   /** Game-specific extras (lines cleared, max tile, ...) kept opaque to the platform. */
   metadata?: Record<string, unknown>
+  /**
+   * For a board ranked by the date of its puzzle (Sudoku's Daily): the run's puzzle date (UTC,
+   * `YYYY-MM-DD`), so the way to the leaderboard opens that day's board even after midnight. Only
+   * picks the board shown; the server takes the date from its own record of the run.
+   */
+  boardDate?: string
+  /**
+   * Called by the platform once the server has recorded this run: at most once, and only while it is
+   * still the run started last. Never called for a run that was refused or could not be saved. For a
+   * game that keeps something of its own only for saved runs (2048 Puzzle, Snake Adventure and Tetris
+   * Challenge: the next stage opens).
+   */
+  onSaved?: () => void
 }

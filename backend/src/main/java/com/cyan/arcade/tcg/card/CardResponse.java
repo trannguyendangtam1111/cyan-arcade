@@ -12,8 +12,10 @@ import com.cyan.arcade.tcg.set.SetRef;
  * @param externalId the card's id in the source it was imported from, e.g. {@code sv01-001}
  * @param number the number printed on the card; text, because real sets use things like "TG03".
  * Alternate arts of a card share its number.
- * @param imageUrl the full-size image
- * @param thumbnailUrl a smaller image for grids, or {@code null} when there is only one size
+ * @param imageUrl the full-size image, or {@code null} for a card shown as text (a game whose
+ * artwork the arcade may not show); never blank
+ * @param thumbnailUrl a smaller image for grids, or {@code null} when there is only one size or no
+ * image at all
  * @param metadata whatever else the card's game knows about it (type, HP, colors, ...). The
  * platform passes it through untouched, so its fields differ from game to game.
  */

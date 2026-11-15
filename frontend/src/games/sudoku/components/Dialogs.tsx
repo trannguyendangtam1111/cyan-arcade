@@ -1,13 +1,15 @@
 import { LoaderCircle, Trophy, XCircle } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { ApiError } from '@/api/client'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { cn } from '@/lib/cn'
 import { formatScore, formatTimeLeft } from '@/lib/format'
-import { fetchStats } from '../api/sudokuApi'
+import { fetchDailyHistory, fetchStats } from '../api/sudokuApi'
 import { formatClock } from '../engine/format'
 import type { SudokuSettings } from '../hooks/useSettings'
-import { DIFFICULTIES, DIFFICULTY_LABELS, type ModeStats, type RunView, type StatsView } from '../types/sudokuTypes'
+import { DIFFICULTIES, DIFFICULTY_LABELS, type DailyHistoryView, type ModeStats, type RunView, type StatsView } from '../types/sudokuTypes'
+import { DailyCalendar } from './DailyCalendar'
 
 // --- Settings ----------------------------------------------------------------------------------------
 
@@ -17,7 +19,7 @@ const SETTING_LABELS: { key: keyof SudokuSettings; label: string; hint: string }
   { key: 'highlightConflicts', label: 'Highlight conflicts', hint: 'Marks digits that repeat in a row, column or box.' },
   { key: 'showMistakes', label: 'Show mistakes', hint: 'Marks digits that are wrong (ranked games). The counter counts them either way.' },
   { key: 'autoRemoveNotes', label: 'Auto-remove notes', hint: 'Placing a digit removes it from the notes it rules out.' },
-  { key: 'keyboardShortcuts', label: 'Keyboard shortcuts', hint: 'N notes, H hint, Esc pause, Ctrl+Z / Ctrl+Y undo and redo.' },
+  { key: 'keyboardShortcuts', label: 'Keyboard shortcuts', hint: 'N notes, C auto notes, H hint, Esc pause, Ctrl+Z / Ctrl+Y undo and redo.' },
 ]
 
 export function SettingsDialog({
@@ -64,17 +66,25 @@ export function StatsDialog({ open, onClose, nextPuzzleAt }: { open: boolean; on
   const [failed, setFailed] = useState(false)
   const [tab, setTab] = useState<'daily' | 'practice'>('daily')
   const [now, setNow] = useState(() => Date.now())
+  // The calendar loads on its own: statistics still show when it can't (a guest has none).
+  const [history, setHistory] = useState<DailyHistoryView | 'loading' | 'signed-out' | 'failed'>('loading')
 
   useEffect(() => {
     if (!open) return
     const controller = new AbortController()
+    const aborted = (error: unknown) => error instanceof DOMException && error.name === 'AbortError'
     fetchStats(controller.signal)
       .then((loaded) => {
         setStats(loaded)
         setFailed(false)
       })
       .catch((error: unknown) => {
-        if (!(error instanceof DOMException && error.name === 'AbortError')) setFailed(true)
+        if (!aborted(error)) setFailed(true)
+      })
+    fetchDailyHistory(controller.signal)
+      .then(setHistory)
+      .catch((error: unknown) => {
+        if (!aborted(error)) setHistory(error instanceof ApiError && error.status === 401 ? 'signed-out' : 'failed')
       })
     const tick = window.setInterval(() => setNow(Date.now()), 30_000)
     return () => {
@@ -98,6 +108,15 @@ export function StatsDialog({ open, onClose, nextPuzzleAt }: { open: boolean; on
             <Tile label="Current streak" value={stats.currentStreak} />
             <Tile label="Best streak" value={stats.bestStreak} />
           </dl>
+          {typeof history === 'object' && <DailyCalendar key={history.today} history={history} />}
+          {history === 'loading' && (
+            <p className="flex items-center gap-2 text-sm">
+              <LoaderCircle aria-hidden className="size-4 animate-spin" />
+              Loading your Daily history…
+            </p>
+          )}
+          {history === 'signed-out' && <p className="rounded-control bg-surface-muted p-3 text-sm">Sign in to see your Daily history for the last 30 days.</p>}
+          {history === 'failed' && <p className="text-sm text-danger">Your Daily history couldn't be loaded.</p>}
           <div role="tablist" aria-label="Statistics" className="grid grid-cols-2 gap-1 rounded-control bg-surface-muted p-1">
             {(['daily', 'practice'] as const).map((value) => (
               <button
@@ -195,7 +214,7 @@ export function CompletionDialog({
           <Button variant="secondary" onClick={onStats}>
             Statistics
           </Button>
-          <Button onClick={onNewGame}>New practice game</Button>
+          <Button onClick={onNewGame}>{run?.mode === 'ARCHIVE' ? 'Replay or pick a date' : 'New practice game'}</Button>
         </>
       }
     >
@@ -204,8 +223,9 @@ export function CompletionDialog({
           <div className="flex items-center gap-3">
             {solved ? <Trophy aria-hidden className="size-10 text-amber-500" /> : <XCircle aria-hidden className="size-10 text-danger" />}
             <p>
-              {run.mode === 'DAILY' ? `Daily Sudoku #${run.puzzleNumber}` : 'Practice'} · {DIFFICULTY_LABELS[run.difficulty]}
-              {!run.ranked && ' · relaxed'}
+              {run.mode === 'DAILY' ? `Daily Sudoku #${run.puzzleNumber}` : run.mode === 'ARCHIVE' ? `Archive · Daily Sudoku #${run.puzzleNumber}` : 'Practice'} ·{' '}
+              {DIFFICULTY_LABELS[run.difficulty]}
+              {run.mode === 'ARCHIVE' ? ' · practice / unranked' : !run.ranked && ' · relaxed'}
             </p>
           </div>
           <dl className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
@@ -220,7 +240,11 @@ export function CompletionDialog({
               {result.hintPercent}%.
             </p>
           )}
-          {!run.ranked && <p className="text-sm">Relaxed games are just for fun: no score, no rewards.</p>}
+          {run.mode === 'ARCHIVE' ? (
+            <p className="text-sm">Archive replays are practice: no score, rewards or streak, and that day&apos;s Daily result stays as it was. Replay it as often as you like.</p>
+          ) : (
+            !run.ranked && <p className="text-sm">Relaxed games are just for fun: no score, no rewards.</p>
+          )}
         </div>
       )}
     </Modal>

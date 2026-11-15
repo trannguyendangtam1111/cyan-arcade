@@ -10,6 +10,8 @@ lerna-debug.log*
 node_modules
 dist
 coverage
+# Vitest reporter output (e.g. --reporter=json --outputFile=.vitest/json/output.json)
+/.vitest/
 dist-ssr
 *.local
 

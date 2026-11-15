@@ -1,0 +1,387 @@
+{
+  "date": "2026-11-14",
+  "startingHead": "0e35f15",
+  "backendCommit": "1086a27",
+  "backend": {
+    "classes": [
+      "com.cyan.arcade.tcg.administration.YugiohActivationTests",
+      "com.cyan.arcade.tcg.administration.YugiohActivationGateTests",
+      "com.cyan.arcade.tcg.administration.YugiohReadinessTests",
+      "com.cyan.arcade.tcg.dataimport.TcgDatasetImportTests",
+      "com.cyan.arcade.tcg.TcgCatalogApiTests",
+      "com.cyan.arcade.tcg.dataimport.yugioh.YugiohPilotTests",
+      "com.cyan.arcade.ArchitectureTests"
+    ],
+    "total": {
+      "passed": 68,
+      "failed": 0,
+      "skipped": 0,
+      "blocked": 0
+    },
+    "architectureTests": 22
+  },
+  "frontend": {
+    "passed": 57,
+    "failed": 0,
+    "skipped": 0,
+    "blocked": 0,
+    "typecheck": "PASS",
+    "focusedLint": "PASS"
+  },
+  "browser": {
+    "kind": "focused real API/mobile verification; staged backend and disposable PostgreSQL only",
+    "scenarios": [
+      {
+        "width": 375,
+        "theme": "light",
+        "status": "PASS",
+        "longName": "Number C104: Umbral Horror Masquerade Victory",
+        "printedCode": "BETB-EN043",
+        "boxes": {
+          "tile": 106.328125,
+          "code": 102.328125,
+          "name": 102.328125,
+          "codeOverflow": "clip",
+          "codeHeight": 13
+        },
+        "pendulum": {
+          "name": "Clown Crew Cappello",
+          "scale": 7
+        },
+        "bounds": {
+          "viewport": 375,
+          "scroll": 375
+        },
+        "configuredOdds": [
+          {
+            "rarity": {
+              "code": "common",
+              "name": "Common",
+              "tier": 1
+            },
+            "percent": 80
+          },
+          {
+            "rarity": {
+              "code": "super-rare",
+              "name": "Super Rare",
+              "tier": 3
+            },
+            "percent": 14
+          },
+          {
+            "rarity": {
+              "code": "ultra-rare",
+              "name": "Ultra Rare",
+              "tier": 4
+            },
+            "percent": 5
+          },
+          {
+            "rarity": {
+              "code": "secret-rare",
+              "name": "Secret Rare",
+              "tier": 5
+            },
+            "percent": 0.99
+          },
+          {
+            "rarity": {
+              "code": "starlight-rare",
+              "name": "Starlight Rare",
+              "tier": 5
+            },
+            "percent": 0.01
+          }
+        ]
+      },
+      {
+        "width": 375,
+        "theme": "dark",
+        "status": "PASS",
+        "longName": "Number C104: Umbral Horror Masquerade Victory",
+        "printedCode": "BETB-EN043",
+        "boxes": {
+          "tile": 106.328125,
+          "code": 102.328125,
+          "name": 102.328125,
+          "codeOverflow": "clip",
+          "codeHeight": 13
+        },
+        "pendulum": {
+          "name": "Clown Crew Cappello",
+          "scale": 7
+        },
+        "bounds": {
+          "viewport": 375,
+          "scroll": 375
+        },
+        "configuredOdds": [
+          {
+            "rarity": {
+              "code": "common",
+              "name": "Common",
+              "tier": 1
+            },
+            "percent": 80
+          },
+          {
+            "rarity": {
+              "code": "super-rare",
+              "name": "Super Rare",
+              "tier": 3
+            },
+            "percent": 14
+          },
+          {
+            "rarity": {
+              "code": "ultra-rare",
+              "name": "Ultra Rare",
+              "tier": 4
+            },
+            "percent": 5
+          },
+          {
+            "rarity": {
+              "code": "secret-rare",
+              "name": "Secret Rare",
+              "tier": 5
+            },
+            "percent": 0.99
+          },
+          {
+            "rarity": {
+              "code": "starlight-rare",
+              "name": "Starlight Rare",
+              "tier": 5
+            },
+            "percent": 0.01
+          }
+        ]
+      },
+      {
+        "width": 1280,
+        "theme": "light",
+        "status": "PASS",
+        "longName": "Number C104: Umbral Horror Masquerade Victory",
+        "printedCode": "BETB-EN043",
+        "boxes": {
+          "tile": 170.671875,
+          "code": 166.671875,
+          "name": 166.671875,
+          "codeOverflow": "clip",
+          "codeHeight": 13
+        },
+        "pendulum": {
+          "name": "Clown Crew Cappello",
+          "scale": 7
+        },
+        "bounds": {
+          "viewport": 1280,
+          "scroll": 1280
+        },
+        "configuredOdds": [
+          {
+            "rarity": {
+              "code": "common",
+              "name": "Common",
+              "tier": 1
+            },
+            "percent": 80
+          },
+          {
+            "rarity": {
+              "code": "super-rare",
+              "name": "Super Rare",
+              "tier": 3
+            },
+            "percent": 14
+          },
+          {
+            "rarity": {
+              "code": "ultra-rare",
+              "name": "Ultra Rare",
+              "tier": 4
+            },
+            "percent": 5
+          },
+          {
+            "rarity": {
+              "code": "secret-rare",
+              "name": "Secret Rare",
+              "tier": 5
+            },
+            "percent": 0.99
+          },
+          {
+            "rarity": {
+              "code": "starlight-rare",
+              "name": "Starlight Rare",
+              "tier": 5
+            },
+            "percent": 0.01
+          }
+        ]
+      },
+      {
+        "width": 1280,
+        "theme": "dark",
+        "status": "PASS",
+        "longName": "Number C104: Umbral Horror Masquerade Victory",
+        "printedCode": "BETB-EN043",
+        "boxes": {
+          "tile": 170.671875,
+          "code": 166.671875,
+          "name": 166.671875,
+          "codeOverflow": "clip",
+          "codeHeight": 13
+        },
+        "pendulum": {
+          "name": "Clown Crew Cappello",
+          "scale": 7
+        },
+        "bounds": {
+          "viewport": 1280,
+          "scroll": 1280
+        },
+        "configuredOdds": [
+          {
+            "rarity": {
+              "code": "common",
+              "name": "Common",
+              "tier": 1
+            },
+            "percent": 80
+          },
+          {
+            "rarity": {
+              "code": "super-rare",
+              "name": "Super Rare",
+              "tier": 3
+            },
+            "percent": 14
+          },
+          {
+            "rarity": {
+              "code": "ultra-rare",
+              "name": "Ultra Rare",
+              "tier": 4
+            },
+            "percent": 5
+          },
+          {
+            "rarity": {
+              "code": "secret-rare",
+              "name": "Secret Rare",
+              "tier": 5
+            },
+            "percent": 0.99
+          },
+          {
+            "rarity": {
+              "code": "starlight-rare",
+              "name": "Starlight Rare",
+              "tier": 5
+            },
+            "percent": 0.01
+          }
+        ]
+      }
+    ],
+    "errors": [],
+    "external": [],
+    "readinessBefore": {
+      "activationAllowed": true,
+      "dataValid": true,
+      "gameActive": false,
+      "packActive": false,
+      "counts": {
+        "sets": 1,
+        "printings": 127,
+        "distinctCards": 100,
+        "packs": 1,
+        "poolCards": 127,
+        "oddsRows": 45
+      },
+      "problems": []
+    },
+    "activation": {
+      "activationAllowed": true,
+      "dataValid": true,
+      "gameActive": true,
+      "packActive": true,
+      "counts": {
+        "sets": 1,
+        "printings": 127,
+        "distinctCards": 100,
+        "packs": 1,
+        "poolCards": 127,
+        "oddsRows": 45
+      },
+      "problems": []
+    },
+    "deactivation": {
+      "activationAllowed": true,
+      "dataValid": true,
+      "gameActive": false,
+      "packActive": false,
+      "counts": {
+        "sets": 1,
+        "printings": 127,
+        "distinctCards": 100,
+        "packs": 1,
+        "poolCards": 127,
+        "oddsRows": 45
+      },
+      "problems": []
+    },
+    "result": {
+      "passed": 4,
+      "failed": 0,
+      "blocked": 0
+    }
+  },
+  "isolation": {
+    "container": "tcg010-review-20261114",
+    "containerId": "e8613c94887db7f3f56df1a6badb175c54498cee07f1e8b0499708eaef8b3240",
+    "postgres": "18-alpine",
+    "database": "tcg010_review",
+    "user": "tcg010",
+    "host": "127.0.0.1",
+    "port": 55440,
+    "backendPort": 8100,
+    "frontendPort": 5200
+  },
+  "probabilityWeightsUnchanged": true,
+  "raritiesUnchanged": true,
+  "defaultSourceEnabled": false,
+  "defaultActivationAllowed": false,
+  "priorEvidence": "docs/acceptance/tcg-009/evidence.json",
+  "releaseStatus": "BLOCKED: external data/rights verification, product decision and restored-copy upgrade approval outstanding",
+  "hashes": {
+    "backendLog": "c623a40e6e23498c68d590c183b1570e0b98c35ed8ca9ec67fa583219a580082",
+    "frontendLog": "7d18ae6da7a5315096566cbc2ad6141a3973b5aea3dace03f003a07b3be262da",
+    "screenshots": {
+      "375-light-long-tile.png": "a6c0cd3f92f89e4e0f4a552e71f8dbd12b188d91353a42a320080ebc82a5bc0a",
+      "375-dark-pack.png": "142d48068dd49b2ef53f8df382c53b6e37f364dd739b4a6071efee067a2dd27e",
+      "1280-light-long-tile.png": "9eee1cc32db141daf147257db699746a3da831ff9db95357860c712d216a3952"
+    }
+  },
+  "cleanup": {
+    "status": "complete",
+    "pilotHiddenByAdminApi": true,
+    "backendStopped": true,
+    "frontendStopped": true,
+    "taskContainerRemoved": true,
+    "repositoryConfigOverrides": 0,
+    "temporaryFilesRemoved": true,
+    "testcontainersRemoved": true,
+    "originalDependenciesPreserved": true
+  },
+  "frontendCommit": "88f5342",
+  "testContainerIds": [
+    "a7f392aa9b396bbe1d9f074f5d80b8f210c21f8f1e3ac432e95576c46cf6dedd",
+    "8da19a39ee0cc6376885677697a0bb852e5215b695b8199bd3675626ac570468",
+    "d921da9188778caf7602e01fe3e5357bdbc4e5be359d2e0af42dab1673545706"
+  ]
+}

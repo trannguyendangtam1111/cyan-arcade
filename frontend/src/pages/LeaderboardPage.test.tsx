@@ -124,9 +124,9 @@ describe('leaderboard page', () => {
     expect(screen.getByRole('link', { name: 'Play Snake' })).toHaveAttribute('href', '/games/snake')
 
     expect(leaderboardRequests(fetchSpy).map(([path]) => path)).toEqual([
-      '/api/leaderboards/snake?period=ALL_TIME&page=0&size=20',
-      '/api/leaderboards/snake?period=WEEKLY&page=0&size=20',
-      '/api/leaderboards/snake?period=DAILY&page=0&size=20',
+      '/api/leaderboards/snake?mode=classic&period=ALL_TIME&page=0&size=20',
+      '/api/leaderboards/snake?mode=classic&period=WEEKLY&page=0&size=20',
+      '/api/leaderboards/snake?mode=classic&period=DAILY&page=0&size=20',
     ])
   })
 
@@ -163,8 +163,8 @@ describe('leaderboard page', () => {
     expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled()
 
     expect(leaderboardRequests(fetchSpy).map(([path]) => path)).toEqual([
-      '/api/leaderboards/2048?period=WEEKLY&page=0&size=20',
-      '/api/leaderboards/2048?period=WEEKLY&page=1&size=20',
+      '/api/leaderboards/2048?mode=classic&period=WEEKLY&page=0&size=20',
+      '/api/leaderboards/2048?mode=classic&period=WEEKLY&page=1&size=20',
     ])
   })
 
@@ -196,7 +196,7 @@ describe('leaderboard page', () => {
     expect(await screen.findByRole('list', { name: 'Top 1 in Tetris' })).toHaveTextContent('9,000')
     expect(screen.getByRole('button', { name: 'Today' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.queryByRole('navigation', { name: 'Leaderboard pages' })).not.toBeInTheDocument()
-    expect(leaderboardRequests(fetchSpy).at(-1)?.[0]).toBe('/api/leaderboards/tetris?period=DAILY&page=0&size=20')
+    expect(leaderboardRequests(fetchSpy).at(-1)?.[0]).toBe('/api/leaderboards/tetris?mode=classic&period=DAILY&page=0&size=20')
   })
 
   it('shows an empty state with a link to play when a game has no scores', async () => {

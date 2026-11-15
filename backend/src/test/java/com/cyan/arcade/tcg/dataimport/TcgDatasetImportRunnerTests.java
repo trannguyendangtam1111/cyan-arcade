@@ -10,6 +10,7 @@ import com.cyan.arcade.IntegrationTest;
 import com.cyan.arcade.tcg.dataimport.TcgDatasetImportRunner.ImportProperties;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -125,14 +126,48 @@ class TcgDatasetImportRunnerTests {
 	}
 
 	@Test
-	void aSourceThatFailsStopsTheJobAndWritesNothingOfItsGame() {
+	void aSourceThatFailsWritesNothingOfItsGameButTheOthersAreStillImported() throws Exception {
 		FakeSource broken = new FakeSource("broken", () -> {
 			throw new TcgSourceException("the source is down");
 		});
+		FakeSource working = new FakeSource("working", () -> sourceGame("runner-after-broken"));
+		Path reportFile = this.directory.resolve("report.json");
 
 		assertThatExceptionOfType(TcgSourceException.class)
-			.isThrownBy(() -> runnerOf(List.of(broken), "broken").run(new DefaultApplicationArguments()))
+			.isThrownBy(() -> runnerOf(List.of(broken, working), false, reportFile, "broken", "working")
+				.run(new DefaultApplicationArguments()))
 			.withMessage("the source is down");
+
+		assertThat(working.fetches).isEqualTo(1);
+		assertThat(this.jdbc.queryForObject("SELECT count(*) FROM tcg_games WHERE slug = 'runner-after-broken'",
+				Integer.class)).isEqualTo(1);
+		// The report still says what happened to each.
+		assertThat(Files.readString(reportFile)).contains("\"FAILED\"", "the source is down", "\"IMPORTED\"");
+	}
+
+	@Test
+	void aDryRunReportsWhatItWouldDoAndWritesNothing() throws Exception {
+		FakeSource source = new FakeSource("dry", () -> sourceGame("runner-dry"));
+		Path reportFile = this.directory.resolve("dry-report.json");
+
+		runnerOf(List.of(source), true, reportFile, "dry").run(new DefaultApplicationArguments());
+
+		assertThat(this.jdbc.queryForObject("SELECT count(*) FROM tcg_games WHERE slug = 'runner-dry'", Integer.class))
+			.isZero();
+		JsonNode outcome = this.json.readTree(Files.readString(reportFile)).path("outcomes").get(0);
+		assertThat(outcome.path("status").asString()).isEqualTo("DRY_RUN");
+		assertThat(outcome.path("report").path("dryRun").asBoolean()).isTrue();
+		assertThat(outcome.path("report").path("newCards").asInt()).isEqualTo(1);
+	}
+
+	@Test
+	void aSourceWithNothingImportableYetWritesNothingAndIsNotAFailure() throws Exception {
+		FakeSource pending = new FakeSource("pending", () -> null);
+		Path reportFile = this.directory.resolve("pending-report.json");
+
+		runnerOf(List.of(pending), false, reportFile, "pending").run(new DefaultApplicationArguments());
+
+		assertThat(Files.readString(reportFile)).contains("\"NOTHING_TO_IMPORT\"", "\"PENDING_IMAGES\"");
 	}
 
 	@Test
@@ -153,12 +188,16 @@ class TcgDatasetImportRunnerTests {
 	private TcgDatasetImportRunner runner(Path... files) {
 		List<String> paths = List.of(files).stream().map(Path::toString).toList();
 		return new TcgDatasetImportRunner(this.importer, this.json, List.of(),
-				new ImportProperties(List.of(), paths, false), this.context);
+				new ImportProperties(List.of(), paths, false, false, null), this.context);
 	}
 
 	private TcgDatasetImportRunner runnerOf(List<TcgSource> sources, String... ids) {
-		return new TcgDatasetImportRunner(this.importer, this.json, sources,
-				new ImportProperties(List.of(ids), List.of(), false), this.context);
+		return runnerOf(sources, false, null, ids);
+	}
+
+	private TcgDatasetImportRunner runnerOf(List<TcgSource> sources, boolean dryRun, Path reportFile, String... ids) {
+		return new TcgDatasetImportRunner(this.importer, this.json, sources, new ImportProperties(List.of(ids),
+				List.of(), false, dryRun, (reportFile != null) ? reportFile.toString() : null), this.context);
 	}
 
 	private static TcgDataset sourceGame(String slug) {
@@ -192,6 +231,15 @@ class TcgDatasetImportRunnerTests {
 		@Override
 		public String description() {
 			return "fake source " + this.id;
+		}
+
+		@Override
+		public SourceFetch fetchChecked() {
+			TcgDataset fetched = fetch();
+			// A source with nothing importable yet answers with checks and no dataset.
+			return (fetched != null) ? new SourceFetch(fetched, List.of())
+					: new SourceFetch(null, List.of(new SetCheck("new-set", "New Set", SetCheck.Status.PENDING_IMAGES,
+							10, 0, 10, Map.of(), Map.of(), 0, 0)));
 		}
 
 		@Override

@@ -141,6 +141,9 @@ function ChallengeCard({ challenge, accentColor, index }: ChallengeCardProps) {
     ? { to: `/games/${challenge.game.slug}`, label: challenge.game.name, cta: `Play ${challenge.game.name}` }
     : { ...activityOf(challenge), label: challenge.activity?.name ?? 'Challenge' }
   const progress = typeof challenge.progress === 'number' ? Math.min(challenge.progress, challenge.target) : null
+  // A game with other modes (Tetris's Sprint and Ultra) counts only its Classic runs here: said on
+  // the card, as the server says it with the challenge, so a run in another mode is not a surprise.
+  const classicOnly = !done && challenge.game?.classicRunsOnly === true
   const style: CSSProperties = { animationDelay: `${index * 70}ms`, ...(accentColor && accentStyle(accentColor)) }
 
   return (
@@ -174,6 +177,7 @@ function ChallengeCard({ challenge, accentColor, index }: ChallengeCardProps) {
       <div>
         <h3 className="text-lg font-semibold">{challenge.title}</h3>
         <p className="mt-0.5 text-ink-soft">{challenge.description}</p>
+        {classicOnly && <p className="mt-1 text-sm font-bold text-ink-soft">Only Classic runs count</p>}
       </div>
 
       {progress !== null && !done && (

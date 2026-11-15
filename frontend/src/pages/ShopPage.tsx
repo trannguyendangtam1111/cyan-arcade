@@ -2,7 +2,7 @@ import { Check, CircleAlert, LogIn, ShoppingBag } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { useSession } from '@/api/auth'
-import { ApiError } from '@/api/client'
+import { ApiError, NETWORK_ERROR } from '@/api/client'
 import {
   INSUFFICIENT_COINS,
   ITEM_LIMIT_REACHED,
@@ -27,6 +27,7 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { accentStyle } from '@/lib/accent'
 import { cn } from '@/lib/cn'
+import { formatScore } from '@/lib/format'
 import { PackAllowancePanel } from '@/tcg/components/PackAllowancePanel'
 import { categoryFromSlug, shopCategories, type ShopCategory } from './shop/categories'
 import { Inventory } from './shop/Inventory'
@@ -46,6 +47,11 @@ interface Wearable {
   equipped: boolean
   type: ItemType
   gameSlug: string | null
+}
+
+/** An amount of coins in words, for a sentence: "1 coin", "1,140 coins". */
+function coins(amount: number): string {
+  return `${formatScore(amount)} ${amount === 1 ? 'coin' : 'coins'}`
 }
 
 /** Says what a refused purchase or change means, with the server's own words. */
@@ -111,18 +117,29 @@ export function ShopPage() {
   const bought = (purchase: PurchaseResponse) => {
     setBuying(null)
     const { item } = purchase
-    if (item.type === 'GAME_SKIN' && item.gameSlug) {
+    const link =
+      item.type === 'GAME_SKIN' && item.gameSlug
+        ? { to: `/games/${item.gameSlug}`, label: 'Play now' }
+        : item.consumable
+          ? { to: '/tcg', label: 'Open packs' }
+          : { to: '/profile', label: 'See your profile' }
+    // The same request answered again (a retry after a lost reply): the first one bought it, and no
+    // coins were taken this time.
+    if (purchase.repeated) {
       setFeedback({
         tone: 'success',
-        text: `Purchased! ${item.name} is yours${item.equipped ? ' and already equipped in its game' : ''}.`,
-        link: { to: `/games/${item.gameSlug}`, label: 'Play now' },
+        text: `That purchase already went through: ${item.name} is yours, and no more coins were taken. You have ${coins(purchase.balance)} left.`,
+        link,
       })
       return
     }
+    const where = item.type === 'GAME_SKIN' && item.gameSlug ? ' and already equipped in its game' : ' and already on your profile'
+    // What it cost and what is left, as the server counted them.
+    const spent = purchase.price > 0 ? ` You spent ${coins(purchase.price)} and have ${coins(purchase.balance)} left.` : ''
     setFeedback({
       tone: 'success',
-      text: `Purchased! ${item.name} is yours${item.equipped ? ' and already on your profile' : ''}.`,
-      link: item.consumable ? { to: '/tcg', label: 'Open packs' } : { to: '/profile', label: 'See your profile' },
+      text: `Purchased! ${item.name} is yours${item.equipped ? where : ''}.${spent}`,
+      link,
     })
   }
 
@@ -239,6 +256,7 @@ export function ShopPage() {
                           <ItemCard
                             item={item}
                             balance={balance}
+                            level={shop.data?.level ?? null}
                             signedIn={Boolean(user)}
                             avatar={avatar}
                             busy={equip.isPending}
@@ -294,9 +312,13 @@ interface ConfirmPurchaseProps {
 /** "Buy this for so many coins?" Nothing is spent until the player says yes. */
 function ConfirmPurchase({ item, requestId, balance, onClose, onBought }: ConfirmPurchaseProps) {
   const purchase = usePurchase()
-  const error = purchase.error
-    ? problemText(purchase.error, "The purchase didn't go through. Nothing was charged; try again.")
-    : null
+  // Without an answer (a lost connection) the purchase may or may not have gone through: trying
+  // again sends the same request id, which the server never charges twice.
+  const error = !purchase.error
+    ? null
+    : purchase.error instanceof ApiError && purchase.error.code === NETWORK_ERROR
+      ? "Couldn't reach the server, so the purchase may not have gone through. Try again: the same purchase is never charged twice."
+      : problemText(purchase.error, "The purchase didn't go through. Nothing was charged; try again.")
 
   return (
     <Modal

@@ -25,6 +25,13 @@ export interface MinesweeperState extends MinesweeperConfig {
   status: MinesweeperStatus
   /** Drives where the mines go. Kept in the state so the engine stays pure. */
   seed: number
+  /**
+   * The seed the game was created with. Laying the mines moves `seed` on; this one stays, so the
+   * mines can be laid again from it and `firstCell` alone (as the server replays a board).
+   */
+  startSeed: number
+  /** The cell of the first reveal, around which the mines were laid; `null` until then. */
+  firstCell: number | null
   /** Safe cells uncovered so far. */
   revealed: number
   /** Flags on the board now. */

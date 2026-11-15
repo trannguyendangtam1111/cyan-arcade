@@ -7,7 +7,15 @@ export interface DailyChallenge {
   title: string
   description: string
   /** The game it is played in; `null` for a challenge about something else (an activity). */
-  game: { slug: string; name: string } | null
+  game: {
+    slug: string
+    name: string
+    /**
+     * Whether only the game's Classic runs count: it has other modes that do not (Tetris's Sprint).
+     * Absent from an older backend, which says nothing either way.
+     */
+    classicRunsOnly?: boolean
+  } | null
   /** What an activity's challenge counts, e.g. `TCG_PACK_OPENED`; `null` for a game's. */
   activity: { code: string; name: string } | null
   /** The number to reach; 1 for "finish a game". */

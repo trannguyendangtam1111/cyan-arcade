@@ -9,6 +9,7 @@ interface NavStripProps {
   /** In a line Stockfish suggests: the strip then steps through it. */
   inVariation: boolean
   label: string
+  latestTitle?: string
   /** Moves played since the player started looking back. */
   newMoves: number
   onFirst: () => void
@@ -42,7 +43,7 @@ function IconButton({ label, title, onClick, disabled, pressed, children }: { la
  * Under the board: stepping through the game (first, previous, next, the live game), which only
  * changes what the board shows, and the board's own tools (draw, clear, flip).
  */
-export function NavStrip({ ply, latest, live, inVariation, label, newMoves, onFirst, onPrevious, onNext, onLive, onFlip, drawing }: NavStripProps) {
+export function NavStrip({ ply, latest, live, inVariation, label, latestTitle = 'Back to the live game', newMoves, onFirst, onPrevious, onNext, onLive, onFlip, drawing }: NavStripProps) {
   return (
     <div className="flex w-full items-center gap-1" role="toolbar" aria-label="Moves and board tools">
       <div role="group" aria-label="Step through the game" className="flex shrink-0 items-center gap-0.5 max-sm:gap-0">
@@ -55,7 +56,7 @@ export function NavStrip({ ply, latest, live, inVariation, label, newMoves, onFi
         <IconButton label="Next move" title="The position after" onClick={onNext} disabled={live || (ply >= latest && !inVariation)}>
           <ChevronRight aria-hidden className="size-5" />
         </IconButton>
-        <IconButton label="Latest position" title="Back to the live game" onClick={onLive} disabled={live}>
+        <IconButton label="Latest position" title={latestTitle} onClick={onLive} disabled={live}>
           <ChevronsRight aria-hidden className="size-5" />
         </IconButton>
       </div>

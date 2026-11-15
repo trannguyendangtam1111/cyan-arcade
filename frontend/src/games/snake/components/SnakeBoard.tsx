@@ -17,12 +17,14 @@ export interface EatenFood extends Point {
 interface SnakeBoardProps {
   state: SnakeState
   eaten?: EatenFood | null
+  /** The map's name, for a game on a map with walls; said in the board's description. */
+  mapName?: string
 }
 
 /** Renders a snake state. Purely presentational: one grid cell is one SVG unit. */
-export const SnakeBoard = memo(function SnakeBoard({ state, eaten }: SnakeBoardProps) {
+export const SnakeBoard = memo(function SnakeBoard({ state, eaten, mapName }: SnakeBoardProps) {
   const patternId = useId()
-  const { width, height, snake, food, direction, status } = state
+  const { width, height, snake, food, direction, status, walls } = state
   const head = snake[0]
   const bodyPoints = snake.map((cell) => `${cell.x + 0.5},${cell.y + 0.5}`).join(' ')
 
@@ -30,7 +32,7 @@ export const SnakeBoard = memo(function SnakeBoard({ state, eaten }: SnakeBoardP
     <svg
       viewBox={`0 0 ${width} ${height}`}
       role="img"
-      aria-label={`Snake board. Length ${snake.length}, score ${state.score}. Head at column ${head.x + 1}, row ${head.y + 1}.`}
+      aria-label={`Snake board${mapName ? `, ${mapName} map` : ''}. Length ${snake.length}, score ${state.score}. Head at column ${head.x + 1}, row ${head.y + 1}.`}
       className="block size-full"
     >
       <defs>
@@ -42,6 +44,25 @@ export const SnakeBoard = memo(function SnakeBoard({ state, eaten }: SnakeBoardP
       </defs>
       <rect width={width} height={height} style={{ fill: 'color-mix(in srgb, var(--accent) 14%, white)' }} />
       <rect width={width} height={height} fill={`url(#${patternId})`} />
+
+      {walls && walls.length > 0 && (
+        // Chunky stone blocks: a dark shade of the game's colour, a soft shine on top. As fatal as the edge.
+        <g data-testid="snake-walls">
+          {walls.map((wall) => (
+            <g key={`${wall.x},${wall.y}`} data-wall={`${wall.x},${wall.y}`}>
+              <rect
+                x={wall.x + 0.04}
+                y={wall.y + 0.04}
+                width="0.92"
+                height="0.92"
+                rx="0.2"
+                style={{ fill: 'color-mix(in srgb, var(--accent) 30%, #334155)' }}
+              />
+              <rect x={wall.x + 0.16} y={wall.y + 0.12} width="0.68" height="0.28" rx="0.12" fill="white" opacity="0.18" />
+            </g>
+          ))}
+        </g>
+      )}
 
       {food && (
         // Keyed by position so every new apple pops in.

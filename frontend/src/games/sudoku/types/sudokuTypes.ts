@@ -34,8 +34,9 @@ export interface ResultView {
 
 export interface RunView {
   id: string
-  mode: 'DAILY' | 'PRACTICE'
-  /** Ranked runs are scored and counted; relaxed practice is just for fun. */
+  /** `ARCHIVE`: a past Daily puzzle replayed for practice, always unranked. */
+  mode: 'DAILY' | 'PRACTICE' | 'ARCHIVE'
+  /** Ranked runs are scored and counted; relaxed practice and archive replays are just for fun. */
   ranked: boolean
   difficulty: Difficulty
   puzzleNumber: number | null
@@ -60,6 +61,20 @@ export interface RunView {
   solution: string | null
   result: ResultView | null
   scored: boolean
+  /** The run's pencil marks are kept on the server too (a signed-in player's run); a guest's stay in this browser. */
+  notesSync: boolean
+}
+
+/** One cell's pencil marks as the server keeps them: its candidate digits, ascending. */
+export interface NoteCellView {
+  cell: number
+  digits: number[]
+}
+
+/** A run's saved pencil marks. `revision` is 0 while none are saved, and goes up by one with each save. */
+export interface NotesView {
+  revision: number
+  cells: NoteCellView[]
 }
 
 export interface TodayView {
@@ -73,6 +88,17 @@ export interface TodayView {
   difficulties: DifficultyInfo[]
   daily: RunView | null
   practice: RunView | null
+  /** The player's replay of a past Daily puzzle in progress. */
+  archive: RunView | null
+}
+
+/** A past Daily puzzle as the archive lists it: its public part, never its solution. */
+export interface ArchivePuzzleView {
+  /** The UTC date, `YYYY-MM-DD`. */
+  date: string
+  puzzleNumber: number
+  difficulty: Difficulty
+  givens: string
 }
 
 export interface HintView {
@@ -108,6 +134,32 @@ export interface StatsView {
   currentStreak: number
   bestStreak: number
   lastDaily: string | null
+}
+
+/** What a signed-in player did with one UTC date's Daily puzzle. */
+export type DayStatus = 'COMPLETED' | 'FAILED' | 'IN_PROGRESS' | 'NOT_ATTEMPTED' | 'NO_PUZZLE'
+
+export interface HistoryDayView {
+  /** The UTC date, `YYYY-MM-DD`. */
+  date: string
+  /** Null before the first Daily (with `difficulty`). */
+  puzzleNumber: number | null
+  difficulty: Difficulty | null
+  status: DayStatus
+  /** Playing time of a completed or failed run. */
+  seconds: number | null
+  /** Of the player's run, null without one (also `hints`). */
+  mistakes: number | null
+  hints: number | null
+  /** For a completed run, the streak it made. */
+  streak: number | null
+}
+
+/** The last 30 UTC dates of the player's Daily Sudoku, oldest first, ending today. */
+export interface DailyHistoryView {
+  from: string
+  today: string
+  days: HistoryDayView[]
 }
 
 // --- AI (admins) ---------------------------------------------------------------------------------

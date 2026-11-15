@@ -1,7 +1,23 @@
 import { describe, expect, it } from 'vitest'
 import { bit, candidates, conflicts, digitCounts, digitsOf, isComplete, parseBoard, peersOf, stepFrom } from './grid'
 import { keyCommand } from './keys'
-import { clearBoard, createBoard, emptyHistory, enterDigit, eraseCell, HISTORY_LIMIT, record, redo, removeNotes, revealCell, undo, valueMoves, applyEdit, type PlayBoard } from './play'
+import {
+  clearBoard,
+  createBoard,
+  emptyHistory,
+  enterDigit,
+  eraseCell,
+  fillCandidates,
+  HISTORY_LIMIT,
+  record,
+  redo,
+  removeNotes,
+  revealCell,
+  undo,
+  valueMoves,
+  applyEdit,
+  type PlayBoard,
+} from './play'
 
 const SOLVED = '534678912672195348198342567859761423426853791713924856961537284287419635345286179'
 const PUZZLE = '530070000600195000098000060800060003400803001700020006060000280000419005000080079'
@@ -163,6 +179,74 @@ describe('editing the board', () => {
   })
 })
 
+describe('filling in candidates', () => {
+  const mask = (...digits: number[]) => digits.reduce((all, digit) => all | bit(digit), 0)
+
+  it('pencils in each empty cell the digits its row, column and box leave open', () => {
+    const board = fresh()
+    const edit = fillCandidates(board)!
+    // Every empty cell of the puzzle, and only those: 81 cells less 30 clues.
+    expect(edit.changes).toHaveLength(51)
+    expect(edit.changes.every(({ cell }) => GIVENS[cell] === 0)).toBe(true)
+    const filled = applyEdit(board, edit)
+    // r1c3: row 5 3 7, column 8, box 5 3 6 9 8.
+    expect(filled.notes[CELL]).toBe(mask(1, 2, 4))
+    // r1c4: row 5 3 7, column 1 8 4, box 7 1 9 5.
+    expect(filled.notes[3]).toBe(mask(2, 6))
+    // r2c3: row 6 1 9 5, column 8, box 5 3 6 9 8.
+    expect(filled.notes[11]).toBe(mask(2, 4, 7))
+    // Clues keep no notes and stay as they are.
+    expect(filled.notes[0]).toBe(0)
+    expect(filled.values).toEqual(board.values)
+  })
+
+  it('reads the board as it stands, the player\'s digits included, right or wrong', () => {
+    // A wrong 2 at r1c3 (the solution has 4): it rules 2 out for the cells that see it.
+    const board = applyEdit(fresh(), enterDigit(fresh(), CELL, 2, false, OPTIONS)!)
+    const filled = applyEdit(board, fillCandidates(board)!)
+    expect(filled.values[CELL]).toBe(2)
+    expect(filled.notes[CELL]).toBe(0)
+    expect(filled.notes[11]).toBe(mask(4, 7))
+    expect(filled.notes[3]).toBe(mask(6))
+    // A digit a hint revealed is locked: no notes, and its peers count it.
+    const revealed = revealCell(fresh(), CELL, 4)
+    const after = applyEdit(revealed, fillCandidates(revealed)!)
+    expect(after.notes[CELL]).toBe(0)
+    expect(after.values[CELL]).toBe(4)
+    expect(after.notes[11]).toBe(mask(2, 7))
+  })
+
+  it('replaces the notes the player had, and changes nothing when they already match', () => {
+    let board = fresh()
+    for (const digit of [9, 1]) board = applyEdit(board, enterDigit(board, 3, digit, true, OPTIONS)!)
+    expect(board.notes[3]).toBe(mask(1, 9))
+    const edit = fillCandidates(board)!
+    expect(edit.changes.find((change) => change.cell === 3)).toEqual({ cell: 3, before: { value: 0, notes: mask(1, 9) }, after: { value: 0, notes: mask(2, 6) } })
+    const filled = applyEdit(board, edit)
+    expect(filled.notes[3]).toBe(mask(2, 6))
+    expect(fillCandidates(filled)).toBeNull()
+    // Notes only: nothing for the server.
+    expect(valueMoves(board, filled)).toEqual([])
+  })
+
+  it('is one step to undo, and redo brings back the same candidates', () => {
+    let board = applyEdit(fresh(), enterDigit(fresh(), 3, 6, true, OPTIONS)!)
+    let history = record(emptyHistory(), { changes: [{ cell: 3, before: { value: 0, notes: 0 }, after: { value: 0, notes: mask(6) } }] })
+    const before = board
+    const edit = fillCandidates(board)!
+    board = applyEdit(board, edit)
+    history = record(history, edit)
+    const filled = board
+
+    const undone = undo(board, history)!
+    expect(undone.board.notes).toEqual(before.notes)
+    expect(undone.history.past).toHaveLength(1)
+    const redone = redo(undone.board, undone.history)!
+    expect(redone.board.notes).toEqual(filled.notes)
+    expect(redone.board.values).toEqual(filled.values)
+  })
+})
+
 describe('keys', () => {
   it('maps digits, erasing and arrows always', () => {
     expect(keyCommand({ key: '5' }, false)).toEqual({ kind: 'digit', digit: 5, note: false })
@@ -176,12 +260,17 @@ describe('keys', () => {
 
   it('maps the shortcuts only when they are on', () => {
     expect(keyCommand({ key: 'n' }, true)).toEqual({ kind: 'notes' })
+    expect(keyCommand({ key: 'c' }, true)).toEqual({ kind: 'candidates' })
+    expect(keyCommand({ key: 'C', shiftKey: true }, true)).toEqual({ kind: 'candidates' })
     expect(keyCommand({ key: 'H' }, true)).toEqual({ kind: 'hint' })
     expect(keyCommand({ key: 'Escape' }, true)).toEqual({ kind: 'pause' })
     expect(keyCommand({ key: 'z', ctrlKey: true }, true)).toEqual({ kind: 'undo' })
     expect(keyCommand({ key: 'Z', ctrlKey: true, shiftKey: true }, true)).toEqual({ kind: 'redo' })
     expect(keyCommand({ key: 'y', metaKey: true }, true)).toEqual({ kind: 'redo' })
     expect(keyCommand({ key: 'n' }, false)).toBeNull()
+    expect(keyCommand({ key: 'c' }, false)).toBeNull()
+    // Copying stays the browser's.
+    expect(keyCommand({ key: 'c', ctrlKey: true }, true)).toBeNull()
     expect(keyCommand({ key: 'z', ctrlKey: true }, false)).toBeNull()
     expect(keyCommand({ key: 'r', ctrlKey: true }, true)).toBeNull()
     expect(keyCommand({ key: 'q' }, true)).toBeNull()

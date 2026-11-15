@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ApiError } from '@/api/client'
 import type { GameProps } from '@/games/types'
-import { bindSession, DAILY_ALREADY_PLAYED, fetchStats, fetchToday, HINT_UNAVAILABLE, pauseRun, resumeRun, sendMoves, startDaily, startPractice, takeHint } from '../api/sudokuApi'
+import { bindSession, DAILY_ALREADY_PLAYED, fetchStats, fetchToday, HINT_UNAVAILABLE, pauseRun, resumeRun, sendMoves, startArchive as startArchiveRun, startDaily, startPractice, takeHint } from '../api/sudokuApi'
 import { boxOf, CELLS, colOf, conflicts, digitCounts, parseBoard, rowOf, stepFrom } from '../engine/grid'
 import type { Direction } from '../engine/keys'
 import {
@@ -11,6 +11,7 @@ import {
   emptyHistory,
   enterDigit,
   eraseCell,
+  fillCandidates as fillCandidatesEdit,
   record,
   redo as redoEdit,
   removeNotes,
@@ -22,9 +23,23 @@ import {
   type PlayBoard,
 } from '../engine/play'
 import type { Difficulty, HintType, HintView, RunView, StatsView, TodayView } from '../types/sudokuTypes'
+import { useNotesSync } from './useNotesSync'
 import { loadNotes, saveNotes, type SudokuSettings } from './useSettings'
 
-export type PlayMode = 'daily' | 'practice'
+/** Today's ranked Daily, practice games, or the archive of past Daily puzzles (unranked replays). */
+export type PlayMode = 'daily' | 'practice' | 'archive'
+
+/** The leaderboard of daily puzzles: a platform mode of Sudoku, like each difficulty's. */
+export const DAILY_BOARD = 'daily'
+
+/**
+ * The leaderboard a ranked run goes on, as the server's mode ID: Daily for the daily puzzle, else its
+ * practice difficulty (`easy` to `expert`). Its session is opened in this mode, and the server ties
+ * the run to no session of any other.
+ */
+export function boardOf(run: Pick<RunView, 'mode' | 'difficulty'>): string {
+  return run.mode === 'DAILY' ? DAILY_BOARD : run.difficulty.toLowerCase()
+}
 
 export interface Message {
   id: number
@@ -59,8 +74,8 @@ export function useSudokuGame(
   const [loadFailed, setLoadFailed] = useState(false)
   const [stats, setStats] = useState<StatsView | null>(null)
   const [mode, setModeState] = useState<PlayMode>('daily')
-  const [runs, setRuns] = useState<Runs>({ daily: null, practice: null })
-  const [locals, setLocals] = useState<Locals>({ daily: null, practice: null })
+  const [runs, setRuns] = useState<Runs>({ daily: null, practice: null, archive: null })
+  const [locals, setLocals] = useState<Locals>({ daily: null, practice: null, archive: null })
   const [selected, setSelected] = useState<number | null>(null)
   const [notesMode, setNotesMode] = useState(false)
   const [fillMode, setFillMode] = useState(false)
@@ -113,7 +128,7 @@ export function useSudokuGame(
 
   /** Puts a run from the server in place, and its board (keeping this page's notes and history). */
   const adopt = useCallback((next: RunView, options: { board?: boolean } = {}) => {
-    const key: PlayMode = next.mode === 'DAILY' ? 'daily' : 'practice'
+    const key: PlayMode = next.mode === 'DAILY' ? 'daily' : next.mode === 'ARCHIVE' ? 'archive' : 'practice'
     setRuns((current) => ({ ...current, [key]: next }))
     setSyncedAt(performance.now())
     setLocals((current) => {
@@ -137,6 +152,7 @@ export function useSudokuGame(
           if (loaded.daily) adopt(loaded.daily)
           else setRuns((current) => ({ ...current, daily: null }))
           if (loaded.practice) adopt(loaded.practice)
+          if (loaded.archive) adopt(loaded.archive)
         })
         .catch((error: unknown) => {
           if (!(error instanceof DOMException && error.name === 'AbortError')) setLoadFailed(true)
@@ -153,24 +169,46 @@ export function useSudokuGame(
     return () => controller.abort()
   }, [load])
 
-  // Notes are kept in this browser, per run, so a reload does not lose them.
+  // Notes are kept in this browser, per run, so a reload does not lose them; a signed-in player's
+  // are kept on the server too, so another device finds them.
   useEffect(() => {
     if (local) saveNotes(local.runId, local.board.notes)
   }, [local])
+
+  /** Puts marks read from the server on the board of their run, if it is still on the page. Not an edit: nothing to undo. */
+  const replaceNotes = useCallback((runId: string, notes: number[]) => {
+    setLocals((current) => {
+      const key = (Object.keys(current) as PlayMode[]).find((candidate) => current[candidate]?.runId === runId)
+      const mine = key && current[key]
+      if (!key || !mine) return current
+      const board = { ...mine.board, notes: mine.board.values.map((value, cell) => (value === 0 ? (notes[cell] ?? 0) : 0)) }
+      return { ...current, [key]: { ...mine, board } }
+    })
+  }, [])
+  useNotesSync(runs, locals, replaceNotes, say)
 
   /** Hands a finished ranked run's result to the platform, which submits the score. Once per run. */
   const report = useCallback(
     (over: RunView) => {
       if (!over.ranked || !over.result || over.scored || reported.current.has(over.id)) return
       reported.current.add(over.id)
-      onGameOver({ score: over.result.score, durationMs: over.elapsedMs, metadata: over.result.details })
+      onGameOver({
+        score: over.result.score,
+        durationMs: over.elapsedMs,
+        metadata: over.result.details,
+        // A daily puzzle's board is its date's: the one to open, whenever the run ended.
+        ...(over.mode === 'DAILY' && over.date && { boardDate: over.date }),
+      })
     },
     [onGameOver],
   )
 
-  /** Opens a platform session for a ranked run: the score is submitted with it. */
-  const openSession = useCallback(async (): Promise<string> => {
-    onGameStart()
+  /**
+   * Opens a platform session for a ranked run on its own leaderboard (see `boardOf`): the score is
+   * submitted with it, and the server ties the run only to a session of its board.
+   */
+  const openSession = useCallback(async (board: string): Promise<string> => {
+    onGameStart(board)
     const session = await currentSession?.()
     if (!session) throw new Error('The platform opened no session')
     return session.id
@@ -184,7 +222,7 @@ export function useSudokuGame(
       if (candidate.status !== 'SOLVED' && candidate.status !== 'FAILED') continue
       if (reported.current.has(candidate.id) || bound.current.has(candidate.id)) continue
       reported.current.add(candidate.id)
-      openSession()
+      openSession(boardOf(candidate))
         .then((sessionId) => (candidate.mode === 'DAILY' ? startDaily(sessionId) : bindSession(candidate.id, sessionId)))
         .then((picked) => {
           markBound(picked.id)
@@ -307,6 +345,16 @@ export function useSudokuGame(
     sync(run.id, valueMoves(local.board, result.board))
   }, [run, local, active, paused, mode, sync])
 
+  /**
+   * Pencils in every empty cell's candidates from the board as it stands, replacing its notes: one
+   * undo step. Notes are no part of the game: no digit goes to the server, and nothing about the score
+   * changes (a signed-in player's notes are saved like any others). Like every edit, only while the
+   * run is in play and not paused.
+   */
+  const fillCandidates = useCallback(() => {
+    edit((board) => fillCandidatesEdit(board))
+  }, [edit])
+
   /** Clears the player's digits and notes. The clock, mistakes and hints stay: it is the same game. */
   const clearAll = useCallback(() => {
     edit((board) => clearBoard(board))
@@ -374,16 +422,20 @@ export function useSudokuGame(
     edit((board) => removeNotes(board, eliminations))
   }, [hint, edit])
 
-  /** Starts the run of this mode: today's daily, or a new practice game. */
+  /** Starts the run of this mode: today's daily, or a new practice game. Archive replays start with `startArchive`. */
   const start = useCallback(
     (practice?: { difficulty: Difficulty; relaxed: boolean }) => {
+      if (mode === 'archive') return
       void enqueue(async () => {
         let started: RunView
         if (mode === 'daily') {
-          started = await startDaily(await openSession())
+          started = await startDaily(await openSession(DAILY_BOARD))
         } else {
           const settingsOf = practice ?? { difficulty: 'EASY' as Difficulty, relaxed: false }
-          started = await startPractice(settingsOf.difficulty, settingsOf.relaxed ? null : await openSession())
+          started = await startPractice(
+            settingsOf.difficulty,
+            settingsOf.relaxed ? null : await openSession(boardOf({ mode: 'PRACTICE', difficulty: settingsOf.difficulty })),
+          )
         }
         markBound(started.id)
         adopt(started)
@@ -396,6 +448,25 @@ export function useSudokuGame(
     [enqueue, mode, openSession, adopt, markBound],
   )
 
+  /**
+   * Replays the past Daily puzzle of a UTC date, unranked: no platform session is opened, so no
+   * score, rewards or streak, and today's Daily is not touched. Any replay in progress is left.
+   */
+  const startArchive = useCallback(
+    (date: string) => {
+      void enqueue(async () => {
+        const started = await startArchiveRun(date)
+        markBound(started.id)
+        adopt(started)
+        setSelected(null)
+        setHint(null)
+        setFinished(null)
+        if (started.paused) adopt(await resumeRun(started.id))
+      })
+    },
+    [enqueue, adopt, markBound],
+  )
+
   /** Picks up the run of this mode after a reload: ties it to a new session, and starts its clock again. */
   const resume = useCallback(() => {
     const current = runsRef.current[mode]
@@ -403,7 +474,7 @@ export function useSudokuGame(
     void enqueue(async () => {
       let picked = current
       if (!bound.current.has(current.id) && current.ranked) {
-        const sessionId = await openSession()
+        const sessionId = await openSession(boardOf(current))
         picked = current.mode === 'DAILY' ? await startDaily(sessionId) : await bindSession(current.id, sessionId)
       }
       markBound(picked.id)
@@ -484,6 +555,7 @@ export function useSudokuGame(
     highlightDigit,
     notesMode,
     toggleNotes: () => setNotesMode((on) => !on),
+    fillCandidates,
     fillMode,
     fillDigit,
     toggleFill,
@@ -498,6 +570,7 @@ export function useSudokuGame(
     askHint,
     applyHintEliminations,
     start,
+    startArchive,
     resume,
     active,
     paused,

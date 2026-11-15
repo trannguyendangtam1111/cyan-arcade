@@ -14,6 +14,7 @@ import com.cyan.arcade.IntegrationTest;
 import com.cyan.arcade.Players;
 import com.cyan.arcade.game.GameService;
 import com.cyan.arcade.leaderboard.LeaderboardPeriod.Window;
+import com.cyan.arcade.score.GameModes;
 import com.cyan.arcade.score.ScoreQueries;
 import com.cyan.arcade.user.UserService;
 import com.jayway.jsonpath.JsonPath;
@@ -68,6 +69,9 @@ class LeaderboardApiTests {
 
 	@Autowired
 	private UserService users;
+
+	@Autowired
+	private GameModes modes;
 
 	@BeforeEach
 	void clearLeaderboard() {
@@ -437,9 +441,9 @@ class LeaderboardApiTests {
 
 	/** The scores on a period's board as the service would build it at a moment of the test's choosing. */
 	private List<Integer> scoresOn(Instant now, LeaderboardPeriod period) {
-		LeaderboardService atThatMoment = new LeaderboardService(this.games, this.scores, this.users,
+		LeaderboardService atThatMoment = new LeaderboardService(this.games, this.scores, this.users, this.modes,
 				Clock.fixed(now, ZoneOffset.UTC));
-		return atThatMoment.leaderboard(GAME, period, 0, 100, null, null)
+		return atThatMoment.leaderboard(GAME, GameModes.CLASSIC, period, 0, 100, null, null)
 			.entries()
 			.stream()
 			.map(LeaderboardResponse.Entry::score)
