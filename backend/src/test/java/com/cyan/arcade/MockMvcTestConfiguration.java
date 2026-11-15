@@ -3,12 +3,10 @@ package com.cyan.arcade;
 import com.cyan.arcade.chess.FakeStockfish;
 import com.cyan.arcade.chess.stockfish.StockfishEngineAdapter;
 
-import org.springframework.beans.factory.InitializingBean;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.MockMvcBuilderCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
-import org.springframework.jdbc.core.JdbcTemplate;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -25,12 +23,7 @@ public class MockMvcTestConfiguration {
 		return (builder) -> builder.defaultRequest(get("/").with(csrf()));
 	}
 
-	/** Lets the test helpers finish runs as if they had been played for a while. */
-	@Bean
-	InitializingBean honestRunsUseTheDatabase(JdbcTemplate jdbc) {
-		return () -> HonestRuns.useDatabase(jdbc);
-	}
-
+	// The run helpers' database is set per test class by HonestRunsDatabase (see IntegrationTest).
 
 	/** The chess engine the tests play against: a scripted UCI engine, never a real one (see FakeStockfish). */
 	@Bean

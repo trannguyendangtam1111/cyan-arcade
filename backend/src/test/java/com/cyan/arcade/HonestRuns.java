@@ -30,7 +30,7 @@ public final class HonestRuns {
 	private HonestRuns() {
 	}
 
-	/** Set once by the test configuration, which has the database. */
+	/** Set by {@link HonestRunsDatabase} to the running test class's database, before the class and each test. */
 	static void useDatabase(JdbcTemplate database) {
 		jdbc = database;
 	}

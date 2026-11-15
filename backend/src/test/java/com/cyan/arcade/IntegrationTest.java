@@ -7,6 +7,8 @@ import java.lang.annotation.Target;
 
 import com.cyan.arcade.score.ModeLab;
 
+import org.junit.jupiter.api.extension.ExtendWith;
+
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
 import org.springframework.boot.session.autoconfigure.SessionAutoConfiguration;
@@ -42,6 +44,8 @@ import org.springframework.context.annotation.Import;
 @ImportAutoConfiguration(exclude = { SessionAutoConfiguration.class, JdbcSessionAutoConfiguration.class })
 // ModeLab: test-only rules for a test-only game with more modes than Classic, inert unless a test adds the game.
 @Import({ TestcontainersConfiguration.class, MockMvcTestConfiguration.class, ModeLab.class })
+// Classes with properties of their own get another context and database; the run helpers follow the running class.
+@ExtendWith(HonestRunsDatabase.class)
 public @interface IntegrationTest {
 
 }

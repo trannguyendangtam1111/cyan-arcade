@@ -15,6 +15,7 @@ import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -152,10 +153,13 @@ class ChessArchiveApiTests {
 			.contentType(MediaType.APPLICATION_JSON).content("{\"playerSide\":\"BLACK\",\"difficulty\":\"CLUB\"}"))
 			.andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
 		UUID id = UUID.fromString(JsonPath.read(json, "$.id"));
+		// The admin account is shared: a game another test left open was abandoned at the same instant,
+		// so this one is not necessarily first. Find it by id.
+		String archived = "$.content[?(@.id == '" + id + "')]";
 		this.mvc.perform(get("/api/chess/archive").session(admin)).andExpect(status().isOk())
-			.andExpect(jsonPath("$.content[0].mode").value("AI"))
-			.andExpect(jsonPath("$.content[0].playerColor").value("BLACK"))
-			.andExpect(jsonPath("$.content[0].difficulty").value("CLUB"));
+			.andExpect(jsonPath(archived + ".mode").value(contains("AI")))
+			.andExpect(jsonPath(archived + ".playerColor").value(contains("BLACK")))
+			.andExpect(jsonPath(archived + ".difficulty").value(contains("CLUB")));
 		String before = row(id);
 		String pgn = this.mvc.perform(get("/api/chess/archive/{id}/pgn", id).session(admin)).andExpect(status().isOk())
 			.andReturn().getResponse().getContentAsString();
